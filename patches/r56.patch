@@ -1,0 +1,30 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ <button id="pasteHistoryBtn">Report history</button>
++<button id="copyPasteHistoryBtn">Copy history</button>
+ <button id="clearPasteHistoryBtn">Clear history</button>
+@@
++async function copyPasteReportHistory() {
++  const text = formatPasteReportHistoryText(20);
++  if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
++  else window.prompt(...);
++}
+@@
++document.getElementById("copyPasteHistoryBtn").addEventListener("click", copyPasteReportHistory);
+@@
++if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "u") {
++  e.preventDefault();
++  copyPasteReportHistory();
++}
+@@
++"Ctrl/Cmd+Shift+U : Copy paste report history",
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] Paste report履歴コピー（ボタン + `Ctrl/Cmd+Shift+U`）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 76 - Builder implementation (history copy shortcut)
++### Step 77 - Reviewer verification (history copy shortcut)

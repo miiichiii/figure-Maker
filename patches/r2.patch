@@ -1,0 +1,314 @@
+--- /tmp/index_r1.html	2026-02-19 02:59:14
++++ index.html	2026-02-19 02:58:22
+@@ -70,6 +70,13 @@
+       fill: rgba(37, 99, 235, 0.12);
+       stroke: var(--accent);
+       stroke-dasharray: 4 2;
++      pointer-events: none;
++    }
++    .selection-outline {
++      fill: none;
++      stroke: var(--accent);
++      stroke-width: 1.5;
++      stroke-dasharray: 6 3;
+       pointer-events: none;
+     }
+     .context-menu {
+@@ -137,6 +144,8 @@
+         <button data-align="top">Align T</button>
+         <button data-align="vcenter">Align M</button>
+         <button data-align="bottom">Align B</button>
++        <button data-distribute="h">Dist H</button>
++        <button data-distribute="v">Dist V</button>
+       </div>
+       <div class="group">
+         <label for="autosaveSelect">Autosave</label>
+@@ -251,8 +260,25 @@
+           el.classList.add("fm-selected");
+         }
+       }
++      renderSelectionOutlines();
+     }
+ 
++    function renderSelectionOutlines() {
++      canvas.querySelectorAll(".selection-outline").forEach((el) => el.remove());
++      const elements = getTopSelectedElements();
++      elements.forEach((el) => {
++        const b = safeBBox(el);
++        if (!b || b.width <= 0 || b.height <= 0) return;
++        const rect = document.createElementNS(SVG_NS, "rect");
++        rect.setAttribute("class", "selection-outline");
++        rect.setAttribute("x", String(b.x));
++        rect.setAttribute("y", String(b.y));
++        rect.setAttribute("width", String(b.width));
++        rect.setAttribute("height", String(b.height));
++        canvas.appendChild(rect);
++      });
++    }
++
+     function setSelection(ids) {
+       state.selectedIds = [...new Set(ids)].filter((id) => !!getById(id));
+       applySelectionStyles();
+@@ -355,10 +381,20 @@
+       const el = createShape("text", { x: 520, y: 330, fill: "#111827", "font-size": 28, "font-family": "Arial" }, "Text");
+       setSelection([el.dataset.id]);
+       pushHistory("add-text");
++    }
++
++    function getCleanCanvasMarkup() {
++      const clone = canvas.cloneNode(true);
++      clone.querySelectorAll(".selection-outline,.marquee").forEach((el) => el.remove());
++      clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
++        el.classList.remove("fm-selected");
++        el.classList.remove("fm-group-selected");
++      });
++      return clone.innerHTML;
+     }
+ 
+     function getSnapshot() {
+-      return { markup: canvas.innerHTML, selectedIds: [...state.selectedIds], at: Date.now() };
++      return { markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds], at: Date.now() };
+     }
+ 
+     function pushHistory(reason) {
+@@ -442,6 +478,49 @@
+       pushHistory(`align-${mode}`);
+     }
+ 
++    function distributeSelected(axis) {
++      const elements = getTopSelectedElements();
++      if (elements.length < 3) {
++        setStatus("Distribute needs 3+ selected objects.");
++        return;
++      }
++      const items = elements.map((el) => {
++        const bRaw = el.getBBox();
++        const t = getTranslate(el);
++        const b = { x: bRaw.x + t.x, y: bRaw.y + t.y, width: bRaw.width, height: bRaw.height };
++        return { el, bRaw, b };
++      });
++
++      if (axis === "h") {
++        items.sort((a, b) => a.b.x - b.b.x);
++        const start = items[0].b.x;
++        const end = items[items.length - 1].b.x + items[items.length - 1].b.width;
++        const totalSize = items.reduce((sum, item) => sum + item.b.width, 0);
++        const gap = (end - start - totalSize) / (items.length - 1);
++        let cursor = start;
++        items.forEach((item) => {
++          const newX = cursor - item.bRaw.x;
++          setTranslate(item.el, newX, getTranslate(item.el).y);
++          cursor += item.b.width + gap;
++        });
++      } else {
++        items.sort((a, b) => a.b.y - b.b.y);
++        const start = items[0].b.y;
++        const end = items[items.length - 1].b.y + items[items.length - 1].b.height;
++        const totalSize = items.reduce((sum, item) => sum + item.b.height, 0);
++        const gap = (end - start - totalSize) / (items.length - 1);
++        let cursor = start;
++        items.forEach((item) => {
++          const newY = cursor - item.bRaw.y;
++          setTranslate(item.el, getTranslate(item.el).x, newY);
++          cursor += item.b.height + gap;
++        });
++      }
++
++      applySelectionStyles();
++      pushHistory(`distribute-${axis}`);
++    }
++
+     function groupSelected() {
+       const elements = getTopSelectedElements();
+       if (elements.length < 2) {
+@@ -510,7 +589,7 @@
+     }
+ 
+     function saveSvg() {
+-      const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${canvas.getAttribute("viewBox")}" width="1200" height="700">${canvas.innerHTML}</svg>`;
++      const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${canvas.getAttribute("viewBox")}" width="1200" height="700">${getCleanCanvasMarkup()}</svg>`;
+       const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement("a");
+@@ -575,7 +654,7 @@
+ 
+     function saveAutosave() {
+       const records = getAutosaveRecords();
+-      records.push({ id: `as-${Date.now()}`, at: Date.now(), markup: canvas.innerHTML, selectedIds: [...state.selectedIds] });
++      records.push({ id: `as-${Date.now()}`, at: Date.now(), markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds] });
+       setAutosaveRecords(records);
+       refreshRestoreList();
+       setStatus("Autosave snapshot written.");
+@@ -634,66 +713,115 @@
+       setStatus(`Autosave set: ${val}`);
+     }
+ 
+-    function handlePaste(ev) {
++    function insertImageElement(src, width, height) {
++      const x = 600 - width / 2;
++      const y = 350 - height / 2;
++      const el = document.createElementNS(SVG_NS, "image");
++      el.setAttribute("x", String(x));
++      el.setAttribute("y", String(y));
++      el.setAttribute("width", String(width));
++      el.setAttribute("height", String(height));
++      el.setAttribute("href", src);
++      el.setAttributeNS(XLINK_NS, "href", src);
++      ensureId(el);
++      setTranslate(el, 0, 0);
++      canvas.appendChild(el);
++      setSelection([el.dataset.id]);
++    }
++
++    function fileToDataUrl(file) {
++      return new Promise((resolve, reject) => {
++        const reader = new FileReader();
++        reader.onload = () => resolve(String(reader.result || ""));
++        reader.onerror = () => reject(new Error("File read failed"));
++        reader.readAsDataURL(file);
++      });
++    }
++
++    function getImageSize(src) {
++      return new Promise((resolve) => {
++        const img = new Image();
++        img.onload = () => resolve({ width: Math.min(img.width || 320, 600), height: Math.min(img.height || 240, 400) });
++        img.onerror = () => resolve({ width: 320, height: 240 });
++        img.src = src;
++      });
++    }
++
++    function extractSvgFromHtml(html) {
++      if (!html) return "";
++      const match = html.match(/<svg[\s\S]*<\/svg>/i);
++      return match ? match[0] : "";
++    }
++
++    function extractImageSrcFromHtml(html) {
++      if (!html) return "";
++      const doc = new DOMParser().parseFromString(html, "text/html");
++      const img = doc.querySelector("img[src]");
++      return img?.getAttribute("src") || "";
++    }
++
++    function importSvgText(svgText) {
++      const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
++      const root = doc.querySelector("svg");
++      if (!root) return false;
++      const importedIds = [];
++      Array.from(root.children).forEach((child) => {
++        const imported = document.importNode(child, true);
++        if (!(imported instanceof SVGElement)) return;
++        ensureId(imported);
++        if (!imported.hasAttribute("transform")) setTranslate(imported, 0, 0);
++        canvas.appendChild(imported);
++        if (imported.dataset.id) importedIds.push(imported.dataset.id);
++      });
++      assignIds();
++      setSelection(importedIds);
++      pushHistory("paste-svg");
++      setStatus("Pasted SVG content.");
++      return importedIds.length > 0;
++    }
++
++    async function handlePaste(ev) {
+       const items = Array.from(ev.clipboardData?.items || []);
+       if (!items.length) return;
+-      const png = items.find((it) => it.type === "image/png");
+-      if (png) {
++
++      const imageItem = items.find((it) => it.type === "image/png" || it.type === "image/jpeg");
++      if (imageItem) {
+         ev.preventDefault();
+-        const file = png.getAsFile();
++        const file = imageItem.getAsFile();
+         if (!file) return;
+-        const url = URL.createObjectURL(file);
+-        const img = new Image();
+-        img.onload = () => {
+-          const width = Math.min(img.width || 320, 600);
+-          const height = Math.min(img.height || 240, 400);
+-          const x = 600 - width / 2;
+-          const y = 350 - height / 2;
+-          const el = document.createElementNS(SVG_NS, "image");
+-          el.setAttribute("x", String(x));
+-          el.setAttribute("y", String(y));
+-          el.setAttribute("width", String(width));
+-          el.setAttribute("height", String(height));
+-          el.setAttribute("href", url);
+-          el.setAttributeNS(XLINK_NS, "href", url);
+-          ensureId(el);
+-          setTranslate(el, 0, 0);
+-          canvas.appendChild(el);
+-          setSelection([el.dataset.id]);
+-          pushHistory("paste-png");
+-          setStatus("Pasted PNG as image.");
+-        };
+-        img.src = url;
++        const dataUrl = await fileToDataUrl(file);
++        const size = await getImageSize(dataUrl);
++        insertImageElement(dataUrl, size.width, size.height);
++        pushHistory("paste-image");
++        setStatus("Pasted image.");
++        return;
++      }
++
++      const htmlText = ev.clipboardData?.getData("text/html") || "";
++      const htmlSvg = extractSvgFromHtml(htmlText);
++      if (htmlSvg) {
++        ev.preventDefault();
++        if (importSvgText(htmlSvg)) return;
++      }
++
++      const htmlImgSrc = extractImageSrcFromHtml(htmlText);
++      if (htmlImgSrc) {
++        ev.preventDefault();
++        const size = await getImageSize(htmlImgSrc);
++        insertImageElement(htmlImgSrc, size.width, size.height);
++        pushHistory("paste-html-image");
++        setStatus("Pasted HTML image.");
+         return;
+       }
+ 
+       const plain = ev.clipboardData?.getData("text/plain") || "";
+       if (plain.trim().startsWith("<svg")) {
+         ev.preventDefault();
+-        const doc = new DOMParser().parseFromString(plain, "image/svg+xml");
+-        const root = doc.querySelector("svg");
+-        if (!root) {
+-          setStatus("Paste SVG parse failed.");
+-          return;
+-        }
+-        const importedIds = [];
+-        Array.from(root.children).forEach((child) => {
+-          const imported = document.importNode(child, true);
+-          if (imported instanceof SVGElement) {
+-            ensureId(imported);
+-            if (!imported.hasAttribute("transform")) setTranslate(imported, 0, 0);
+-            canvas.appendChild(imported);
+-            if (imported.dataset.id) importedIds.push(imported.dataset.id);
+-          }
+-        });
+-        assignIds();
+-        setSelection(importedIds);
+-        pushHistory("paste-svg");
+-        setStatus("Pasted SVG content.");
++        if (!importSvgText(plain)) setStatus("Paste SVG parse failed.");
+         return;
+       }
+ 
+-      setStatus("Paste unsupported: use PNG or SVG text.");
++      setStatus("Paste unsupported: use PNG/JPEG or SVG text.");
+     }
+ 
+     function beginMarquee(start, keepCurrent) {
+@@ -802,6 +930,9 @@
+       document.querySelectorAll("[data-align]").forEach((btn) => {
+         btn.addEventListener("click", () => alignSelected(btn.dataset.align));
+       });
++      document.querySelectorAll("[data-distribute]").forEach((btn) => {
++        btn.addEventListener("click", () => distributeSelected(btn.dataset.distribute));
++      });
+ 
+       const fileInput = document.getElementById("openFileInput");
+       document.getElementById("openSvg").addEventListener("click", () => fileInput.click());

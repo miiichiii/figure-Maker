@@ -1,0 +1,19 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Arrow先端形状の修正:
++ - applyArrowStyle() で矢印ヘッド先端がmarker境界で潰れないように tip=size+2 を導入
++ - markerWidth/refX/viewBox/path を tip 基準へ更新
++ - line の stroke-linecap を butt に固定して先端はみ出しを防止
++
++具体変更:
++ - markerWidth: size -> tip
++ - refX: size -> tip
++ - viewBox: 0 0 size size -> 0 0 tip size
++ - path d: M0 0 Lsize size/2 L0 size z -> M0 0 Ltip size/2 L0 size z
++ - lineEl.setAttribute("stroke-linecap", "butt") 追加
++
++テスト:
++ - /tmp/pwfm/reviewer-r63-arrow-tip.js 追加（PASS）
++   * marker(refX/markerWidth/viewBox) が tip 基準
++   * linecap=butt

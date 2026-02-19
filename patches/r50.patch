@@ -1,0 +1,38 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++function extractSvgSnippet(text) {
++  const m = String(text || "").match(/<svg[\s\S]*?<\/svg>/i);
++  return m ? m[0] : "";
++}
++
++function readClipboardItemAsText(item) { ... FileReader.readAsText ... }
+@@
+-const plain = ev.clipboardData?.getData("text/plain") || "";
++const plain = ev.clipboardData?.getData("text/plain") || "";
+@@
++const svgItem = items.find((it) => it.type === "image/svg+xml");
++if (svgItem) {
++  const raw = await readClipboardItemAsText(svgItem);
++  const snippet = extractSvgSnippet(raw);
++  const ok = snippet ? importSvgText(snippet).length > 0 : false;
++  setLastPasteReport("item-image-svg+xml", types, ok ? "vector imported" : "item parse failed");
++  ...
++}
+@@
+-if (plain.trim().startsWith("<svg")) {
+-  const ok = importSvgText(plain).length > 0;
++const plainSvg = plain.trim().startsWith("<svg") ? plain : extractSvgSnippet(plain);
++if (plainSvg) {
++  const ok = importSvgText(plainSvg).length > 0;
+   ...
+ }
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Med] 貼り付け経路拡張（`image/svg+xml` item/埋め込みplain text SVG抽出）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 64 - Builder implementation (paste route expansion)
++### Step 65 - Reviewer verification (paste route expansion)

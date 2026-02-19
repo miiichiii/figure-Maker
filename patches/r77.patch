@@ -1,0 +1,34 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Cmd+V reliability improvements:
++ - Added hidden `#pasteSink` and focus management (`focusPasteSink`)
++ - `.canvas-wrap` now focusable (`tabindex="0"`)
++ - Paste listeners now on window + document + canvasWrap + pasteSink
++ - Added WeakSet de-duplication for same paste event object
++ - Goal: avoid OS paste event loss without using clipboard.read permission prompts
+@@
++White Arrow text click reliability improvements:
++ - Added `findNearestEditableTargetByPoint` fallback when direct click raw-hit fails
++ - Existing bbox-hit fallback retained and extended
++ - `pickDirectTargetFromStack` now normalizes + text-like prioritization
++ - pointerdown direct path wired through resolveTargetByTool for consistent target resolution
+@@
++Validation:
++ - reviewer-r76-cmdv-no-prompt-and-textlike: PASS
++ - reviewer-r75-path-text-hit: PASS
++ - reviewer-r74-files-unknown-mime-and-text-hit: PASS
++ - reviewer-r73-files-png-fallback: PASS
++ - reviewer-r72-ui-copy-paste: PASS
++ - reviewer-r71-paste-lock-recovery: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] Cmd+V取りこぼし対策（paste sink + paste複線化）
++[done] White Arrowのクリック取りこぼし対策（BBox最近傍フォールバック）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 111/112 追加（実装 + 批判AI検証）

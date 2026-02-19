@@ -1,0 +1,38 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ <button id="pasteBtn">Paste</button>
++<button id="pasteReportBtn">Paste report</button>
+@@
+ state = {
+   ...
++  lastPasteReport: null,
+ }
+@@
+-<svg xmlns="http://www.w3.org/2000/svg" ...>
++<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ...>
+@@
++function setLastPasteReport(route, types, note = "") { ... }
++function showPasteReport() { ... }
+@@
++const types = listClipboardTypes(ev.clipboardData);
+ ...
++setLastPasteReport("html-svg", types, `blocks=${count}`);
++setLastPasteReport("image-svg+xml", types, ...);
++setLastPasteReport("plain-svg", types, ...);
++setLastPasteReport("html-image", types, ...);
++setLastPasteReport("image-raster", types, "fallback to raster");
++setLastPasteReport("unsupported", types, ...);
++setLastPasteReport("error", types, ...);
+@@
+ document.getElementById("pasteBtn").addEventListener("click", pasteInternalClipboard);
++document.getElementById("pasteReportBtn").addEventListener("click", showPasteReport);
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Med] Paste diagnosticsレポート追加（route/types/noteを表示）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 58 - Builder implementation (paste diagnostics report)
++### Step 59 - Reviewer verification (paste diagnostics report)

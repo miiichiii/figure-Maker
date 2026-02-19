@@ -1,0 +1,34 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++External paste compatibility fix (Files,image/png):
++ - Added findRasterFileFromClipboard(ev, items)
++ - Raster detection now supports:
++   * DataTransferItem.type (image/png|image/jpeg)
++   * DataTransferItem.kind=file + getAsFile().type
++   * clipboardData.files[] MIME scan
++ - listClipboardTypes now includes clipboardData.files MIME types
+@@
++Fallback flow fix:
++ - image/svg+xml item parse failure no longer returns early
++ - continues to PNG/JPEG fallback instead of ending at "Paste SVG item parse failed"
+@@
++Paste-lock tuning:
++ - PASTE_LOCK_TIMEOUT_MS tuned to 900ms for faster stale-lock recovery
++
++Validation:
++ - reviewer-r73-files-png-fallback: PASS
++ - reviewer-r71-paste-lock-recovery: PASS
++ - reviewer-r72-ui-copy-paste: PASS
++ - reviewer-r70-paste-best-effort: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] 外部PasteのFiles/image/png取りこぼし修正
++[done] image/svg+xml parse失敗時のPNG/JPEGフォールバック継続
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 103/104 追加（実装 + 批判AI検証）

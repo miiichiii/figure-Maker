@@ -1,0 +1,35 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ <button id="copyPasteReportBtn">Copy report</button>
++<button id="downloadPasteReportBtn">Save report</button>
+@@
++const PASTE_REPORT_KEY = "figureMaker_last_paste_report";
+@@
+ function setLastPasteReport(route, types, note = "") {
+   state.lastPasteReport = {...};
++  localStorage.setItem(PASTE_REPORT_KEY, JSON.stringify(state.lastPasteReport));
+ }
+@@
++function downloadPasteReport() {
++  // save current paste report as .txt
++}
+@@
++document.getElementById("downloadPasteReportBtn").addEventListener("click", downloadPasteReport);
+@@
++if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "k") {
++  e.preventDefault();
++  downloadPasteReport();
++}
+@@
++const parsed = JSON.parse(localStorage.getItem(PASTE_REPORT_KEY) || "null");
++if (parsed && parsed.route) state.lastPasteReport = parsed;
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] Paste reportの永続化 + ファイル保存（`Ctrl/Cmd+Shift+K`）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 68 - Builder implementation (report persistence/download)
++### Step 69 - Reviewer verification (report persistence/download)

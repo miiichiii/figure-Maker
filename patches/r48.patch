@@ -1,0 +1,59 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+-.canvas-wrap { padding: 10px; overflow: auto; }
++.canvas-wrap { padding: 10px; overflow: auto; position: relative; }
++ #textEditorInput {
++   position: absolute;
++   display: none;
++   z-index: 30;
++   min-width: 120px;
++   ...
++ }
+@@
+ <svg id="canvas" ...></svg>
++<input id="textEditorInput" type="text" />
+@@
++const canvasWrapEl = document.querySelector(".canvas-wrap");
++const textEditorInput = document.getElementById("textEditorInput");
+@@
+ state = {
+   ...
++  textEdit: null,
+ }
+@@
+-<svg xmlns="http://www.w3.org/2000/svg" ...>
++<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ...>
+@@
++function closeInlineTextEditor(commit) { ... }
++function openInlineTextEditor(textEl) { ... }
+@@
+ canvas.addEventListener("dblclick", (e) => {
+-  // prompt edit
++  openInlineTextEditor(textEl);
+ });
++textEditorInput.addEventListener("keydown", ... Enter/Escape ...);
++textEditorInput.addEventListener("blur", () => closeInlineTextEditor(true));
+@@
+ if (e.key === "Escape") {
++  closeInlineTextEditor(false);
+   ...
+ }
++if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "i") {
++  e.preventDefault();
++  showPasteReport();
++}
+--- /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
+@@
+-- テキスト編集: `text`要素はダブルクリックで編集（prompt入力）を採用。
++- テキスト編集: `text`要素はダブルクリックでインライン編集（Enter確定 / Escキャンセル）。
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Med] テキストのインライン編集化（dblclickで入力、Enter/Esc対応）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 60 - Builder implementation (inline text editor)
++### Step 61 - Reviewer verification (inline text editor)

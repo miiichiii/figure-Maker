@@ -1,0 +1,47 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++setSelection(): syncArrowControlsFromSelection() を呼び出し、Arrow選択時にUI入力値を同期
+@@
++Arrow機能をP1として確定:
++ - Line隣にArrowボタン
++ - Arrow size / Arrow stroke 入力
++ - addArrow() で line + marker-end を生成
++ - applyArrowStyle() で markerWidth/Height, refX/refY, stroke-width を更新
++ - Arrow入力は change だけでなく input でも即時反映
++ - Q キーで Arrow 追加ショートカット
++ - Shortcutsヘルプに Q を追記
+@@
++dblclick text編集の対象解決を強化:
++ - e.target.closest('text') が取れない場合、elementsFromPoint由来スタックから text を探索
++ - それでも取れない場合は単一選択中textを編集対象にフォールバック
+@@
++SVG貼り付け経路を追加強化:
++ - importSvgFromClipboardStringItems(items, types) を追加
++ - clipboardData.items の string-kind (text/plain/text/html/image/svg+xml) を getAsString で読取
++ - HTML内の複数 <svg> を抽出して一括取り込み
++ - plain/string中の <svg> スニペットを抽出してベクター貼り付け
++ - 成功時は paste report route を item-html-svg / item-string-svg で記録
+@@
++テスト:
++ - /tmp/pwfm/reviewer-r61-critical.js 追加（PASS）
++   * text dblclick 編集
++   * arrow 作成 + size/stroke 反映
++   * string-kind item SVG paste
++   * items空 + plain text SVG paste 回帰
++ - reviewer-r60-critical / reviewer-r59 再PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
+-[doing] textダブルクリック編集不具合
+-[doing] Arrow機能（サイズ/線太さ）
+-[doing] webアプリ由来SVG貼り付け再修正
++[done] textダブルクリック編集不具合
++[done] Arrow機能（サイズ/線太さ）
++[done] webアプリ由来SVG貼り付け再修正
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 86/87 を追加（実装 + 批判AI検証）

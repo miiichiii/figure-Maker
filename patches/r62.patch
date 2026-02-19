@@ -1,0 +1,35 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++PowerPoint paste crash fix:
++ - handlePaste(): clipboard items を filter(Boolean)
++ - listClipboardTypes(): null item を除外して type を安全参照
++ - importSvgFromClipboardStringItems(): item.type 参照を optional-safe 化
++ => `Cannot read properties of null (reading 'type')` 再発防止
+@@
++Raster quality improvement:
++ - getImageSize(): 600x400 クランプを撤廃し、元画像の width/height を保持
++ - handlePaste(): rasterは html <img> より先に image/png|jpeg clipboard item を優先
++ - status/paste report に source size を記録
++ => PowerPoint貼り付けで高解像度ソースを優先利用
+@@
++Known limitation clarified:
++ - PowerPoint/OS/ブラウザが clipboard に低解像度bitmap しか提供しない場合、Webアプリ側で高解像度へ復元は不可能
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] PowerPoint画像貼り付け時の null type エラー修正
++[done] PowerPoint高解像度ソース優先（貼り付け順序/寸法制限見直し）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 88/89 追加（実装 + 批判AI検証）
+
+--- /tmp/pwfm/reviewer-r62-critical.js
++++ /tmp/pwfm/reviewer-r62-critical.js
+@@
++新規批判的テスト
++ - null item混在pasteでクラッシュしない
++ - 1200x900 PNG貼り付けで寸法保持

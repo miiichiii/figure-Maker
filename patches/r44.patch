@@ -1,0 +1,108 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ const DEFAULT_VIEWBOX = "0 0 1200 700";
+ const MIN_RESIZE_SIZE = 6;
++const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
++const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ffffff' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
+@@
+ if (el.tagName === "line" || el.tagName === "path" || el.tagName === "polyline") {
+   el.setAttribute("pointer-events", "stroke");
++  el.style.pointerEvents = "stroke";
+   return;
+ }
+ if (el.tagName === "text") {
+-  el.setAttribute("pointer-events", "bounding-box");
++  el.setAttribute("pointer-events", "all");
++  el.style.pointerEvents = "all";
+   return;
+ }
+-if (el.tagName !== "g") el.setAttribute("pointer-events", "all");
++if (el.tagName !== "g") { el.setAttribute("pointer-events", "all"); el.style.pointerEvents = "all"; }
+@@
+-return ["rect", "line", "ellipse", "text", "path", "polygon", "polyline", "image", "g"].includes(el.tagName);
++return ["rect", "line", "ellipse", "circle", "text", "path", "polygon", "polyline", "image", "g"].includes(el.tagName);
+@@
+-return !!el && ["rect", "ellipse", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
++return !!el && ["rect", "ellipse", "circle", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
+@@
++if (el.tagName === "circle") {
++  // circle resize support
++  ...
++}
+@@
+-return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
++return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
++
++function updateToolCursor() {
++  canvas.style.cursor = state.tool === "direct" ? CURSOR_WHITE : CURSOR_BLACK;
++}
+@@
+-URL.revokeObjectURL(url);
++setTimeout(() => URL.revokeObjectURL(url), 1500);
+@@
+ document.getElementById("toolSelect").addEventListener("click", () => {
+   state.tool = "select";
+@@
++  updateToolCursor();
+ });
+ document.getElementById("toolDirect").addEventListener("click", () => {
+   state.tool = "direct";
+@@
++  updateToolCursor();
+ });
+@@
++canvas.addEventListener("dblclick", (e) => {
++  const textEl = e.target instanceof SVGElement ? e.target.closest("text") : null;
++  if (!(textEl instanceof SVGElement) || !textEl.dataset.id || textEl.classList.contains("group-label")) return;
++  const next = window.prompt("Edit text", textEl.textContent || "");
++  if (next === null) return;
++  textEl.textContent = next;
++  setSelection([textEl.dataset.id]);
++  pushHistory("edit-text");
++});
+@@
+-setStatus("Pasted raster image (PNG/JPEG).");
++setStatus(`Pasted raster image (PNG/JPEG).${types.length ? ` Types: ${types.join(", ")}` : ""}`);
+@@
+ function initialize() {
+   assignIds();
+   setupEvents();
++  updateToolCursor();
+--- /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
+@@
+ - 選択モード:
+   - 黒矢印: クリック要素がグループ内なら「最外側の `<g>`」を選択。
+   - 白矢印: クリックした最深要素を選択。
++  - ツール切替時、キャンバスカーソルを黒/白矢印に連動表示する。
+@@
+ - 既定フォント: Arial。
++- テキスト編集: `text`要素はダブルクリックで編集（prompt入力）を採用。
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
+-- [doing][P1-High] 外部SVG内のテキスト/ドット（circle等）が選択できない問題の修正
++- [done][P1-High] 外部SVG内のテキスト/ドット（circle等）が選択できない問題の修正
+-- [doing][P1-Med] PowerPoint貼り付けが常に画像になる環境の診断導線（clipboard type可視化）の強化
++- [done][P1-Med] PowerPoint貼り付けが常に画像になる環境の診断導線（clipboard type可視化）の強化
+-- [doing][P1-Low] Black/White Arrow切替時にキャンバスカーソルを黒/白矢印へ連動
++- [done][P1-Low] Black/White Arrow切替時にキャンバスカーソルを黒/白矢印へ連動
+-- [doing][P1-High] Save SVGで保存したファイルが開けない問題の修正
++- [done][P1-High] Save SVGで保存したファイルが開けない問題の修正
+-- [doing][P1-High] テキストのダブルクリック編集機能の実装
++- [done][P1-High] テキストのダブルクリック編集機能の実装
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 54 - Builder implementation (selection/cursor/text/save fixes)
++- Date: 2026-02-19
++- Owner: Builder
++- Decisions: 選択不能要素の改善、ツール状態可視化、保存互換、テキスト編集を同時に修正する。
++- Changes: `circle`を選択/リサイズ対象に追加。`pointer-events`適用をstyle属性にも反映。Black/Whiteツールでカスタムカーソル連動。`dblclick`で`text`編集（prompt）。Save SVGをXML宣言付きにし、Object URLのrevokeを遅延化。
++
++### Step 55 - Reviewer verification (selection/cursor/text/save fixes)
++- Date: 2026-02-19
++- Owner: Reviewer
++- Decisions: 指摘5件を自動検証し、回帰を防ぐ。
++- Changes: Playwrightで `circle/text`選択、黒白カーソル差分、テキスト編集ハンドラ、保存SVGの再パース/再読込を検証しPASS。

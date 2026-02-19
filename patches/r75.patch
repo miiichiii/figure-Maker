@@ -1,0 +1,24 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++SVG text selection fix (path-outlined text support):
++ - applyPointerEventPolicy() updated:
++   * line/polyline => pointer-events: stroke !important
++   * path/text/tspan => pointer-events: all !important
++ - This allows fill-only path glyphs (common in exported chart SVG text outlines) to be selectable/movable.
+@@
++Validation:
++ - reviewer-r75-path-text-hit: PASS
++   * path with pointer-events:none !important becomes selectable
++   * text+tspan with pointer-events:none !important becomes selectable
++ - reviewer-r74/r73/r72/r71 regression PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] SVGテキスト実体がpath化されたケースの選択不可修正
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 107/108 追加（実装 + 批判AI検証）

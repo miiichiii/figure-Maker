@@ -1,0 +1,145 @@
+# 30_TODO
+
+## P0 (MVP)
+- [done][P0-High] 単一 `index.html` の骨組み（ツールバー、キャンバス、ステータス、復元UI）
+- [done][P0-High] 図形追加（Rect/Line/Ellipse/Text）
+- [done][P0-High] 選択（黒矢印/白矢印、Shift、マーキー）
+- [done][P0-High] 移動（ドラッグ、矢印キー）
+- [done][P0-High] Align 6種
+- [done][P0-High] Group/Ungroup + 右クリックA/B/Cラベル
+- [done][P0-High] Undo/Redo（100手）
+- [done][P0-High] Save/Open SVG
+- [done][P0-High] PDF Export
+- [done][P0-High] 自動保存 Off/10/30 + Restore latest/list
+- [done][P0-High] Paste(PNG/SVG text)
+- [doing][P0-Med] 手動テストとバグ修正
+- [done][P1-Med] 上部メニューバー（File/Edit/View/Window）追加
+- [done][P1-Med] ViewメニューからCanvasサイズ変更（A4 Portrait/A4 Landscape/カスタム）
+- [done][P1-Med] New/Open SVG/Save SVG/Export PDF をツールバーからFileメニューへ集約
+- [done][P1-Med] Paste report系ボタンをツールバーからWindowメニューへ集約
+- [done][P1-Med] Canvasのピンチイン/アウトズーム（Ctrl/⌘+Wheel + 2本指タッチ）対応
+- [done][P1-Med] ズーム時もBBox表示の見た目（線幅/ハンドルサイズ）を一定に維持
+- [done][P1-Med] Align/Distribute（L/C/R/T/M/B/Dist H/V）ボタンのアイコン化
+- [done][P1-High] 右クリックメニュー拡張（Copy/Cut/Paste/Mark(A-Z)/Group/Ungroup/Duplicate）
+- [done][P1-Med] 右クリックメニューにClear Mark追加（管理ラベルのみ削除）
+- [done][P1-High] 貼り付け要素（matrix/complex transform）のリサイズで位置が飛ぶ回帰を再修正
+- [done][P1-High] 貼り付けSVG内の `data-id/data-tx/data-ty/data-base-transform` 持ち越しによるリサイズ飛び再発を修正
+- [done][P1-High] リサイズ方式をtransformベースに統一（親子transform下でも位置ドリフトしない）
+- [done][P1-Med] 短いLineで見た目が太る問題を修正（line/polylineに non-scaling-stroke 適用）
+- [done][P1-Med] Line/Arrowの太さコントロールを共通化（同一入力で変更可能）
+- [done][P1-Low] ツールバーのCopy/Cut/Pasteボタンを削除（Menu/右クリック/ショートカットに集約）
+- [done][P1-Low] Undo/Redoボタンをアイコン化
+- [done][P1-Med] stroke入力のリアルタイム反映を強化（選択中Line/Arrowへinput時に即時適用）
+
+## P1 (仕上げ)
+- [done][P1-High] 貼り付け直後の`sel:1`グループ選択で子要素が全点線になる視覚ノイズを修正（group子への選択クラス付与を廃止）
+- [done][P1-High] White Arrowで重なり図形下の文字を選びづらい問題を修正（クリック近傍text優先）
+- [done][P1-High] 選択枠座標のズレ修正（`getScreenCTM`→canvas逆変換でBBoxを同一座標系化）
+- [done][P1-Med] 複数選択中の通常クリックで単一選択へ収束（Shift時のみ加算/解除）
+- [done][P1-High] `Control/Treatment`系ラベルが`path`アウトラインでもWhite Arrowで選択できるよう修正（label-like path優先）
+- [done][P1-High] 貼り付けSVG内の既存ラベル文字（例:`class="group-label"`）を右クリックA/Bで上書きしないよう修正（管理ラベルを`data-fm-group-label`に分離）
+- [done][P1-High] 貼り付けオブジェクトのBBox移動で遠くへ飛ぶ問題を修正（親transform対応の移動座標変換）
+- [done][P1-High] 個別選択時に透明/非表示要素（clipPath/transparent rect等）が誤選択される問題を修正（editable判定とpointer-events見直し）
+- [done][P1-High] PPT貼り付けで `Types: Files, image/png` なのに未取込になる回帰を修正（types-only payload時のClipboard API画像フォールバック）
+- [done][P1-Med] PPT画像ペーストの体感遅延（数秒待ち）を短縮（raster fastpathで文字列タイムアウト待ちを回避）
+- [done][P1-Med] PPT画像ペースト遅延をさらに短縮（`clipboardData.types`優先判定 + blob URL即時挿入で待ち時間削減）
+- [done][P1-Med] web app由来SVGペースト遅延（約5秒）を短縮（plain/svg優先、text/html取得を後段化、string item探索を短時間化）
+- [done][P1-High] White Arrowでrawヒット優先される回帰の修正（text-likeはBBox候補を常時評価）
+- [done][P1-Med] Cmd+V pasteイベント取りこぼし対策（keypress時にpaste sinkへフォーカス）
+- [done][P1-High] Cmd+V取りこぼし対策（paste sink + window/document/canvasWrap/paste複線化）
+- [done][P1-High] White Arrowのクリック取りこぼし対策（BBox最近傍フォールバック）
+- [done][P1-High] Cmd+V時の不要なclipboard許可プロンプト抑制（Pasteボタンは内部Pasteのみ、Cmd+Vはpasteイベント優先）
+- [done][P1-High] White Arrowのtext-likeターゲット解決強化（g/text/label/tick/axis/useを選択可能化）
+- [done][P1-High] SVGテキストの実体が`<path>`化されたケースの選択不可を修正（path hit policy見直し）
+- [done][P1-High] PowerPoint貼り付け `Types: Files, image/png` 未取込の最終修正（MIME空/不定でもfilesを受理）
+- [done][P1-High] web app由来SVG内テキストの選択不可修正（pointer-events強制上書き）
+- [done][P1-High] 外部PasteのFiles/image/png取りこぼし修正（clipboardData.files/kind=file対応）
+- [done][P1-High] `image/svg+xml` item parse失敗時の早期returnを廃止し、PNG/JPEGフォールバック継続
+- [done][P1-High] Paste is already running 固着の根治（貼り付けロックのタイムアウト解除 + clipboard読み取りタイムアウト）
+- [done][P1-High] Paste経路を一本化（Pasteボタン/Ctrl+Vで system clipboard API -> internal clipboard fallback）
+- [done][P1-High] Copy/Paste全面修正（Ctrl/Cmd+Vで内部ペースト自動フォールバック、内部Copyのsystem clipboard書き込み）
+- [done][P1-High] 起動時に前回エラー通知が毎回再表示される挙動を修正（last_error復元表示の見直し）
+- [done][P1-Med] Arrow先端（三角）を線の先へさらに前進させる（refX/marker調整）
+- [done][P1-Med] Paste report強化（解像度/経路の明示、低解像度時の案内文）
+- [done][P1-High] 起動直後/クリック時に発生する `Cannot read properties of null (reading 'type')`（pointerup競合）修正
+- [done][P1-High] PowerPoint画像貼り付け時の `Cannot read properties of null (reading 'type')` エラー修正
+- [done][P1-High] PowerPoint画像貼り付けで高解像度ソースを優先する（ラスタ貼り付け経路の順序/寸法制限見直し）
+- [done][P1-High] textオブジェクトのダブルクリック編集が開かない不具合修正
+- [done][P1-Med] Arrow図形追加（Line隣ボタン）+ 矢印サイズ/線太さ調整
+- [done][P1-High] webアプリ由来SVGの貼り付け不具合を再修正（実環境で貼れないケース）
+- [done][P1-High] webアプリ由来SVGの貼り付け不能修正（clipboardData.items が空でも text payload を処理）
+- [done][P1-High] error_id生成ユーティリティ追加（`YYYYMMDD-HHMM-xxxx`）
+- [done][P1-High] `window.onerror` で構造化エラーログ出力（ID付き）
+- [done][P1-High] `window.onunhandledrejection` でPromise未捕捉エラー記録
+- [done][P1-Med] 直近イベントリングバッファ（最大100件: click/key/route）
+- [done][P1-High] エラー通知UI（ID強調）+ Download log（`error-<id>.json`）
+- [done][P1-Med] `last_error` のlocalStorage保存と起動時復元通知
+- [done][P1-Med] `?debug=1` で詳細ログ、通常は最小ログ
+- [done][P1-Med] 代表エラー時のユーザー向け文言（ファイル読込失敗/JSON parse失敗など）
+- [done][P1-Low] READMEにバグ報告テンプレ追加
+- [done][P1-High] 外部SVG内のテキスト/ドット（circle等）が選択できない問題の修正
+- [done][P1-Med] PowerPoint貼り付けが常に画像になる環境の診断導線（clipboard type可視化）の強化
+- [done][P1-Low] Black/White Arrow切替時にキャンバスカーソルを黒/白矢印へ連動
+- [done][P1-High] Save SVGで保存したファイルが開けない問題の修正
+- [done][P1-High] テキストのダブルクリック編集機能の実装
+- [done][P1-Med] 等間隔分布（横/縦）
+- [done][P1-Med] PDF品質改善（svg2pdf失敗時のcanvgフォールバック）
+- [done][P1-Med] 貼り付けMIME拡張（HTML断片: SVG/img）
+- [done][P1-Low] 選択ハンドル強化（簡易BBox表示）
+- [done][P1-Med] 整列基準切替（Selection Box / First Selected）
+- [done][P1-Med] 貼り付けHTML複数要素対応（複数SVG/複数img）
+- [done][P1-Med] リサイズ対象拡張（Line/Text/Group）
+- [done][P1-Low] リサイズ対象拡張（Polygon/Polyline）
+- [done][P1-Low] リサイズ対象拡張（Path）
+- [done][P1-Low] Open/Paste時のSVGサニタイズと選択当たり判定調整
+- [done][P1-Low] Duplicate機能（ボタン / Ctrl/Cmd+D）
+- [done][P1-Med] 外部SVG transform保持移動 + 複数貼り付けオフセット配置
+- [done][P1-Low] 補助UI要素の選択混入防止 + 複数貼り付け時の一括選択
+- [done][P1-Med] 変換付き要素でのBBox/Align/Distribute精度改善
+- [done][P1-Low] Paste/PDFの再入防止と例外ガード
+- [done][P1-Low] 矢印キー連打時のUndo履歴coalesce
+- [done][P1-Low] グループラベル除外BBox（Align/Distribute/選択枠のズレ修正）
+- [done][P1-Med] Open/Undo/Autosaveでcanvas viewBox保持
+- [done][P1-Low] SVGサニタイズ属性強化 + HTML貼り付け上限制御
+- [done][P1-Low] group-label選択混入防止 + Ungroup時ラベル除去
+- [done][P1-Low] New/Open/Restore時のUndo履歴セッション分離
+- [done][P1-Low] 内部Clipboard（Copy/Cut/Paste）追加
+- [done][P1-Low] 内部Clipboard時の選択クラス混入防止
+- [done][P1-Low] 内部Pasteの親階層復元（parentId活用）
+- [done][P1-High] 右クリックメニューが出ない問題の修正
+- [done][P1-High] バウンディングボックス挙動異常の修正
+- [done][P1-Med] Groupラベル位置の自動再配置（内容BBox基準）
+- [done][P1-High] BBoxがマウス移動と同期せず巨大化する不具合の修正
+- [done][P1-Low] ドラッグ/リサイズ中の選択枠再描画をRAFで軽量化
+- [done][P1-Low] Escで選択解除・コンテキストメニュー閉じる操作追加
+- [done][P1-High] BBoxのマウス完全同期化（要素行列4隅変換ベース）
+- [done][P1-Low] 内部Pasteオフセットの親座標系変換（ネストgroup対応）
+- [done][P1-High] BBox同期修正のヘッドレス自動検証（drag追従差分<=1.5px）
+- [done][P1-Low] Pointer Capture導入でドラッグ/リサイズの追従安定化
+- [done][P1-High] リサイズ中BBoxのliveBox表示でハンドル/枠の即時同期
+- [done][P1-High] Resize時BBox巨大化の根本修正（増分スケール化）+ 自動検証PASS
+- [done][P1-Low] Shift押下で比率固定リサイズ
+- [done][P1-Low] リサイズハンドル視認性と最小サイズ制約の調整
+- [done][P1-Low] Drag履歴の時間窓coalesce（Undo体感改善）
+- [done][P1-Low] coalesce安全化（選択対象一致条件 + key移動時間窓）
+- [done][P1-Low] Undo/Redoボタンの履歴連動disabled制御
+- [done][P1-Low] ステータスバー強化（tool/selection/history/autosave/align表示）
+- [done][P1-Low] 狭幅向けステータスcompact表示（自動切替）
+- [done][P1-Low] 狭幅時ツールバーcompact化（低優先UIを折りたたみ表示）
+- [done][P1-Low] compact時の復元UIトグル（More/Less）+ `Ctrl/Cmd+Shift+R` でRestore latest
+- [done][P1-Low] compact復元UIと復元ショートカットのヘッドレス検証（Playwright）
+- [done][P1-Med] 貼り付け判定をSVG優先へ修正（HTML/SVG text優先、PNG/JPEGはフォールバック）
+- [done][P1-Med] 白矢印で重なり要素を順送り選択（再クリックで下層要素を選択）
+- [done][P1-Med] Paste diagnosticsレポート追加（route/types/noteを表示）
+- [done][P1-Med] テキストのインライン編集化（dblclickで入力、Enter/Esc対応）
+- [done][P1-Med] Save SVGのクリーン化（内部`data-*`/選択クラスを除去）
+- [done][P1-Med] 貼り付け経路拡張（`image/svg+xml` item/埋め込みplain text SVG抽出）
+- [done][P1-Low] Paste reportのコピー機能（ボタン + `Ctrl/Cmd+Shift+J`）
+- [done][P1-Low] Paste reportの永続化 + ファイル保存（`Ctrl/Cmd+Shift+K`）
+- [done][P1-Low] Paste report履歴（直近30件）表示 + 保存出力への履歴同梱（`Ctrl/Cmd+Shift+H`）
+- [done][P1-Low] Paste report履歴クリア（ボタン + `Ctrl/Cmd+Shift+L`）
+- [done][P1-Low] ショートカットヘルプ表示（ボタン + `Ctrl/Cmd+/`）
+- [done][P1-Low] Paste report履歴コピー（ボタン + `Ctrl/Cmd+Shift+U`）
+- [done][P1-Low] テキスト編集ショートカット（Enter/F2で編集開始）+ 編集中グローバルキー抑止
+- [done][P1-Low] ツール切替ショートカット（`V`=Black Arrow, `A`=White Arrow）
+- [done][P1-Low] 図形追加ショートカット（`R/L/E/T`）

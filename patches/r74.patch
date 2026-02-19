@@ -1,0 +1,34 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++PowerPoint external paste fix (Files,image/png):
++ - hasPayload now checks clipboardData.files.length
++ - findRasterFileFromClipboard() accepts unknown MIME file paths:
++   * item.kind=file with empty/octet-stream MIME
++   * clipboardData.files fallback even when MIME missing
++ - image/svg+xml item parse failure no longer blocks later raster fallback
+@@
++web app SVG text selection fix:
++ - applyPointerEventPolicy() now removes existing pointer-events attr/style first
++ - pointer-events reapplied with !important
++   * text => all
++   * line/path/polyline => stroke
++   * other shapes => all
++ - resolves imported SVG styles like `pointer-events:none !important`
+@@
++Validation:
++ - reviewer-r74-files-unknown-mime-and-text-hit: PASS
++ - reviewer-r73-files-png-fallback: PASS
++ - reviewer-r71-paste-lock-recovery: PASS
++ - reviewer-r72-ui-copy-paste: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] PowerPoint Files,image/png 未取込の最終修正
++[done] web app SVG text選択不可修正（pointer-events強制上書き）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 105/106 追加（実装 + 批判AI検証）

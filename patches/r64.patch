@@ -1,0 +1,31 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Crash fix (startup/click):
++ - pointermove/pointerup で state.interaction を直接連続参照しないよう変更
++ - ローカル変数 it に退避後、type/pointerId を先に読む
++ - finishDrag/finishResize/finishMarquee が state.interaction を null にしても後続で type を読まない
++ => `Cannot read properties of null (reading 'type')` at pointerup を解消
++
++実装修正:
++ - window.pointermove: state.interaction -> const it
++ - window.pointerup: const it, const type, const capturedId 先取り
++
++テスト:
++ - /tmp/pwfm/reviewer-r64-pointerup-crash.js 追加（PASS）
++   * 連続クリックで pageerror に null-type が出ない
++   * paste 動作回帰も同時PASS
++ - reviewer-r62-critical: PASS
++ - reviewer-r60-critical: PASS
++ - reviewer-r63-arrow-tip: PASS
++ - reviewer-r61-critical: FAIL（矢印先端仕様変更後の旧期待値）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] 起動直後/クリック時 null type（pointerup競合）修正
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 90/91 追加（実装 + 批判AI検証）

@@ -1,0 +1,26 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ <button id="toolSelect" class="active">Black Arrow</button>
+ <button id="toolDirect">White Arrow</button>
++<button id="shortcutsBtn">Shortcuts</button>
+@@
++function showShortcutHelp() {
++  // show key bindings via prompt
++}
+@@
++document.getElementById("shortcutsBtn").addEventListener("click", showShortcutHelp);
+@@
++if ((e.ctrlKey || e.metaKey) && e.key === "/") {
++  e.preventDefault();
++  showShortcutHelp();
++}
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] ショートカットヘルプ表示（ボタン + `Ctrl/Cmd+/`）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 74 - Builder implementation (shortcut help)
++### Step 75 - Reviewer verification (shortcut help)

@@ -1,0 +1,125 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+-    const MIN_RESIZE_SIZE = 6;
++    const MIN_RESIZE_SIZE = 6;
++    const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
++    const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ffffff' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
+@@
+-      if (el.tagName === "line" || el.tagName === "path" || el.tagName === "polyline") {
+-        el.setAttribute("pointer-events", "stroke");
+-        return;
+-      }
+-      if (el.tagName === "text") {
+-        el.setAttribute("pointer-events", "bounding-box");
+-        return;
+-      }
+-      if (el.tagName !== "g") el.setAttribute("pointer-events", "all");
++      if (el.tagName === "line" || el.tagName === "path" || el.tagName === "polyline") {
++        el.setAttribute("pointer-events", "stroke");
++        el.style.pointerEvents = "stroke";
++        return;
++      }
++      if (el.tagName === "text") {
++        el.setAttribute("pointer-events", "all");
++        el.style.pointerEvents = "all";
++        return;
++      }
++      if (el.tagName !== "g") {
++        el.setAttribute("pointer-events", "all");
++        el.style.pointerEvents = "all";
++      }
+@@
+-      return ["rect", "line", "ellipse", "text", "path", "polygon", "polyline", "image", "g"].includes(el.tagName);
++      return ["rect", "line", "ellipse", "circle", "text", "path", "polygon", "polyline", "image", "g"].includes(el.tagName);
+@@
+-      return !!el && ["rect", "ellipse", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
++      return !!el && ["rect", "ellipse", "circle", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
+@@
++      if (el.tagName === "circle") {
++        const cx = Number(el.getAttribute("cx") || 0) + t.x + parentOffset.x;
++        const cy = Number(el.getAttribute("cy") || 0) + t.y + parentOffset.y;
++        const r = Number(el.getAttribute("r") || 0);
++        const x1 = cx - r;
++        const x2 = cx + r;
++        const y1 = cy - r;
++        const y2 = cy + r;
++        const nx1 = mapX(x1, oldBox, newBox);
++        const nx2 = mapX(x2, oldBox, newBox);
++        const ny1 = mapY(y1, oldBox, newBox);
++        const ny2 = mapY(y2, oldBox, newBox);
++        const ncx = (nx1 + nx2) / 2;
++        const ncy = (ny1 + ny2) / 2;
++        const nr = Math.max(0.5, ((nx2 - nx1) + (ny2 - ny1)) / 4);
++        el.setAttribute("cx", String(ncx - t.x - parentOffset.x));
++        el.setAttribute("cy", String(ncy - t.y - parentOffset.y));
++        el.setAttribute("r", String(nr));
++        return;
++      }
+@@
+-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
++      return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
+     }
++
++    function updateToolCursor() {
++      canvas.style.cursor = state.tool === "direct" ? CURSOR_WHITE : CURSOR_BLACK;
++    }
+@@
+-      URL.revokeObjectURL(url);
++      setTimeout(() => URL.revokeObjectURL(url), 1500);
+@@
+-          setStatus("Pasted raster image (PNG/JPEG).");
++          setStatus(`Pasted raster image (PNG/JPEG). Source did not provide SVG payload.${suffix}`);
+@@
+       document.getElementById("toolSelect").addEventListener("click", () => {
+         state.tool = "select";
+         document.getElementById("toolSelect").classList.add("active");
+         document.getElementById("toolDirect").classList.remove("active");
++        updateToolCursor();
+       });
+@@
+       document.getElementById("toolDirect").addEventListener("click", () => {
+         state.tool = "direct";
+         document.getElementById("toolDirect").classList.add("active");
+         document.getElementById("toolSelect").classList.remove("active");
++        updateToolCursor();
+       });
+@@
++      canvas.addEventListener("dblclick", (e) => {
++        if (!(e.target instanceof SVGElement)) return;
++        const textEl = e.target.closest("text");
++        if (!(textEl instanceof SVGElement)) return;
++        if (!textEl.dataset.id || textEl.classList.contains("group-label")) return;
++        e.preventDefault();
++        const current = textEl.textContent || "";
++        const next = window.prompt("Edit text", current);
++        if (next === null) return;
++        textEl.textContent = next;
++        setSelection([textEl.dataset.id]);
++        pushHistory("edit-text");
++        setStatus("Text updated.");
++      });
+@@
+     function initialize() {
+       assignIds();
+       setupEvents();
++      updateToolCursor();
+--- /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
+@@
++  - ツール切替時、キャンバスカーソルを黒/白矢印に連動表示する。
+@@
++- テキスト編集: `text`要素はダブルクリックで編集（prompt入力）を採用。
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-High] 外部SVG内のテキスト/ドット（circle等）が選択できない問題の修正
++- [done][P1-Med] PowerPoint貼り付けが常に画像になる環境の診断導線（clipboard type可視化）の強化
++- [done][P1-Low] Black/White Arrow切替時にキャンバスカーソルを黒/白矢印へ連動
++- [done][P1-High] Save SVGで保存したファイルが開けない問題の修正
++- [done][P1-High] テキストのダブルクリック編集機能の実装
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 54 - Builder implementation (selection/cursor/text/save fixes)
++### Step 55 - Reviewer verification (selection/cursor/text/save fixes)

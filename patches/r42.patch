@@ -1,0 +1,74 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+     function renderStatus() {
+       const compact = window.innerWidth < 980;
+       document.body.classList.toggle("compact", compact);
++      const advancedBtn = document.getElementById("toggleAdvanced");
++      if (!compact) {
++        document.body.classList.remove("show-advanced");
++      }
++      if (advancedBtn) {
++        const expanded = compact && document.body.classList.contains("show-advanced");
++        advancedBtn.textContent = expanded ? "Less" : "More";
++        advancedBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
++      }
+       const toolName = state.tool === "direct" ? "White Arrow" : "Black Arrow";
+@@
+       document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
+       document.getElementById("restoreLatest").addEventListener("click", restoreLatest);
++      document.getElementById("toggleAdvanced").addEventListener("click", () => {
++        if (!document.body.classList.contains("compact")) return;
++        document.body.classList.toggle("show-advanced");
++        setStatus(document.body.classList.contains("show-advanced") ? "Advanced restore options shown." : "Advanced restore options hidden.");
++      });
+       document.getElementById("restoreFromList").addEventListener("click", restoreFromList);
+@@
+         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "v") {
+           e.preventDefault();
+           pasteInternalClipboard();
+         }
++        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "r") {
++          e.preventDefault();
++          restoreLatest();
++        }
+       });
+--- /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
+@@
+-- 選択表示のハンドル強化・操作性改善: 簡易BBox + リサイズハンドル（Rect/Ellipse/Image）実装済み。
++- 選択表示のハンドル強化・操作性改善: 簡易BBox + リサイズハンドル（Rect/Line/Ellipse/Text/Image/Group/Polygon/Polyline/Path）実装済み。
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
+ - [done][P1-Low] ステータスバー強化（tool/selection/history/autosave/align表示）
+ - [done][P1-Low] 狭幅向けステータスcompact表示（自動切替）
+ - [done][P1-Low] 狭幅時ツールバーcompact化（低優先UIを折りたたみ表示）
++- [done][P1-Low] compact時の復元UIトグル（More/Less）+ `Ctrl/Cmd+Shift+R` でRestore latest
++- [done][P1-Low] compact復元UIと復元ショートカットのヘッドレス検証（Playwright）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
+ ### Step 49 - Builder implementation (compact toolbar)
+ - Date: 2026-02-18
+ - Owner: Builder
+ - Decisions: 狭幅では低優先UIを折りたたみ、主要操作の可視性を優先する。
+ - Changes: `body.compact`スタイルを追加し、restore list系を隠す。`renderStatus`でcompactクラスを自動切替。
+ - Open issues: compact時に隠した復元UIは横幅拡大で再表示。
+ - Next action: 構文確認とパッチ更新。
++
++### Step 50 - Builder implementation (compact restore UX)
++- Date: 2026-02-19
++- Owner: Builder
++- Decisions: compact時のみ復元詳細UIをトグル表示し、誤操作を避けつつアクセス性を確保する。
++- Changes: `toggleAdvanced`の`More/Less`挙動を実装。非compact時は`show-advanced`を自動解除。`Ctrl/Cmd+Shift+R`で`Restore latest`ショートカットを追加。
++- Open issues: compact判定しきい値(980px)は利用環境で調整余地あり。
++- Next action: 構文チェックと差分更新。
++
++### Step 51 - Reviewer verification (compact restore UX)
++- Date: 2026-02-19
++- Owner: Reviewer
++- Decisions: 既存機能の回帰を避けるため、compact復元UIとショートカットをヘッドレスで実測確認する。
++- Changes: Playwrightで`900px`幅時の`More/Less`表示、`aria-expanded`反映、`Ctrl+Shift+R`でlatest復元を検証しPASS。
++- Open issues: ショートカットはブラウザ既定再読み込みと競合しうるため、環境差の体感確認は継続。
++- Next action: 次のP1改善（ショートカット可視化/ヘルプ導線）へ進む。

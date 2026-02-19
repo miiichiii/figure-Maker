@@ -1,0 +1,32 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Root fix for "Paste is already running" lock:
++ - Added paste lock metadata: state.pasteLockAt
++ - Added PASTE_LOCK_TIMEOUT_MS (2.5s)
++ - Added clearPasteLock() and tryRecoverPasteLock()
++ - handlePaste(): if locked, attempts stale-lock recovery before rejecting
++ - handlePaste(): sets pasteLockAt at start, always clears lock in finally
++ - pasteFromClipboardApiFallback(): same lock lifecycle + stale-lock recovery
++ - readClipboardItemAsText(): 1.2s timeout for getAsString/FileReader dead-paths
+@@
++Critical bug fixed:
++ - Repaired malformed finally block in pasteFromClipboardApiFallback that caused startup parse error
++ - Verified no pageerror on fresh load
+@@
++Validation:
++ - reviewer-r71-paste-lock-recovery: PASS
++ - reviewer-r72-ui-copy-paste: PASS
++ - reviewer-r70-paste-best-effort: PASS
++ - reviewer-r66-paste-report-meaning: PASS
++ - reviewer-r64-pointerup-crash: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] Paste is already running 固着の根治（ロック回復+読み取りタイムアウト）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 101/102 追加（実装 + 批判AI検証）

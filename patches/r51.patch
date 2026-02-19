@@ -1,0 +1,31 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ <button id="pasteReportBtn">Paste report</button>
++<button id="copyPasteReportBtn">Copy report</button>
+@@
++function formatPasteReportText() {
++  return [Time, Route, Types, Note, UserAgent].join("\\n");
++}
++
++async function copyPasteReport() {
++  if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(formatPasteReportText());
++  else window.prompt(...);
++}
+@@
+ document.getElementById("pasteReportBtn").addEventListener("click", showPasteReport);
++document.getElementById("copyPasteReportBtn").addEventListener("click", copyPasteReport);
+@@
++if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "j") {
++  e.preventDefault();
++  copyPasteReport();
++}
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] Paste reportのコピー機能（ボタン + `Ctrl/Cmd+Shift+J`）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 66 - Builder implementation (paste report copy)
++### Step 67 - Reviewer verification (paste report copy)

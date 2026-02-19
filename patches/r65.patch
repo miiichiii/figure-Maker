@@ -1,0 +1,19 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++pointerup null-type crash fix finalized:
++ - pointermove/pointerup で interaction をローカル退避して参照
++ - finishDrag 等で interaction が null 化されても後続分岐で type を再参照しない
++ - 起動直後クリックでのエラー表示を解消
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 92 追加:
++ - reviewer-r61-critical の期待値を現行矢印仕様へ更新
++ - reviewer-r60/r61/r62/r63/r64 全PASS
+
+--- /tmp/pwfm/reviewer-r61-critical.js
++++ /tmp/pwfm/reviewer-r61-critical.js
+@@
++Arrow期待値を tip=size+2 に更新（markerWidth/refX）

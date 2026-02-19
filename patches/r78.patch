@@ -1,0 +1,30 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Regression audit fix (direct text selection):
++ - In white-arrow pointerdown path, raw/stack target alone is no longer authoritative.
++ - Always evaluate bbox-derived candidates in parallel.
++ - If bbox candidate is text-like and raw candidate is not, text-like target is selected.
++ - This fixes cases where overlay elements steal raw hit and text never gets selected.
+@@
++Cmd+V reliability tuning:
++ - focusPasteSink() is called right before Cmd/Ctrl+V fallback timing starts,
++   improving native paste-event delivery without clipboard permission prompts.
+@@
++Validation:
++ - reviewer-r78-direct-text-priority: PASS
++ - reviewer-r76-cmdv-no-prompt-and-textlike: PASS
++ - reviewer-r75-path-text-hit: PASS
++ - reviewer-r74-files-unknown-mime-and-text-hit: PASS
++ - reviewer-r72-ui-copy-paste: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] White Arrow raw優先回帰修正（BBox候補常時評価）
++[done] Cmd+V前のpaste sinkフォーカス強化
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 113/114 追加（回帰調査 + 批判AI検証）

@@ -1,0 +1,932 @@
+diff --git a/index.html b/index.html
+new file mode 100644
+index 0000000..ea3eaa4
+--- /dev/null
++++ b/index.html
+@@ -0,0 +1,926 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="UTF-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++  <title>Figure Maker</title>
++  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
++  <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.5.0/dist/svg2pdf.umd.min.js"></script>
++  <style>
++    :root {
++      --bg: #f3f4f6;
++      --panel: #ffffff;
++      --ink: #111827;
++      --line: #d1d5db;
++      --accent: #2563eb;
++      --muted: #6b7280;
++    }
++    * { box-sizing: border-box; font-family: Arial, sans-serif; }
++    body { margin: 0; color: var(--ink); background: var(--bg); }
++    .app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
++    .toolbar {
++      display: flex;
++      flex-wrap: wrap;
++      gap: 8px;
++      padding: 8px;
++      border-bottom: 1px solid var(--line);
++      background: var(--panel);
++      align-items: center;
++    }
++    .group { display: flex; gap: 6px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
++    .group:last-child { border-right: none; }
++    button, select {
++      border: 1px solid var(--line);
++      background: #fff;
++      color: var(--ink);
++      border-radius: 6px;
++      padding: 5px 8px;
++      font-size: 12px;
++      cursor: pointer;
++    }
++    button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
++    .canvas-wrap { padding: 10px; overflow: auto; }
++    #canvas {
++      width: 1200px;
++      height: 700px;
++      background: #fff;
++      border: 1px solid var(--line);
++      user-select: none;
++      touch-action: none;
++    }
++    .status {
++      padding: 6px 10px;
++      font-size: 12px;
++      color: var(--muted);
++      border-top: 1px solid var(--line);
++      background: var(--panel);
++      min-height: 30px;
++    }
++    .fm-selected {
++      stroke: var(--accent) !important;
++      stroke-width: 2 !important;
++      stroke-dasharray: 4 2;
++    }
++    .fm-group-selected {
++      stroke: var(--accent) !important;
++      stroke-width: 2 !important;
++      stroke-dasharray: 4 2;
++    }
++    .marquee {
++      fill: rgba(37, 99, 235, 0.12);
++      stroke: var(--accent);
++      stroke-dasharray: 4 2;
++      pointer-events: none;
++    }
++    .context-menu {
++      position: fixed;
++      background: #fff;
++      border: 1px solid var(--line);
++      border-radius: 8px;
++      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
++      display: none;
++      z-index: 10;
++      padding: 4px;
++      min-width: 110px;
++    }
++    .context-menu button {
++      display: block;
++      width: 100%;
++      text-align: left;
++      border: none;
++      background: transparent;
++      border-radius: 4px;
++      padding: 6px 8px;
++    }
++    .context-menu button:hover { background: #eef2ff; }
++    .group-label {
++      font-family: Arial, sans-serif;
++      font-size: 16px;
++      font-weight: bold;
++      fill: #111827;
++      pointer-events: none;
++    }
++  </style>
++</head>
++<body>
++  <div class="app">
++    <div class="toolbar">
++      <div class="group">
++        <button id="toolSelect" class="active">Black Arrow</button>
++        <button id="toolDirect">White Arrow</button>
++      </div>
++      <div class="group">
++        <button id="newCanvas">New</button>
++        <button id="openSvg">Open SVG</button>
++        <button id="saveSvg">Save SVG</button>
++        <button id="exportPdf">Export PDF</button>
++        <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
++      </div>
++      <div class="group">
++        <button id="addRect">Rect</button>
++        <button id="addLine">Line</button>
++        <button id="addEllipse">Ellipse</button>
++        <button id="addText">Text</button>
++      </div>
++      <div class="group">
++        <button id="undoBtn">Undo</button>
++        <button id="redoBtn">Redo</button>
++      </div>
++      <div class="group">
++        <button id="groupBtn">Group</button>
++        <button id="ungroupBtn">Ungroup</button>
++      </div>
++      <div class="group">
++        <button data-align="left">Align L</button>
++        <button data-align="hcenter">Align C</button>
++        <button data-align="right">Align R</button>
++        <button data-align="top">Align T</button>
++        <button data-align="vcenter">Align M</button>
++        <button data-align="bottom">Align B</button>
++      </div>
++      <div class="group">
++        <label for="autosaveSelect">Autosave</label>
++        <select id="autosaveSelect">
++          <option value="off">Off</option>
++          <option value="10">10 min</option>
++          <option value="30">30 min</option>
++        </select>
++        <button id="restoreLatest">Restore latest</button>
++        <select id="restoreList"></select>
++        <button id="restoreFromList">Restore selected</button>
++      </div>
++    </div>
++    <div class="canvas-wrap">
++      <svg id="canvas" viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg"></svg>
++    </div>
++    <div id="status" class="status">Ready.</div>
++  </div>
++
++  <div id="ctxMenu" class="context-menu">
++    <button data-label="A">Label A</button>
++    <button data-label="B">Label B</button>
++    <button data-label="C">Label C</button>
++  </div>
++
++  <script>
++    const SVG_NS = "http://www.w3.org/2000/svg";
++    const XLINK_NS = "http://www.w3.org/1999/xlink";
++    const AUTOSAVE_KEY = "figureMaker_autosave_records";
++    const AUTOSAVE_INTERVAL_KEY = "figureMaker_autosave_interval";
++
++    const canvas = document.getElementById("canvas");
++    const statusEl = document.getElementById("status");
++    const restoreListEl = document.getElementById("restoreList");
++    const ctxMenu = document.getElementById("ctxMenu");
++
++    const state = {
++      tool: "select",
++      selectedIds: [],
++      idCounter: 1,
++      history: [],
++      future: [],
++      maxHistory: 100,
++      interaction: null,
++      autosaveTimer: null,
++      contextGroupId: null
++    };
++
++    function setStatus(msg) {
++      statusEl.textContent = msg;
++    }
++
++    function createId() {
++      const id = `obj-${state.idCounter++}`;
++      return id;
++    }
++
++    function ensureId(el) {
++      if (!el || !(el instanceof SVGElement)) return;
++      if (el === canvas) return;
++      if (!el.dataset.id) el.dataset.id = createId();
++    }
++
++    function assignIds(root = canvas) {
++      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
++      let maxNum = state.idCounter;
++      while (walker.nextNode()) {
++        const el = walker.currentNode;
++        if (!(el instanceof SVGElement)) continue;
++        ensureId(el);
++        if (el.dataset.id && /^obj-(\d+)$/.test(el.dataset.id)) {
++          const n = Number(el.dataset.id.replace("obj-", ""));
++          if (n >= maxNum) maxNum = n + 1;
++        }
++      }
++      state.idCounter = maxNum;
++    }
++
++    function isEditableElement(el) {
++      if (!(el instanceof SVGElement)) return false;
++      if (el === canvas) return false;
++      return ["rect", "line", "ellipse", "text", "path", "polygon", "polyline", "image", "g"].includes(el.tagName);
++    }
++
++    function getById(id) {
++      return canvas.querySelector(`[data-id="${CSS.escape(id)}"]`);
++    }
++
++    function getTranslate(el) {
++      const x = Number(el.dataset.tx || 0);
++      const y = Number(el.dataset.ty || 0);
++      return { x, y };
++    }
++
++    function setTranslate(el, x, y) {
++      el.dataset.tx = String(x);
++      el.dataset.ty = String(y);
++      el.setAttribute("transform", `translate(${x},${y})`);
++    }
++
++    function applySelectionStyles() {
++      canvas.querySelectorAll(".fm-selected").forEach((el) => el.classList.remove("fm-selected"));
++      canvas.querySelectorAll(".fm-group-selected").forEach((el) => el.classList.remove("fm-group-selected"));
++      for (const id of state.selectedIds) {
++        const el = getById(id);
++        if (!el) continue;
++        if (el.tagName === "g") {
++          Array.from(el.children).forEach((child) => {
++            if (child instanceof SVGElement && !child.classList.contains("group-label")) child.classList.add("fm-group-selected");
++          });
++        } else {
++          el.classList.add("fm-selected");
++        }
++      }
++    }
++
++    function setSelection(ids) {
++      state.selectedIds = [...new Set(ids)].filter((id) => !!getById(id));
++      applySelectionStyles();
++      setStatus(state.selectedIds.length ? `Selected: ${state.selectedIds.length}` : "Ready.");
++    }
++
++    function toggleSelection(id) {
++      if (!id) return;
++      if (state.selectedIds.includes(id)) {
++        setSelection(state.selectedIds.filter((s) => s !== id));
++      } else {
++        setSelection([...state.selectedIds, id]);
++      }
++    }
++
++    function clearSelection() {
++      setSelection([]);
++    }
++
++    function closestEditableTarget(node) {
++      let cur = node;
++      while (cur && cur !== canvas) {
++        if (isEditableElement(cur) && cur.dataset.id) return cur;
++        cur = cur.parentNode;
++      }
++      return null;
++    }
++
++    function resolveOuterGroup(el) {
++      let cur = el;
++      let outer = null;
++      while (cur && cur !== canvas) {
++        if (cur.tagName === "g") outer = cur;
++        cur = cur.parentNode;
++      }
++      return outer || el;
++    }
++
++    function resolveTargetByTool(raw) {
++      if (!raw) return null;
++      return state.tool === "select" ? resolveOuterGroup(raw) : raw;
++    }
++
++    function getSvgPoint(clientX, clientY) {
++      const pt = canvas.createSVGPoint();
++      pt.x = clientX;
++      pt.y = clientY;
++      const matrix = canvas.getScreenCTM();
++      return matrix ? pt.matrixTransform(matrix.inverse()) : { x: 0, y: 0 };
++    }
++
++    function intersects(a, b) {
++      return a.x <= b.x + b.width && a.x + a.width >= b.x && a.y <= b.y + b.height && a.y + a.height >= b.y;
++    }
++
++    function safeBBox(el) {
++      try {
++        const b = el.getBBox();
++        const t = getTranslate(el);
++        return { x: b.x + t.x, y: b.y + t.y, width: b.width, height: b.height };
++      } catch (_) {
++        return null;
++      }
++    }
++
++    function getTopSelectedElements() {
++      const selected = state.selectedIds.map(getById).filter(Boolean);
++      return selected.filter((el) => !selected.some((other) => other !== el && other.contains(el)));
++    }
++
++    function createShape(tag, attrs, text) {
++      const el = document.createElementNS(SVG_NS, tag);
++      Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, String(v)));
++      if (text) el.textContent = text;
++      ensureId(el);
++      setTranslate(el, 0, 0);
++      canvas.appendChild(el);
++      return el;
++    }
++
++    function addRect() {
++      const el = createShape("rect", { x: 120, y: 120, width: 180, height: 110, fill: "#fef3c7", stroke: "#374151", "stroke-width": 2 });
++      setSelection([el.dataset.id]);
++      pushHistory("add-rect");
++    }
++
++    function addLine() {
++      const el = createShape("line", { x1: 150, y1: 300, x2: 340, y2: 360, stroke: "#0f172a", "stroke-width": 3 });
++      setSelection([el.dataset.id]);
++      pushHistory("add-line");
++    }
++
++    function addEllipse() {
++      const el = createShape("ellipse", { cx: 520, cy: 190, rx: 95, ry: 60, fill: "#dbeafe", stroke: "#1e3a8a", "stroke-width": 2 });
++      setSelection([el.dataset.id]);
++      pushHistory("add-ellipse");
++    }
++
++    function addText() {
++      const el = createShape("text", { x: 520, y: 330, fill: "#111827", "font-size": 28, "font-family": "Arial" }, "Text");
++      setSelection([el.dataset.id]);
++      pushHistory("add-text");
++    }
++
++    function getSnapshot() {
++      return { markup: canvas.innerHTML, selectedIds: [...state.selectedIds], at: Date.now() };
++    }
++
++    function pushHistory(reason) {
++      const snap = getSnapshot();
++      const last = state.history[state.history.length - 1];
++      if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) return;
++      state.history.push(snap);
++      if (state.history.length > state.maxHistory) state.history.shift();
++      state.future = [];
++      setStatus(`Saved state (${reason}).`);
++    }
++
++    function restoreSnapshot(snap) {
++      if (!snap) return;
++      canvas.innerHTML = snap.markup;
++      assignIds();
++      setSelection(snap.selectedIds || []);
++    }
++
++    function undo() {
++      if (state.history.length <= 1) {
++        setStatus("Undo unavailable.");
++        return;
++      }
++      const current = state.history.pop();
++      state.future.push(current);
++      restoreSnapshot(state.history[state.history.length - 1]);
++      setStatus("Undo.");
++    }
++
++    function redo() {
++      if (!state.future.length) {
++        setStatus("Redo unavailable.");
++        return;
++      }
++      const next = state.future.pop();
++      state.history.push(next);
++      restoreSnapshot(next);
++      setStatus("Redo.");
++    }
++
++    function moveSelection(dx, dy) {
++      if (!state.selectedIds.length) return;
++      for (const el of getTopSelectedElements()) {
++        const t = getTranslate(el);
++        setTranslate(el, t.x + dx, t.y + dy);
++      }
++      applySelectionStyles();
++      pushHistory("move");
++    }
++
++    function alignSelected(mode) {
++      const elements = getTopSelectedElements();
++      if (elements.length < 2) {
++        setStatus("Align needs 2+ selected objects.");
++        return;
++      }
++      const bounds = elements.map(safeBBox).filter(Boolean);
++      if (!bounds.length) return;
++      const minX = Math.min(...bounds.map((b) => b.x));
++      const maxX = Math.max(...bounds.map((b) => b.x + b.width));
++      const minY = Math.min(...bounds.map((b) => b.y));
++      const maxY = Math.max(...bounds.map((b) => b.y + b.height));
++      const centerX = (minX + maxX) / 2;
++      const centerY = (minY + maxY) / 2;
++
++      elements.forEach((el) => {
++        const bRaw = el.getBBox();
++        const t = getTranslate(el);
++        let newX = t.x;
++        let newY = t.y;
++        if (mode === "left") newX = minX - bRaw.x;
++        if (mode === "hcenter") newX = centerX - (bRaw.x + bRaw.width / 2);
++        if (mode === "right") newX = maxX - (bRaw.x + bRaw.width);
++        if (mode === "top") newY = minY - bRaw.y;
++        if (mode === "vcenter") newY = centerY - (bRaw.y + bRaw.height / 2);
++        if (mode === "bottom") newY = maxY - (bRaw.y + bRaw.height);
++        setTranslate(el, newX, newY);
++      });
++      applySelectionStyles();
++      pushHistory(`align-${mode}`);
++    }
++
++    function groupSelected() {
++      const elements = getTopSelectedElements();
++      if (elements.length < 2) {
++        setStatus("Group needs 2+ selected objects.");
++        return;
++      }
++      const parent = elements[0].parentNode;
++      if (!elements.every((el) => el.parentNode === parent)) {
++        setStatus("Group requires same parent level.");
++        return;
++      }
++      const g = document.createElementNS(SVG_NS, "g");
++      ensureId(g);
++      setTranslate(g, 0, 0);
++      parent.insertBefore(g, elements[0]);
++      elements.forEach((el) => g.appendChild(el));
++      setSelection([g.dataset.id]);
++      pushHistory("group");
++    }
++
++    function ungroupSelected() {
++      const groups = getTopSelectedElements().filter((el) => el.tagName === "g");
++      if (!groups.length) {
++        setStatus("Ungroup needs selected group.");
++        return;
++      }
++      const selected = [];
++      groups.forEach((g) => {
++        const parent = g.parentNode;
++        const children = Array.from(g.childNodes);
++        children.forEach((child) => {
++          parent.insertBefore(child, g);
++          if (child instanceof SVGElement && child.dataset.id) selected.push(child.dataset.id);
++        });
++        g.remove();
++      });
++      setSelection(selected);
++      pushHistory("ungroup");
++    }
++
++    function addOrReplaceGroupLabel(groupEl, letter) {
++      if (!groupEl || groupEl.tagName !== "g") return;
++      const existing = groupEl.querySelector(":scope > .group-label");
++      if (existing) existing.remove();
++      const b = groupEl.getBBox();
++      const label = document.createElementNS(SVG_NS, "text");
++      label.setAttribute("class", "group-label");
++      label.setAttribute("x", String(b.x));
++      label.setAttribute("y", String(b.y - 6));
++      label.textContent = letter;
++      ensureId(label);
++      groupEl.appendChild(label);
++      pushHistory(`label-${letter}`);
++    }
++
++    function openContextMenu(clientX, clientY, groupId) {
++      state.contextGroupId = groupId;
++      ctxMenu.style.left = `${clientX}px`;
++      ctxMenu.style.top = `${clientY}px`;
++      ctxMenu.style.display = "block";
++    }
++
++    function closeContextMenu() {
++      ctxMenu.style.display = "none";
++      state.contextGroupId = null;
++    }
++
++    function saveSvg() {
++      const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${canvas.getAttribute("viewBox")}" width="1200" height="700">${canvas.innerHTML}</svg>`;
++      const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
++      const url = URL.createObjectURL(blob);
++      const a = document.createElement("a");
++      a.href = url;
++      a.download = "figure.svg";
++      a.click();
++      URL.revokeObjectURL(url);
++      setStatus("SVG saved.");
++    }
++
++    async function exportPdf() {
++      try {
++        if (!window.jspdf || !window.jspdf.jsPDF) {
++          setStatus("jsPDF unavailable.");
++          return;
++        }
++        const vb = (canvas.getAttribute("viewBox") || "0 0 1200 700").split(/\s+/).map(Number);
++        const w = vb[2] || 1200;
++        const h = vb[3] || 700;
++        const { jsPDF } = window.jspdf;
++        const pdf = new jsPDF({ unit: "pt", format: [w, h], orientation: w >= h ? "landscape" : "portrait" });
++        await pdf.svg(canvas, { x: 0, y: 0, width: w, height: h });
++        pdf.save("figure.pdf");
++        setStatus("PDF exported.");
++      } catch (err) {
++        setStatus(`PDF export failed: ${err.message}`);
++      }
++    }
++
++    function loadSvgText(text) {
++      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
++      const root = doc.querySelector("svg");
++      if (!root) {
++        setStatus("Invalid SVG file.");
++        return;
++      }
++      canvas.innerHTML = root.innerHTML;
++      assignIds();
++      clearSelection();
++      pushHistory("open-svg");
++      setStatus("SVG opened.");
++    }
++
++    function newCanvas() {
++      canvas.innerHTML = "";
++      clearSelection();
++      pushHistory("new-canvas");
++      setStatus("New canvas created.");
++    }
++
++    function getAutosaveRecords() {
++      try {
++        return JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "[]");
++      } catch (_) {
++        return [];
++      }
++    }
++
++    function setAutosaveRecords(records) {
++      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(records.slice(-20)));
++    }
++
++    function saveAutosave() {
++      const records = getAutosaveRecords();
++      records.push({ id: `as-${Date.now()}`, at: Date.now(), markup: canvas.innerHTML, selectedIds: [...state.selectedIds] });
++      setAutosaveRecords(records);
++      refreshRestoreList();
++      setStatus("Autosave snapshot written.");
++    }
++
++    function refreshRestoreList() {
++      const records = getAutosaveRecords();
++      restoreListEl.innerHTML = "";
++      records.slice().reverse().forEach((r) => {
++        const option = document.createElement("option");
++        option.value = r.id;
++        option.textContent = new Date(r.at).toLocaleString();
++        restoreListEl.appendChild(option);
++      });
++    }
++
++    function restoreLatest() {
++      const records = getAutosaveRecords();
++      const r = records[records.length - 1];
++      if (!r) {
++        setStatus("No autosave records.");
++        return;
++      }
++      canvas.innerHTML = r.markup;
++      assignIds();
++      setSelection(r.selectedIds || []);
++      pushHistory("restore-latest");
++      setStatus("Latest autosave restored.");
++    }
++
++    function restoreFromList() {
++      const records = getAutosaveRecords();
++      const id = restoreListEl.value;
++      const r = records.find((x) => x.id === id);
++      if (!r) {
++        setStatus("Selected autosave not found.");
++        return;
++      }
++      canvas.innerHTML = r.markup;
++      assignIds();
++      setSelection(r.selectedIds || []);
++      pushHistory("restore-from-list");
++      setStatus("Autosave restored.");
++    }
++
++    function updateAutosaveTimer() {
++      if (state.autosaveTimer) {
++        clearInterval(state.autosaveTimer);
++        state.autosaveTimer = null;
++      }
++      const val = document.getElementById("autosaveSelect").value;
++      localStorage.setItem(AUTOSAVE_INTERVAL_KEY, val);
++      if (val !== "off") {
++        state.autosaveTimer = setInterval(saveAutosave, Number(val) * 60 * 1000);
++      }
++      setStatus(`Autosave set: ${val}`);
++    }
++
++    function handlePaste(ev) {
++      const items = Array.from(ev.clipboardData?.items || []);
++      if (!items.length) return;
++      const png = items.find((it) => it.type === "image/png");
++      if (png) {
++        ev.preventDefault();
++        const file = png.getAsFile();
++        if (!file) return;
++        const url = URL.createObjectURL(file);
++        const img = new Image();
++        img.onload = () => {
++          const width = Math.min(img.width || 320, 600);
++          const height = Math.min(img.height || 240, 400);
++          const x = 600 - width / 2;
++          const y = 350 - height / 2;
++          const el = document.createElementNS(SVG_NS, "image");
++          el.setAttribute("x", String(x));
++          el.setAttribute("y", String(y));
++          el.setAttribute("width", String(width));
++          el.setAttribute("height", String(height));
++          el.setAttribute("href", url);
++          el.setAttributeNS(XLINK_NS, "href", url);
++          ensureId(el);
++          setTranslate(el, 0, 0);
++          canvas.appendChild(el);
++          setSelection([el.dataset.id]);
++          pushHistory("paste-png");
++          setStatus("Pasted PNG as image.");
++        };
++        img.src = url;
++        return;
++      }
++
++      const plain = ev.clipboardData?.getData("text/plain") || "";
++      if (plain.trim().startsWith("<svg")) {
++        ev.preventDefault();
++        const doc = new DOMParser().parseFromString(plain, "image/svg+xml");
++        const root = doc.querySelector("svg");
++        if (!root) {
++          setStatus("Paste SVG parse failed.");
++          return;
++        }
++        const importedIds = [];
++        Array.from(root.children).forEach((child) => {
++          const imported = document.importNode(child, true);
++          if (imported instanceof SVGElement) {
++            ensureId(imported);
++            if (!imported.hasAttribute("transform")) setTranslate(imported, 0, 0);
++            canvas.appendChild(imported);
++            if (imported.dataset.id) importedIds.push(imported.dataset.id);
++          }
++        });
++        assignIds();
++        setSelection(importedIds);
++        pushHistory("paste-svg");
++        setStatus("Pasted SVG content.");
++        return;
++      }
++
++      setStatus("Paste unsupported: use PNG or SVG text.");
++    }
++
++    function beginMarquee(start, keepCurrent) {
++      const rect = document.createElementNS(SVG_NS, "rect");
++      rect.setAttribute("class", "marquee");
++      rect.setAttribute("x", String(start.x));
++      rect.setAttribute("y", String(start.y));
++      rect.setAttribute("width", "0");
++      rect.setAttribute("height", "0");
++      canvas.appendChild(rect);
++      state.interaction = { type: "marquee", start, rect, keepCurrent };
++    }
++
++    function updateMarquee(pt) {
++      const it = state.interaction;
++      if (!it || it.type !== "marquee") return;
++      const x = Math.min(it.start.x, pt.x);
++      const y = Math.min(it.start.y, pt.y);
++      const w = Math.abs(it.start.x - pt.x);
++      const h = Math.abs(it.start.y - pt.y);
++      it.rect.setAttribute("x", String(x));
++      it.rect.setAttribute("y", String(y));
++      it.rect.setAttribute("width", String(w));
++      it.rect.setAttribute("height", String(h));
++    }
++
++    function finishMarquee() {
++      const it = state.interaction;
++      if (!it || it.type !== "marquee") return;
++      const x = Number(it.rect.getAttribute("x"));
++      const y = Number(it.rect.getAttribute("y"));
++      const width = Number(it.rect.getAttribute("width"));
++      const height = Number(it.rect.getAttribute("height"));
++      it.rect.remove();
++      const hit = [];
++      if (width > 2 && height > 2) {
++        const area = { x, y, width, height };
++        canvas.querySelectorAll("[data-id]").forEach((el) => {
++          if (!(el instanceof SVGElement) || !isEditableElement(el)) return;
++          if (el.classList.contains("group-label")) return;
++          const b = safeBBox(el);
++          if (b && intersects(area, b)) hit.push(el.dataset.id);
++        });
++      }
++      if (it.keepCurrent) {
++        setSelection([...state.selectedIds, ...hit]);
++      } else {
++        setSelection(hit);
++      }
++      state.interaction = null;
++    }
++
++    function beginDrag(start) {
++      const elements = getTopSelectedElements();
++      if (!elements.length) return;
++      const original = new Map();
++      elements.forEach((el) => original.set(el.dataset.id, getTranslate(el)));
++      state.interaction = { type: "drag", start, original, moved: false };
++    }
++
++    function updateDrag(pt) {
++      const it = state.interaction;
++      if (!it || it.type !== "drag") return;
++      const dx = pt.x - it.start.x;
++      const dy = pt.y - it.start.y;
++      if (Math.abs(dx) > 0.3 || Math.abs(dy) > 0.3) it.moved = true;
++      getTopSelectedElements().forEach((el) => {
++        const o = it.original.get(el.dataset.id);
++        if (!o) return;
++        setTranslate(el, o.x + dx, o.y + dy);
++      });
++      applySelectionStyles();
++    }
++
++    function finishDrag() {
++      const it = state.interaction;
++      if (!it || it.type !== "drag") return;
++      if (it.moved) pushHistory("drag-move");
++      state.interaction = null;
++    }
++
++    function setupEvents() {
++      document.getElementById("toolSelect").addEventListener("click", () => {
++        state.tool = "select";
++        document.getElementById("toolSelect").classList.add("active");
++        document.getElementById("toolDirect").classList.remove("active");
++      });
++      document.getElementById("toolDirect").addEventListener("click", () => {
++        state.tool = "direct";
++        document.getElementById("toolDirect").classList.add("active");
++        document.getElementById("toolSelect").classList.remove("active");
++      });
++
++      document.getElementById("newCanvas").addEventListener("click", newCanvas);
++      document.getElementById("addRect").addEventListener("click", addRect);
++      document.getElementById("addLine").addEventListener("click", addLine);
++      document.getElementById("addEllipse").addEventListener("click", addEllipse);
++      document.getElementById("addText").addEventListener("click", addText);
++      document.getElementById("undoBtn").addEventListener("click", undo);
++      document.getElementById("redoBtn").addEventListener("click", redo);
++      document.getElementById("groupBtn").addEventListener("click", groupSelected);
++      document.getElementById("ungroupBtn").addEventListener("click", ungroupSelected);
++      document.getElementById("saveSvg").addEventListener("click", saveSvg);
++      document.getElementById("exportPdf").addEventListener("click", exportPdf);
++
++      document.querySelectorAll("[data-align]").forEach((btn) => {
++        btn.addEventListener("click", () => alignSelected(btn.dataset.align));
++      });
++
++      const fileInput = document.getElementById("openFileInput");
++      document.getElementById("openSvg").addEventListener("click", () => fileInput.click());
++      fileInput.addEventListener("change", async (e) => {
++        const file = e.target.files?.[0];
++        if (!file) return;
++        const text = await file.text();
++        loadSvgText(text);
++        fileInput.value = "";
++      });
++
++      document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
++      document.getElementById("restoreLatest").addEventListener("click", restoreLatest);
++      document.getElementById("restoreFromList").addEventListener("click", restoreFromList);
++
++      canvas.addEventListener("contextmenu", (e) => {
++        const raw = closestEditableTarget(e.target);
++        if (!raw) return;
++        const group = resolveOuterGroup(raw);
++        if (!group || group.tagName !== "g") return;
++        e.preventDefault();
++        openContextMenu(e.clientX, e.clientY, group.dataset.id);
++      });
++
++      ctxMenu.addEventListener("click", (e) => {
++        const btn = e.target.closest("button[data-label]");
++        if (!btn) return;
++        const group = getById(state.contextGroupId);
++        if (group && group.tagName === "g") {
++          addOrReplaceGroupLabel(group, btn.dataset.label);
++          setStatus(`Label ${btn.dataset.label} set.`);
++        }
++        closeContextMenu();
++      });
++
++      window.addEventListener("click", (e) => {
++        if (!ctxMenu.contains(e.target)) closeContextMenu();
++      });
++
++      canvas.addEventListener("pointerdown", (e) => {
++        if (e.button !== 0) return;
++        closeContextMenu();
++        const raw = closestEditableTarget(e.target);
++        const pt = getSvgPoint(e.clientX, e.clientY);
++        if (raw) {
++          const target = resolveTargetByTool(raw);
++          if (!target || !target.dataset.id) return;
++          const id = target.dataset.id;
++          if (e.shiftKey) {
++            toggleSelection(id);
++            return;
++          }
++          if (!state.selectedIds.includes(id)) setSelection([id]);
++          beginDrag(pt);
++          return;
++        }
++        beginMarquee(pt, e.shiftKey);
++        if (!e.shiftKey) clearSelection();
++      });
++
++      window.addEventListener("pointermove", (e) => {
++        if (!state.interaction) return;
++        const pt = getSvgPoint(e.clientX, e.clientY);
++        if (state.interaction.type === "drag") updateDrag(pt);
++        if (state.interaction.type === "marquee") updateMarquee(pt);
++      });
++
++      window.addEventListener("pointerup", () => {
++        if (!state.interaction) return;
++        if (state.interaction.type === "drag") finishDrag();
++        if (state.interaction.type === "marquee") finishMarquee();
++      });
++
++      window.addEventListener("keydown", (e) => {
++        if (e.key === "Delete" || e.key === "Backspace") {
++          if (!state.selectedIds.length) return;
++          e.preventDefault();
++          getTopSelectedElements().forEach((el) => el.remove());
++          clearSelection();
++          pushHistory("delete");
++          return;
++        }
++        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
++          if (!state.selectedIds.length) return;
++          e.preventDefault();
++          const step = e.shiftKey ? 10 : 1;
++          if (e.key === "ArrowUp") moveSelection(0, -step);
++          if (e.key === "ArrowDown") moveSelection(0, step);
++          if (e.key === "ArrowLeft") moveSelection(-step, 0);
++          if (e.key === "ArrowRight") moveSelection(step, 0);
++        }
++        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
++          e.preventDefault();
++          if (e.shiftKey) redo(); else undo();
++        }
++        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
++          e.preventDefault();
++          redo();
++        }
++      });
++
++      window.addEventListener("paste", handlePaste);
++      window.addEventListener("beforeunload", () => {
++        if (document.getElementById("autosaveSelect").value !== "off") saveAutosave();
++      });
++    }
++
++    function initialize() {
++      assignIds();
++      setupEvents();
++      const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
++      document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";
++      refreshRestoreList();
++      updateAutosaveTimer();
++      pushHistory("init");
++      setStatus("Figure Maker ready.");
++    }
++
++    initialize();
++  </script>
++</body>
++</html>

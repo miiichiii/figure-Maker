@@ -1,0 +1,28 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ function getCleanCanvasMarkup() {
+   const clone = canvas.cloneNode(true);
+   clone.querySelectorAll(".selection-outline,.selection-handle,.marquee").forEach((el) => el.remove());
+   clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
+     el.classList.remove("fm-selected");
+     el.classList.remove("fm-group-selected");
++    if (el.classList.length === 0) el.removeAttribute("class");
+   });
++  clone.querySelectorAll("[data-id],[data-tx],[data-ty],[data-base-transform]").forEach((el) => {
++    el.removeAttribute("data-id");
++    el.removeAttribute("data-tx");
++    el.removeAttribute("data-ty");
++    el.removeAttribute("data-base-transform");
++  });
+   return clone.innerHTML;
+ }
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Med] Save SVGのクリーン化（内部`data-*`/選択クラスを除去）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 62 - Builder implementation (clean SVG export)
++### Step 63 - Reviewer verification (clean SVG export)

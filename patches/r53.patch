@@ -1,0 +1,47 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ <button id="downloadPasteReportBtn">Save report</button>
++<button id="pasteHistoryBtn">Report history</button>
+@@
++const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
+@@
+ state = {
+   ...
++  pasteReportHistory: [],
+ }
+@@
+ function setLastPasteReport(route, types, note = "") {
+   ...
++  state.pasteReportHistory.push(state.lastPasteReport);
++  state.pasteReportHistory = state.pasteReportHistory.slice(-30);
++  localStorage.setItem(PASTE_REPORT_HISTORY_KEY, JSON.stringify(state.pasteReportHistory));
+ }
+@@
++function formatPasteReportHistoryText(limit = 10) { ... }
++function showPasteReportHistory() { ... }
+@@
+-function downloadPasteReport() {
+-  const text = formatPasteReportText();
++function downloadPasteReport() {
++  const text = [formatPasteReportText(), "", "----", "", formatPasteReportHistoryText(20)].join("\\n");
+ }
+@@
++document.getElementById("pasteHistoryBtn").addEventListener("click", showPasteReportHistory);
+@@
++if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "h") {
++  e.preventDefault();
++  showPasteReportHistory();
++}
+@@
++const history = JSON.parse(localStorage.getItem(PASTE_REPORT_HISTORY_KEY) || "[]");
++state.pasteReportHistory = Array.isArray(history) ? history.slice(-30) : [];
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] Paste report履歴（直近30件）表示 + 保存出力への履歴同梱（`Ctrl/Cmd+Shift+H`）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 70 - Builder implementation (report history)
++### Step 71 - Reviewer verification (report history)

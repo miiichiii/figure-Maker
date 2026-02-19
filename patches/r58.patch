@@ -1,0 +1,23 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++"V : Black Arrow tool",
++"A : White Arrow tool",
+@@
++if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "v") {
++  state.tool = "select";
++  // sync active buttons + cursor + status
++}
++if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
++  state.tool = "direct";
++  // sync active buttons + cursor + status
++}
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] ツール切替ショートカット（`V`=Black Arrow, `A`=White Arrow）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 80 - Builder implementation (tool hotkeys)
++### Step 81 - Reviewer verification (tool hotkeys)

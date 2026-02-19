@@ -1,0 +1,31 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Copy/Paste hardening:
++ - Ctrl/Cmd+V に内部Paste自動フォールバックを追加
++   * まずOS clipboard pasteイベントを優先
++   * 外部payloadが来ない場合のみ約90ms後に内部clipboard貼り付け
++ - Ctrl/Cmd+Shift+V は内部Paste強制（従来維持）
++ - copySelected() は内部clipboard保存に加え、可能な環境では system clipboard へSVG textを書き込み
+@@
++実装詳細:
++ - state.pendingInternalPasteTimer / state.lastExternalPasteAt を追加
++ - handlePaste() で外部paste受信時刻を記録
++ - buildSelectedSvgClipboardText() / copySelectedToSystemClipboard() を追加
++ - Shortcuts help を更新（Ctrl/Cmd+Vの挙動を明示）
+@@
++検証:
++ - reviewer-r69-copy-paste-hotkeys: PASS
++ - reviewer-r60-critical: PASS
++ - reviewer-r62-critical: PASS
++ - reviewer-r64-pointerup-crash: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] Copy/Paste全面修正（Ctrl/Cmd+Vフォールバック + system clipboard書き込み）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 97/98 追加（実装 + 批判AI検証）

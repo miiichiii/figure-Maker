@@ -1,0 +1,100 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+     function extractImageSrcFromHtml(html) {
+       if (!html) return [];
+       const doc = new DOMParser().parseFromString(html, "text/html");
+       return Array.from(doc.querySelectorAll("img[src]")).slice(0, 20).map((img) => img.getAttribute("src")).filter(Boolean);
+     }
++
++    function listClipboardTypes(clipboardData) {
++      const fromTypes = Array.from(clipboardData?.types || []);
++      const fromItems = Array.from(clipboardData?.items || []).map((it) => it.type).filter(Boolean);
++      return [...new Set([...fromTypes, ...fromItems])];
++    }
+@@
+-        const imageItem = items.find((it) => it.type === "image/png" || it.type === "image/jpeg");
+-        if (imageItem) {
+-          ev.preventDefault();
+-          const file = imageItem.getAsFile();
+-          if (!file) return;
+-          const dataUrl = await fileToDataUrl(file);
+-          const size = await getImageSize(dataUrl);
+-          const id = insertImageElement(dataUrl, size.width, size.height, 0, { select: false });
+-          if (id) setSelection([id]);
+-          pushHistory("paste-image");
+-          setStatus("Pasted image.");
+-          return;
+-        }
+-
+         const htmlText = ev.clipboardData?.getData("text/html") || "";
++        const svgXmlText = ev.clipboardData?.getData("image/svg+xml") || "";
++        const plain = ev.clipboardData?.getData("text/plain") || "";
+@@
++        if (svgXmlText.trim().startsWith("<svg")) {
++          ev.preventDefault();
++          if (!importSvgText(svgXmlText).length) setStatus("Paste SVG(XML) parse failed.");
++          return;
++        }
++
++        if (plain.trim().startsWith("<svg")) {
++          ev.preventDefault();
++          if (!importSvgText(plain).length) setStatus("Paste SVG parse failed.");
++          return;
++        }
++
+         const htmlImgSrcs = extractImageSrcFromHtml(htmlText);
+@@
+-        const plain = ev.clipboardData?.getData("text/plain") || "";
+-        if (plain.trim().startsWith("<svg")) {
++        const imageItem = items.find((it) => it.type === "image/png" || it.type === "image/jpeg");
++        if (imageItem) {
+           ev.preventDefault();
+-          if (!importSvgText(plain).length) setStatus("Paste SVG parse failed.");
++          const file = imageItem.getAsFile();
++          if (!file) return;
++          const dataUrl = await fileToDataUrl(file);
++          const size = await getImageSize(dataUrl);
++          const id = insertImageElement(dataUrl, size.width, size.height, 0, { select: false });
++          if (id) setSelection([id]);
++          pushHistory("paste-image");
++          setStatus("Pasted raster image (PNG/JPEG).");
+           return;
+         }
+ 
+-        setStatus("Paste unsupported: use PNG/JPEG or SVG text.");
++        const types = listClipboardTypes(ev.clipboardData);
++        const suffix = types.length ? ` Types: ${types.join(", ")}` : "";
++        setStatus(`Paste unsupported: use SVG/HTML or PNG/JPEG.${suffix}`);
+--- /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
+@@
+ - 貼り付け方針:
++  - 優先順位は「SVGベクター優先」: `text/html内の<svg>` → `image/svg+xml` → `text/plain(<svg...)` → 画像（`<img>` / `image/png` / `image/jpeg`）。
+@@
+ - `text/html`貼り付けは `<svg>` / `<img src>` 複数対応だが、複雑な埋め込みCSSや外部参照は完全再現しない。
++- PowerPoint/アプリ依存で、ブラウザに渡されるクリップボード形式が画像のみの場合はベクター貼り付けはできず、ラスター貼り付けになる。
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
+ - [done][P1-Low] compact時の復元UIトグル（More/Less）+ `Ctrl/Cmd+Shift+R` でRestore latest
+ - [done][P1-Low] compact復元UIと復元ショートカットのヘッドレス検証（Playwright）
++- [done][P1-Med] 貼り付け判定をSVG優先へ修正（HTML/SVG text優先、PNG/JPEGはフォールバック）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 52 - Builder implementation (vector-first paste)
++- Date: 2026-02-19
++- Owner: Builder
++- Decisions: 画像先行判定を廃止し、SVGベクターを最優先で取り込む。
++- Changes: `handlePaste`を`HTML内SVG -> image/svg+xml -> text/plain SVG -> HTML img -> image/png/jpeg`順に変更。未対応時はクリップボードtype一覧をstatus表示。
++- Open issues: クリップボードにベクター形式が含まれない場合はラスター貼り付けにフォールバック。
++- Next action: 優先順位の回帰テスト実施。
++
++### Step 53 - Reviewer verification (vector-first paste)
++- Date: 2026-02-19
++- Owner: Reviewer
++- Decisions: PNGとSVGが同時に存在するクリップボードでSVGが優先されることを確認する。
++- Changes: Playwrightで擬似clipboardイベントを注入し、`image/png`同梱時にも`text/html`内SVGが貼り付けられることを確認（PASS）。
++- Open issues: 実アプリ（PowerPoint等）がSVGを提供しないケースはAPI制約上回避不可。
++- Next action: 実機PowerPointでclipboard type確認。

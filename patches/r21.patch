@@ -1,0 +1,1289 @@
+--- /tmp/index_before_r3.html	2026-02-19 03:01:25
++++ index.html	2026-02-19 11:23:59
+@@ -6,6 +6,7 @@
+   <title>Figure Maker</title>
+   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.5.0/dist/svg2pdf.umd.min.js"></script>
++  <script src="https://cdn.jsdelivr.net/npm/canvg@4.0.2/lib/umd.min.js"></script>
+   <style>
+     :root {
+       --bg: #f3f4f6;
+@@ -79,6 +80,12 @@
+       stroke-dasharray: 6 3;
+       pointer-events: none;
+     }
++    .selection-handle {
++      fill: #ffffff;
++      stroke: var(--accent);
++      stroke-width: 1.5;
++      cursor: nwse-resize;
++    }
+     .context-menu {
+       position: fixed;
+       background: #fff;
+@@ -132,12 +139,21 @@
+       <div class="group">
+         <button id="undoBtn">Undo</button>
+         <button id="redoBtn">Redo</button>
++        <button id="copyBtn">Copy</button>
++        <button id="cutBtn">Cut</button>
++        <button id="pasteBtn">Paste</button>
+       </div>
+       <div class="group">
+         <button id="groupBtn">Group</button>
+         <button id="ungroupBtn">Ungroup</button>
++        <button id="duplicateBtn">Duplicate</button>
+       </div>
+       <div class="group">
++        <label for="alignBasisSelect">Align base</label>
++        <select id="alignBasisSelect">
++          <option value="bbox">Selection Box</option>
++          <option value="first">First Selected</option>
++        </select>
+         <button data-align="left">Align L</button>
+         <button data-align="hcenter">Align C</button>
+         <button data-align="right">Align R</button>
+@@ -176,6 +192,8 @@
+     const XLINK_NS = "http://www.w3.org/1999/xlink";
+     const AUTOSAVE_KEY = "figureMaker_autosave_records";
+     const AUTOSAVE_INTERVAL_KEY = "figureMaker_autosave_interval";
++    const ALIGN_BASIS_KEY = "figureMaker_align_basis";
++    const DEFAULT_VIEWBOX = "0 0 1200 700";
+ 
+     const canvas = document.getElementById("canvas");
+     const statusEl = document.getElementById("status");
+@@ -191,7 +209,11 @@
+       maxHistory: 100,
+       interaction: null,
+       autosaveTimer: null,
+-      contextGroupId: null
++      contextGroupId: null,
++      alignBasis: "bbox",
++      isExportingPdf: false,
++      isPasting: false,
++      clipboardItems: []
+     };
+ 
+     function setStatus(msg) {
+@@ -203,19 +225,74 @@
+       return id;
+     }
+ 
++    function isHelperElement(el) {
++      return !!el && (
++        el.classList.contains("selection-outline") ||
++        el.classList.contains("selection-handle") ||
++        el.classList.contains("marquee")
++      );
++    }
++
++    function isGroupLabel(el) {
++      return !!el && el.classList && el.classList.contains("group-label");
++    }
++
+     function ensureId(el) {
+       if (!el || !(el instanceof SVGElement)) return;
+       if (el === canvas) return;
++      if (isHelperElement(el)) return;
+       if (!el.dataset.id) el.dataset.id = createId();
+     }
+ 
++    function applyPointerEventPolicy(el) {
++      if (!(el instanceof SVGElement) || el === canvas) return;
++      if (el.tagName === "line" || el.tagName === "path" || el.tagName === "polyline") {
++        el.setAttribute("pointer-events", "stroke");
++        return;
++      }
++      if (el.tagName === "text") {
++        el.setAttribute("pointer-events", "bounding-box");
++        return;
++      }
++      if (el.tagName !== "g") el.setAttribute("pointer-events", "all");
++    }
++
++    function sanitizeSvgAttributes(el) {
++      if (!(el instanceof SVGElement)) return;
++      for (const attr of Array.from(el.attributes)) {
++        const name = attr.name.toLowerCase();
++        const value = String(attr.value || "");
++        if (name.startsWith("on")) el.removeAttribute(attr.name);
++        if ((name === "href" || name.endsWith(":href")) && value.trim().toLowerCase().startsWith("javascript:")) {
++          el.removeAttribute(attr.name);
++        }
++      }
++    }
++
++    function sanitizeSvgTree(root) {
++      if (!(root instanceof SVGElement)) return;
++      root.querySelectorAll("script,foreignObject,iframe,object,embed").forEach((el) => el.remove());
++      sanitizeSvgAttributes(root);
++      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
++      while (walker.nextNode()) {
++        const el = walker.currentNode;
++        if (!(el instanceof SVGElement)) continue;
++        sanitizeSvgAttributes(el);
++        applyPointerEventPolicy(el);
++      }
++      applyPointerEventPolicy(root);
++    }
++
+     function assignIds(root = canvas) {
+       const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+       let maxNum = state.idCounter;
+       while (walker.nextNode()) {
+         const el = walker.currentNode;
+         if (!(el instanceof SVGElement)) continue;
++        if (isHelperElement(el)) continue;
+         ensureId(el);
++        applyPointerEventPolicy(el);
++        ensureTransformState(el);
+         if (el.dataset.id && /^obj-(\d+)$/.test(el.dataset.id)) {
+           const n = Number(el.dataset.id.replace("obj-", ""));
+           if (n >= maxNum) maxNum = n + 1;
+@@ -227,6 +304,8 @@
+     function isEditableElement(el) {
+       if (!(el instanceof SVGElement)) return false;
+       if (el === canvas) return false;
++      if (isHelperElement(el)) return false;
++      if (isGroupLabel(el)) return false;
+       return ["rect", "line", "ellipse", "text", "path", "polygon", "polyline", "image", "g"].includes(el.tagName);
+     }
+ 
+@@ -234,16 +313,46 @@
+       return canvas.querySelector(`[data-id="${CSS.escape(id)}"]`);
+     }
+ 
++    function ensureTransformState(el) {
++      if (!(el instanceof SVGElement) || el === canvas) return;
++      const hasState = el.dataset.tx !== undefined && el.dataset.ty !== undefined && el.dataset.baseTransform !== undefined;
++      if (hasState) return;
++      const raw = String(el.getAttribute("transform") || "").trim();
++      const m = raw.match(/^translate\(\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)(?:[\s,]+([-+]?\d*\.?\d+(?:e[-+]?\d+)?))?\s*\)$/i);
++      if (m) {
++        el.dataset.baseTransform = "";
++        el.dataset.tx = String(Number(m[1] || 0));
++        el.dataset.ty = String(Number(m[2] || 0));
++      } else {
++        el.dataset.baseTransform = raw;
++        el.dataset.tx = String(Number(el.dataset.tx || 0));
++        el.dataset.ty = String(Number(el.dataset.ty || 0));
++      }
++      setTranslate(el, Number(el.dataset.tx || 0), Number(el.dataset.ty || 0));
++    }
++
+     function getTranslate(el) {
++      ensureTransformState(el);
+       const x = Number(el.dataset.tx || 0);
+       const y = Number(el.dataset.ty || 0);
+       return { x, y };
+     }
+ 
+     function setTranslate(el, x, y) {
+-      el.dataset.tx = String(x);
+-      el.dataset.ty = String(y);
+-      el.setAttribute("transform", `translate(${x},${y})`);
++      if (!(el instanceof SVGElement) || el === canvas) return;
++      const nx = Number.isFinite(x) ? x : 0;
++      const ny = Number.isFinite(y) ? y : 0;
++      const base = el.dataset.baseTransform !== undefined ? el.dataset.baseTransform : String(el.getAttribute("transform") || "").trim();
++      el.dataset.baseTransform = base;
++      el.dataset.tx = String(nx);
++      el.dataset.ty = String(ny);
++      if (base) {
++        if (Math.abs(nx) < 1e-9 && Math.abs(ny) < 1e-9) el.setAttribute("transform", base);
++        else el.setAttribute("transform", `${base} translate(${nx},${ny})`);
++      } else {
++        if (Math.abs(nx) < 1e-9 && Math.abs(ny) < 1e-9) el.removeAttribute("transform");
++        else el.setAttribute("transform", `translate(${nx},${ny})`);
++      }
+     }
+ 
+     function applySelectionStyles() {
+@@ -264,7 +373,7 @@
+     }
+ 
+     function renderSelectionOutlines() {
+-      canvas.querySelectorAll(".selection-outline").forEach((el) => el.remove());
++      canvas.querySelectorAll(".selection-outline,.selection-handle").forEach((el) => el.remove());
+       const elements = getTopSelectedElements();
+       elements.forEach((el) => {
+         const b = safeBBox(el);
+@@ -277,10 +386,44 @@
+         rect.setAttribute("height", String(b.height));
+         canvas.appendChild(rect);
+       });
++      renderResizeHandles(elements);
+     }
+ 
++    function isResizableElement(el) {
++      return !!el && ["rect", "ellipse", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
++    }
++
++    function renderResizeHandles(elements) {
++      if (elements.length !== 1) return;
++      const target = elements[0];
++      if (!isResizableElement(target)) return;
++      const b = safeBBox(target);
++      if (!b) return;
++      const size = 8;
++      const corners = [
++        { name: "nw", x: b.x, y: b.y },
++        { name: "ne", x: b.x + b.width, y: b.y },
++        { name: "sw", x: b.x, y: b.y + b.height },
++        { name: "se", x: b.x + b.width, y: b.y + b.height }
++      ];
++      corners.forEach((c) => {
++        const h = document.createElementNS(SVG_NS, "rect");
++        h.setAttribute("class", "selection-handle");
++        h.setAttribute("x", String(c.x - size / 2));
++        h.setAttribute("y", String(c.y - size / 2));
++        h.setAttribute("width", String(size));
++        h.setAttribute("height", String(size));
++        h.dataset.handle = c.name;
++        h.dataset.targetId = target.dataset.id;
++        canvas.appendChild(h);
++      });
++    }
++
+     function setSelection(ids) {
+-      state.selectedIds = [...new Set(ids)].filter((id) => !!getById(id));
++      state.selectedIds = [...new Set(ids)].filter((id) => {
++        const el = getById(id);
++        return !!el && isEditableElement(el);
++      });
+       applySelectionStyles();
+       setStatus(state.selectedIds.length ? `Selected: ${state.selectedIds.length}` : "Ready.");
+     }
+@@ -336,6 +479,36 @@
+ 
+     function safeBBox(el) {
+       try {
++        if (el.tagName === "g") {
++          const childBoxes = Array.from(el.children)
++            .filter((child) => child instanceof SVGElement && !child.classList.contains("group-label") && !isHelperElement(child))
++            .map((child) => safeBBox(child))
++            .filter(Boolean);
++          if (childBoxes.length) {
++            const minX = Math.min(...childBoxes.map((b) => b.x));
++            const minY = Math.min(...childBoxes.map((b) => b.y));
++            const maxX = Math.max(...childBoxes.map((b) => b.x + b.width));
++            const maxY = Math.max(...childBoxes.map((b) => b.y + b.height));
++            return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
++          }
++        }
++        if (el.isConnected) {
++          const er = el.getBoundingClientRect();
++          const cr = canvas.getBoundingClientRect();
++          if (er.width > 0 && er.height > 0 && cr.width > 0 && cr.height > 0) {
++            const vb = (canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX).split(/\s+/).map(Number);
++            const vw = vb[2] || 1200;
++            const vh = vb[3] || 700;
++            const sx = vw / cr.width;
++            const sy = vh / cr.height;
++            return {
++              x: (er.left - cr.left) * sx,
++              y: (er.top - cr.top) * sy,
++              width: er.width * sx,
++              height: er.height * sy
++            };
++          }
++        }
+         const b = el.getBBox();
+         const t = getTranslate(el);
+         return { x: b.x + t.x, y: b.y + t.y, width: b.width, height: b.height };
+@@ -345,7 +518,7 @@
+     }
+ 
+     function getTopSelectedElements() {
+-      const selected = state.selectedIds.map(getById).filter(Boolean);
++      const selected = state.selectedIds.map(getById).filter((el) => !!el && isEditableElement(el));
+       return selected.filter((el) => !selected.some((other) => other !== el && other.contains(el)));
+     }
+ 
+@@ -354,6 +527,7 @@
+       Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, String(v)));
+       if (text) el.textContent = text;
+       ensureId(el);
++      applyPointerEventPolicy(el);
+       setTranslate(el, 0, 0);
+       canvas.appendChild(el);
+       return el;
+@@ -385,7 +559,7 @@
+ 
+     function getCleanCanvasMarkup() {
+       const clone = canvas.cloneNode(true);
+-      clone.querySelectorAll(".selection-outline,.marquee").forEach((el) => el.remove());
++      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee").forEach((el) => el.remove());
+       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
+         el.classList.remove("fm-selected");
+         el.classList.remove("fm-group-selected");
+@@ -393,22 +567,59 @@
+       return clone.innerHTML;
+     }
+ 
+-    function getSnapshot() {
+-      return { markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds], at: Date.now() };
++    function getCanvasMeta() {
++      const vb = canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX;
++      return { viewBox: vb };
+     }
+ 
+-    function pushHistory(reason) {
+-      const snap = getSnapshot();
++    function applyCanvasMeta(meta) {
++      const vb = meta?.viewBox || DEFAULT_VIEWBOX;
++      canvas.setAttribute("viewBox", vb);
++    }
++
++    function getCanvasDimensions() {
++      const parts = (canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX).split(/\s+/).map(Number);
++      const minX = Number.isFinite(parts[0]) ? parts[0] : 0;
++      const minY = Number.isFinite(parts[1]) ? parts[1] : 0;
++      const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : 1200;
++      const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : 700;
++      return { minX, minY, width, height };
++    }
++
++    function getCleanSvgDocument() {
++      const { minX, minY, width, height } = getCanvasDimensions();
++      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
++    }
++
++    function getSnapshot(reason = "") {
++      return { markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds], canvasMeta: getCanvasMeta(), at: Date.now(), reason };
++    }
++
++    function pushHistory(reason, options = {}) {
++      const snap = getSnapshot(reason);
+       const last = state.history[state.history.length - 1];
+       if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) return;
++      if (options.coalesce && last && last.reason === reason) {
++        state.history[state.history.length - 1] = snap;
++        state.future = [];
++        setStatus(`Saved state (${reason}).`);
++        return;
++      }
+       state.history.push(snap);
+       if (state.history.length > state.maxHistory) state.history.shift();
+       state.future = [];
+       setStatus(`Saved state (${reason}).`);
+     }
+ 
++    function resetHistory(reason) {
++      const snap = getSnapshot(reason);
++      state.history = [snap];
++      state.future = [];
++    }
++
+     function restoreSnapshot(snap) {
+       if (!snap) return;
++      applyCanvasMeta(snap.canvasMeta);
+       canvas.innerHTML = snap.markup;
+       assignIds();
+       setSelection(snap.selectedIds || []);
+@@ -436,14 +647,14 @@
+       setStatus("Redo.");
+     }
+ 
+-    function moveSelection(dx, dy) {
++    function moveSelection(dx, dy, options = {}) {
+       if (!state.selectedIds.length) return;
+       for (const el of getTopSelectedElements()) {
+         const t = getTranslate(el);
+         setTranslate(el, t.x + dx, t.y + dy);
+       }
+       applySelectionStyles();
+-      pushHistory("move");
++      pushHistory(options.reason || "move", { coalesce: !!options.coalesce });
+     }
+ 
+     function alignSelected(mode) {
+@@ -454,28 +665,42 @@
+       }
+       const bounds = elements.map(safeBBox).filter(Boolean);
+       if (!bounds.length) return;
+-      const minX = Math.min(...bounds.map((b) => b.x));
+-      const maxX = Math.max(...bounds.map((b) => b.x + b.width));
+-      const minY = Math.min(...bounds.map((b) => b.y));
+-      const maxY = Math.max(...bounds.map((b) => b.y + b.height));
+-      const centerX = (minX + maxX) / 2;
+-      const centerY = (minY + maxY) / 2;
++      let baseMinX = Math.min(...bounds.map((b) => b.x));
++      let baseMaxX = Math.max(...bounds.map((b) => b.x + b.width));
++      let baseMinY = Math.min(...bounds.map((b) => b.y));
++      let baseMaxY = Math.max(...bounds.map((b) => b.y + b.height));
++      let anchorEl = null;
++      if (state.alignBasis === "first") {
++        const firstId = state.selectedIds.find((id) => elements.some((el) => el.dataset.id === id));
++        anchorEl = firstId ? getById(firstId) : elements[0];
++        const anchorBox = anchorEl ? safeBBox(anchorEl) : null;
++        if (anchorBox) {
++          baseMinX = anchorBox.x;
++          baseMaxX = anchorBox.x + anchorBox.width;
++          baseMinY = anchorBox.y;
++          baseMaxY = anchorBox.y + anchorBox.height;
++        }
++      }
++      const centerX = (baseMinX + baseMaxX) / 2;
++      const centerY = (baseMinY + baseMaxY) / 2;
+ 
+       elements.forEach((el) => {
+-        const bRaw = el.getBBox();
++        if (state.alignBasis === "first" && anchorEl && el === anchorEl) return;
++        const cur = safeBBox(el);
++        if (!cur) return;
+         const t = getTranslate(el);
+-        let newX = t.x;
+-        let newY = t.y;
+-        if (mode === "left") newX = minX - bRaw.x;
+-        if (mode === "hcenter") newX = centerX - (bRaw.x + bRaw.width / 2);
+-        if (mode === "right") newX = maxX - (bRaw.x + bRaw.width);
+-        if (mode === "top") newY = minY - bRaw.y;
+-        if (mode === "vcenter") newY = centerY - (bRaw.y + bRaw.height / 2);
+-        if (mode === "bottom") newY = maxY - (bRaw.y + bRaw.height);
+-        setTranslate(el, newX, newY);
++        let dx = 0;
++        let dy = 0;
++        if (mode === "left") dx = baseMinX - cur.x;
++        if (mode === "hcenter") dx = centerX - (cur.x + cur.width / 2);
++        if (mode === "right") dx = baseMaxX - (cur.x + cur.width);
++        if (mode === "top") dy = baseMinY - cur.y;
++        if (mode === "vcenter") dy = centerY - (cur.y + cur.height / 2);
++        if (mode === "bottom") dy = baseMaxY - (cur.y + cur.height);
++        setTranslate(el, t.x + dx, t.y + dy);
+       });
+       applySelectionStyles();
+-      pushHistory(`align-${mode}`);
++      pushHistory(`align-${mode}-${state.alignBasis}`);
+     }
+ 
+     function distributeSelected(axis) {
+@@ -485,11 +710,13 @@
+         return;
+       }
+       const items = elements.map((el) => {
+-        const bRaw = el.getBBox();
+-        const t = getTranslate(el);
+-        const b = { x: bRaw.x + t.x, y: bRaw.y + t.y, width: bRaw.width, height: bRaw.height };
+-        return { el, bRaw, b };
+-      });
++        const b = safeBBox(el);
++        return b ? { el, b } : null;
++      }).filter(Boolean);
++      if (items.length < 3) {
++        setStatus("Distribute needs 3+ measurable objects.");
++        return;
++      }
+ 
+       if (axis === "h") {
+         items.sort((a, b) => a.b.x - b.b.x);
+@@ -499,8 +726,9 @@
+         const gap = (end - start - totalSize) / (items.length - 1);
+         let cursor = start;
+         items.forEach((item) => {
+-          const newX = cursor - item.bRaw.x;
+-          setTranslate(item.el, newX, getTranslate(item.el).y);
++          const t = getTranslate(item.el);
++          const dx = cursor - item.b.x;
++          setTranslate(item.el, t.x + dx, t.y);
+           cursor += item.b.width + gap;
+         });
+       } else {
+@@ -511,8 +739,9 @@
+         const gap = (end - start - totalSize) / (items.length - 1);
+         let cursor = start;
+         items.forEach((item) => {
+-          const newY = cursor - item.bRaw.y;
+-          setTranslate(item.el, getTranslate(item.el).x, newY);
++          const t = getTranslate(item.el);
++          const dy = cursor - item.b.y;
++          setTranslate(item.el, t.x, t.y + dy);
+           cursor += item.b.height + gap;
+         });
+       }
+@@ -552,6 +781,10 @@
+         const parent = g.parentNode;
+         const children = Array.from(g.childNodes);
+         children.forEach((child) => {
++          if (child instanceof SVGElement && isGroupLabel(child)) {
++            child.remove();
++            return;
++          }
+           parent.insertBefore(child, g);
+           if (child instanceof SVGElement && child.dataset.id) selected.push(child.dataset.id);
+         });
+@@ -559,8 +792,103 @@
+       });
+       setSelection(selected);
+       pushHistory("ungroup");
++    }
++
++    function duplicateSelected() {
++      const elements = getTopSelectedElements();
++      if (!elements.length) {
++        setStatus("Duplicate needs selected object.");
++        return;
++      }
++      const clones = [];
++      elements.forEach((el) => {
++        const clone = el.cloneNode(true);
++        clone.querySelectorAll?.("[data-id]").forEach((n) => n.removeAttribute("data-id"));
++        clone.removeAttribute("data-id");
++        sanitizeSvgTree(clone);
++        ensureId(clone);
++        const t = getTranslate(el);
++        setTranslate(clone, t.x + 20, t.y + 20);
++        el.parentNode.appendChild(clone);
++        assignIds(clone);
++        if (clone.dataset.id) clones.push(clone.dataset.id);
++      });
++      setSelection(clones);
++      pushHistory("duplicate");
++      setStatus(`Duplicated ${clones.length} object(s).`);
++    }
++
++    function collectSelectedClipboardItems() {
++      const elements = getTopSelectedElements();
++      if (!elements.length) return [];
++      return elements.map((el) => ({
++        markup: el.outerHTML,
++        parentId: el.parentElement instanceof SVGElement ? el.parentElement.dataset.id || "" : ""
++      }));
+     }
+ 
++    function copySelected() {
++      const items = collectSelectedClipboardItems();
++      if (!items.length) {
++        setStatus("Copy needs selected object.");
++        return;
++      }
++      state.clipboardItems = items;
++      setStatus(`Copied ${items.length} object(s).`);
++    }
++
++    function cutSelected() {
++      const elements = getTopSelectedElements();
++      if (!elements.length) {
++        setStatus("Cut needs selected object.");
++        return;
++      }
++      copySelected();
++      elements.forEach((el) => el.remove());
++      clearSelection();
++      pushHistory("cut");
++    }
++
++    function importMarkupFragment(markup, offsetX = 0, offsetY = 0) {
++      const parserDoc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${markup}</svg>`, "image/svg+xml");
++      if (parserDoc.querySelector("parsererror")) return "";
++      const tempRoot = parserDoc.querySelector("svg");
++      const node = tempRoot?.firstElementChild;
++      if (!(node instanceof SVGElement)) return "";
++      const imported = document.importNode(node, true);
++      sanitizeSvgTree(imported);
++      imported.removeAttribute("data-id");
++      imported.querySelectorAll("[data-id]").forEach((n) => n.removeAttribute("data-id"));
++      ensureId(imported);
++      ensureTransformState(imported);
++      const t = getTranslate(imported);
++      setTranslate(imported, t.x + offsetX, t.y + offsetY);
++      canvas.appendChild(imported);
++      assignIds(imported);
++      return imported.dataset.id || "";
++    }
++
++    function pasteInternalClipboard() {
++      const items = state.clipboardItems || [];
++      if (!items.length) {
++        setStatus("Clipboard is empty.");
++        return false;
++      }
++      const inserted = [];
++      items.forEach((item, idx) => {
++        const id = importMarkupFragment(item.markup, 24 * (idx + 1), 24 * (idx + 1));
++        if (id) inserted.push(id);
++      });
++      if (!inserted.length) {
++        setStatus("Clipboard paste failed.");
++        return false;
++      }
++      setSelection(inserted);
++      pushHistory("paste-internal");
++      setStatus(`Pasted ${inserted.length} object(s).`);
++      return true;
++    }
++
+     function addOrReplaceGroupLabel(groupEl, letter) {
+       if (!groupEl || groupEl.tagName !== "g") return;
+       const existing = groupEl.querySelector(":scope > .group-label");
+@@ -589,7 +917,7 @@
+     }
+ 
+     function saveSvg() {
+-      const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${canvas.getAttribute("viewBox")}" width="1200" height="700">${getCleanCanvasMarkup()}</svg>`;
++      const markup = getCleanSvgDocument();
+       const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement("a");
+@@ -601,42 +929,71 @@
+     }
+ 
+     async function exportPdf() {
++      if (state.isExportingPdf) {
++        setStatus("PDF export is already running.");
++        return;
++      }
++      state.isExportingPdf = true;
++      const exportBtn = document.getElementById("exportPdf");
++      if (exportBtn) exportBtn.disabled = true;
+       try {
+         if (!window.jspdf || !window.jspdf.jsPDF) {
+           setStatus("jsPDF unavailable.");
+           return;
+         }
+-        const vb = (canvas.getAttribute("viewBox") || "0 0 1200 700").split(/\s+/).map(Number);
+-        const w = vb[2] || 1200;
+-        const h = vb[3] || 700;
++        const { width: w, height: h } = getCanvasDimensions();
+         const { jsPDF } = window.jspdf;
+         const pdf = new jsPDF({ unit: "pt", format: [w, h], orientation: w >= h ? "landscape" : "portrait" });
+-        await pdf.svg(canvas, { x: 0, y: 0, width: w, height: h });
++        try {
++          const cleanSvg = new DOMParser().parseFromString(getCleanSvgDocument(), "image/svg+xml").documentElement;
++          await pdf.svg(cleanSvg, { x: 0, y: 0, width: w, height: h });
++        } catch (_) {
++          if (!window.canvg || !window.canvg.Canvg) throw new Error("svg2pdf failed and canvg unavailable");
++          const tempCanvas = document.createElement("canvas");
++          tempCanvas.width = Math.max(1, Math.round(w));
++          tempCanvas.height = Math.max(1, Math.round(h));
++          const ctx = tempCanvas.getContext("2d");
++          if (!ctx) throw new Error("Canvas context unavailable");
++          const v = await window.canvg.Canvg.fromString(ctx, getCleanSvgDocument());
++          await v.render();
++          const pngData = tempCanvas.toDataURL("image/png");
++          pdf.addImage(pngData, "PNG", 0, 0, w, h);
++        }
+         pdf.save("figure.pdf");
+         setStatus("PDF exported.");
+       } catch (err) {
+         setStatus(`PDF export failed: ${err.message}`);
++      } finally {
++        state.isExportingPdf = false;
++        if (exportBtn) exportBtn.disabled = false;
+       }
+     }
+ 
+     function loadSvgText(text) {
+       const doc = new DOMParser().parseFromString(text, "image/svg+xml");
++      if (doc.querySelector("parsererror")) {
++        setStatus("Invalid SVG file.");
++        return;
++      }
+       const root = doc.querySelector("svg");
+       if (!root) {
+         setStatus("Invalid SVG file.");
+         return;
+       }
++      sanitizeSvgTree(root);
++      applyCanvasMeta({ viewBox: root.getAttribute("viewBox") || DEFAULT_VIEWBOX });
+       canvas.innerHTML = root.innerHTML;
+       assignIds();
+       clearSelection();
+-      pushHistory("open-svg");
++      resetHistory("open-svg");
+       setStatus("SVG opened.");
+     }
+ 
+     function newCanvas() {
++      applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX });
+       canvas.innerHTML = "";
+       clearSelection();
+-      pushHistory("new-canvas");
++      resetHistory("new-canvas");
+       setStatus("New canvas created.");
+     }
+ 
+@@ -654,7 +1011,13 @@
+ 
+     function saveAutosave() {
+       const records = getAutosaveRecords();
+-      records.push({ id: `as-${Date.now()}`, at: Date.now(), markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds] });
++      records.push({
++        id: `as-${Date.now()}`,
++        at: Date.now(),
++        markup: getCleanCanvasMarkup(),
++        selectedIds: [...state.selectedIds],
++        canvasMeta: getCanvasMeta()
++      });
+       setAutosaveRecords(records);
+       refreshRestoreList();
+       setStatus("Autosave snapshot written.");
+@@ -678,10 +1041,11 @@
+         setStatus("No autosave records.");
+         return;
+       }
++      applyCanvasMeta(r.canvasMeta);
+       canvas.innerHTML = r.markup;
+       assignIds();
+       setSelection(r.selectedIds || []);
+-      pushHistory("restore-latest");
++      resetHistory("restore-latest");
+       setStatus("Latest autosave restored.");
+     }
+ 
+@@ -693,10 +1057,11 @@
+         setStatus("Selected autosave not found.");
+         return;
+       }
++      applyCanvasMeta(r.canvasMeta);
+       canvas.innerHTML = r.markup;
+       assignIds();
+       setSelection(r.selectedIds || []);
+-      pushHistory("restore-from-list");
++      resetHistory("restore-from-list");
+       setStatus("Autosave restored.");
+     }
+ 
+@@ -713,9 +1078,10 @@
+       setStatus(`Autosave set: ${val}`);
+     }
+ 
+-    function insertImageElement(src, width, height) {
+-      const x = 600 - width / 2;
+-      const y = 350 - height / 2;
++    function insertImageElement(src, width, height, offsetIndex = 0, options = {}) {
++      const step = 24;
++      const x = 600 - width / 2 + offsetIndex * step;
++      const y = 350 - height / 2 + offsetIndex * step;
+       const el = document.createElementNS(SVG_NS, "image");
+       el.setAttribute("x", String(x));
+       el.setAttribute("y", String(y));
+@@ -726,7 +1092,8 @@
+       ensureId(el);
+       setTranslate(el, 0, 0);
+       canvas.appendChild(el);
+-      setSelection([el.dataset.id]);
++      if (options.select !== false) setSelection([el.dataset.id]);
++      return el.dataset.id || "";
+     }
+ 
+     function fileToDataUrl(file) {
+@@ -748,80 +1115,122 @@
+     }
+ 
+     function extractSvgFromHtml(html) {
+-      if (!html) return "";
+-      const match = html.match(/<svg[\s\S]*<\/svg>/i);
+-      return match ? match[0] : "";
++      if (!html) return [];
++      const doc = new DOMParser().parseFromString(html, "text/html");
++      return Array.from(doc.querySelectorAll("svg")).slice(0, 20).map((svg) => svg.outerHTML).filter(Boolean);
+     }
+ 
+     function extractImageSrcFromHtml(html) {
+-      if (!html) return "";
++      if (!html) return [];
+       const doc = new DOMParser().parseFromString(html, "text/html");
+-      const img = doc.querySelector("img[src]");
+-      return img?.getAttribute("src") || "";
++      return Array.from(doc.querySelectorAll("img[src]")).slice(0, 20).map((img) => img.getAttribute("src")).filter(Boolean);
+     }
+ 
+-    function importSvgText(svgText) {
++    function importSvgText(svgText, options = {}) {
++      const push = options.push !== false;
++      const setMessage = options.setMessage !== false;
++      const select = options.select !== false;
++      const offsetX = Number(options.offsetX || 0);
++      const offsetY = Number(options.offsetY || 0);
+       const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
++      if (doc.querySelector("parsererror")) return [];
+       const root = doc.querySelector("svg");
+-      if (!root) return false;
++      if (!root) return [];
++      sanitizeSvgTree(root);
+       const importedIds = [];
+       Array.from(root.children).forEach((child) => {
+         const imported = document.importNode(child, true);
+         if (!(imported instanceof SVGElement)) return;
+         ensureId(imported);
+-        if (!imported.hasAttribute("transform")) setTranslate(imported, 0, 0);
++        sanitizeSvgTree(imported);
++        ensureTransformState(imported);
++        if (offsetX || offsetY) {
++          const t = getTranslate(imported);
++          setTranslate(imported, t.x + offsetX, t.y + offsetY);
++        }
+         canvas.appendChild(imported);
+         if (imported.dataset.id) importedIds.push(imported.dataset.id);
+       });
+       assignIds();
+-      setSelection(importedIds);
+-      pushHistory("paste-svg");
+-      setStatus("Pasted SVG content.");
+-      return importedIds.length > 0;
++      if (select) setSelection(importedIds);
++      if (push) pushHistory("paste-svg");
++      if (setMessage) setStatus("Pasted SVG content.");
++      return importedIds;
+     }
+ 
+     async function handlePaste(ev) {
++      if (state.isPasting) {
++        setStatus("Paste is already running.");
++        return;
++      }
+       const items = Array.from(ev.clipboardData?.items || []);
+       if (!items.length) return;
++      state.isPasting = true;
++      try {
+ 
+-      const imageItem = items.find((it) => it.type === "image/png" || it.type === "image/jpeg");
+-      if (imageItem) {
+-        ev.preventDefault();
+-        const file = imageItem.getAsFile();
+-        if (!file) return;
+-        const dataUrl = await fileToDataUrl(file);
+-        const size = await getImageSize(dataUrl);
+-        insertImageElement(dataUrl, size.width, size.height);
+-        pushHistory("paste-image");
+-        setStatus("Pasted image.");
+-        return;
+-      }
++        const imageItem = items.find((it) => it.type === "image/png" || it.type === "image/jpeg");
++        if (imageItem) {
++          ev.preventDefault();
++          const file = imageItem.getAsFile();
++          if (!file) return;
++          const dataUrl = await fileToDataUrl(file);
++          const size = await getImageSize(dataUrl);
++          const id = insertImageElement(dataUrl, size.width, size.height, 0, { select: false });
++          if (id) setSelection([id]);
++          pushHistory("paste-image");
++          setStatus("Pasted image.");
++          return;
++        }
+ 
+-      const htmlText = ev.clipboardData?.getData("text/html") || "";
+-      const htmlSvg = extractSvgFromHtml(htmlText);
+-      if (htmlSvg) {
+-        ev.preventDefault();
+-        if (importSvgText(htmlSvg)) return;
+-      }
+-
+-      const htmlImgSrc = extractImageSrcFromHtml(htmlText);
+-      if (htmlImgSrc) {
+-        ev.preventDefault();
+-        const size = await getImageSize(htmlImgSrc);
+-        insertImageElement(htmlImgSrc, size.width, size.height);
+-        pushHistory("paste-html-image");
+-        setStatus("Pasted HTML image.");
+-        return;
+-      }
++        const htmlText = ev.clipboardData?.getData("text/html") || "";
++        const htmlSvgs = extractSvgFromHtml(htmlText);
++        if (htmlSvgs.length) {
++          ev.preventDefault();
++          let count = 0;
++          const allIds = [];
++          htmlSvgs.forEach((svgText, idx) => {
++            const ids = importSvgText(svgText, { push: false, setMessage: false, select: false, offsetX: idx * 24, offsetY: idx * 24 });
++            if (ids.length > 0) count += 1;
++            allIds.push(...ids);
++          });
++          if (count > 0) {
++            setSelection(allIds);
++            pushHistory("paste-html-svg");
++            setStatus(`Pasted ${count} SVG block(s) from HTML.`);
++            return;
++          }
++        }
+ 
+-      const plain = ev.clipboardData?.getData("text/plain") || "";
+-      if (plain.trim().startsWith("<svg")) {
+-        ev.preventDefault();
+-        if (!importSvgText(plain)) setStatus("Paste SVG parse failed.");
+-        return;
+-      }
++        const htmlImgSrcs = extractImageSrcFromHtml(htmlText);
++        if (htmlImgSrcs.length) {
++          ev.preventDefault();
++          let inserted = 0;
++          const allIds = [];
++          for (const [idx, src] of htmlImgSrcs.slice(0, 20).entries()) {
++            const size = await getImageSize(src);
++            const id = insertImageElement(src, size.width, size.height, idx, { select: false });
++            if (id) allIds.push(id);
++            inserted += 1;
++          }
++          if (allIds.length) setSelection(allIds);
++          pushHistory("paste-html-image");
++          setStatus(`Pasted ${inserted} HTML image(s).`);
++          return;
++        }
+ 
+-      setStatus("Paste unsupported: use PNG/JPEG or SVG text.");
++        const plain = ev.clipboardData?.getData("text/plain") || "";
++        if (plain.trim().startsWith("<svg")) {
++          ev.preventDefault();
++          if (!importSvgText(plain).length) setStatus("Paste SVG parse failed.");
++          return;
++        }
++
++        setStatus("Paste unsupported: use PNG/JPEG or SVG text.");
++      } catch (err) {
++        setStatus(`Paste failed: ${err.message}`);
++      } finally {
++        state.isPasting = false;
++      }
+     }
+ 
+     function beginMarquee(start, keepCurrent) {
+@@ -880,8 +1289,242 @@
+       const original = new Map();
+       elements.forEach((el) => original.set(el.dataset.id, getTranslate(el)));
+       state.interaction = { type: "drag", start, original, moved: false };
++    }
++
++    function beginResize(start, targetEl, handle) {
++      if (!targetEl || !isResizableElement(targetEl)) return;
++      const b = safeBBox(targetEl);
++      if (!b) return;
++      state.interaction = {
++        type: "resize",
++        start,
++        targetId: targetEl.dataset.id,
++        handle,
++        originalBox: b,
++        moved: false
++      };
++    }
++
++    function mapX(x, oldBox, newBox) {
++      const denom = Math.max(oldBox.width, 1e-6);
++      return newBox.x + ((x - oldBox.x) / denom) * newBox.width;
++    }
++
++    function mapY(y, oldBox, newBox) {
++      const denom = Math.max(oldBox.height, 1e-6);
++      return newBox.y + ((y - oldBox.y) / denom) * newBox.height;
++    }
++
++    function scalePathD(d, oldBox, newBox, offset) {
++      const tokens = [];
++      const re = /([a-zA-Z])|([-+]?\d*\.?\d+(?:e[-+]?\d+)?)/g;
++      let m;
++      while ((m = re.exec(d)) !== null) {
++        if (m[1]) tokens.push({ type: "cmd", value: m[1] });
++        else tokens.push({ type: "num", value: Number(m[2]) });
++      }
++      const out = [];
++      let i = 0;
++      let cmd = "";
++      const sx = newBox.width / Math.max(oldBox.width, 1e-6);
++      const sy = newBox.height / Math.max(oldBox.height, 1e-6);
++      const mapAbsX = (x) => mapX(x + offset.x, oldBox, newBox) - offset.x;
++      const mapAbsY = (y) => mapY(y + offset.y, oldBox, newBox) - offset.y;
++      const mapRelX = (x) => x * sx;
++      const mapRelY = (y) => y * sy;
++      const readNum = () => {
++        if (i >= tokens.length || tokens[i].type !== "num") return null;
++        return tokens[i++].value;
++      };
++      const emit = (vals) => vals.forEach((v) => out.push(Number.isInteger(v) ? String(v) : String(Number(v.toFixed(4)))));
++      while (i < tokens.length) {
++        if (tokens[i].type === "cmd") {
++          cmd = tokens[i].value;
++          out.push(cmd);
++          i += 1;
++        }
++        if (!cmd) break;
++        const c = cmd.toLowerCase();
++        const rel = cmd === c;
++        const need = c === "m" || c === "l" || c === "t" ? 2
++          : c === "h" || c === "v" ? 1
++          : c === "c" ? 6
++          : c === "s" || c === "q" ? 4
++          : c === "a" ? 7
++          : c === "z" ? 0 : -1;
++        if (need === 0) {
++          while (i < tokens.length && tokens[i].type !== "cmd") i += 1;
++          continue;
++        }
++        if (need < 0) break;
++        if (i < tokens.length && tokens[i].type === "cmd") continue;
++        const vals = [];
++        for (let k = 0; k < need; k += 1) {
++          const v = readNum();
++          if (v === null) break;
++          vals.push(v);
++        }
++        if (vals.length < need) break;
++
++        if (c === "h") emit([rel ? mapRelX(vals[0]) : mapAbsX(vals[0])]);
++        else if (c === "v") emit([rel ? mapRelY(vals[0]) : mapAbsY(vals[0])]);
++        else if (c === "m" || c === "l" || c === "t") {
++          emit([rel ? mapRelX(vals[0]) : mapAbsX(vals[0]), rel ? mapRelY(vals[1]) : mapAbsY(vals[1])]);
++        } else if (c === "s" || c === "q") {
++          emit([
++            rel ? mapRelX(vals[0]) : mapAbsX(vals[0]),
++            rel ? mapRelY(vals[1]) : mapAbsY(vals[1]),
++            rel ? mapRelX(vals[2]) : mapAbsX(vals[2]),
++            rel ? mapRelY(vals[3]) : mapAbsY(vals[3])
++          ]);
++        } else if (c === "c") {
++          emit([
++            rel ? mapRelX(vals[0]) : mapAbsX(vals[0]),
++            rel ? mapRelY(vals[1]) : mapAbsY(vals[1]),
++            rel ? mapRelX(vals[2]) : mapAbsX(vals[2]),
++            rel ? mapRelY(vals[3]) : mapAbsY(vals[3]),
++            rel ? mapRelX(vals[4]) : mapAbsX(vals[4]),
++            rel ? mapRelY(vals[5]) : mapAbsY(vals[5])
++          ]);
++        } else if (c === "a") {
++          const rx = Math.max(0.5, Math.abs(vals[0] * sx));
++          const ry = Math.max(0.5, Math.abs(vals[1] * sy));
++          emit([
++            rx,
++            ry,
++            vals[2],
++            vals[3],
++            vals[4],
++            rel ? mapRelX(vals[5]) : mapAbsX(vals[5]),
++            rel ? mapRelY(vals[6]) : mapAbsY(vals[6])
++          ]);
++        }
++      }
++      return out.join(" ");
++    }
++
++    function scaleSingleElement(el, oldBox, newBox, parentOffset = { x: 0, y: 0 }) {
++      const t = getTranslate(el);
++      if (el.tagName === "rect" || el.tagName === "image") {
++        const x = Number(el.getAttribute("x") || 0) + t.x + parentOffset.x;
++        const y = Number(el.getAttribute("y") || 0) + t.y + parentOffset.y;
++        const x2 = x + Number(el.getAttribute("width") || 0);
++        const y2 = y + Number(el.getAttribute("height") || 0);
++        const nx = mapX(x, oldBox, newBox);
++        const ny = mapY(y, oldBox, newBox);
++        const nx2 = mapX(x2, oldBox, newBox);
++        const ny2 = mapY(y2, oldBox, newBox);
++        el.setAttribute("x", String(nx - t.x - parentOffset.x));
++        el.setAttribute("y", String(ny - t.y - parentOffset.y));
++        el.setAttribute("width", String(Math.max(1, nx2 - nx)));
++        el.setAttribute("height", String(Math.max(1, ny2 - ny)));
++        return;
++      }
++      if (el.tagName === "ellipse") {
++        const cx = Number(el.getAttribute("cx") || 0) + t.x + parentOffset.x;
++        const cy = Number(el.getAttribute("cy") || 0) + t.y + parentOffset.y;
++        const rx = Number(el.getAttribute("rx") || 0);
++        const ry = Number(el.getAttribute("ry") || 0);
++        const x1 = cx - rx;
++        const x2 = cx + rx;
++        const y1 = cy - ry;
++        const y2 = cy + ry;
++        const nx1 = mapX(x1, oldBox, newBox);
++        const nx2 = mapX(x2, oldBox, newBox);
++        const ny1 = mapY(y1, oldBox, newBox);
++        const ny2 = mapY(y2, oldBox, newBox);
++        const ncx = (nx1 + nx2) / 2;
++        const ncy = (ny1 + ny2) / 2;
++        el.setAttribute("cx", String(ncx - t.x - parentOffset.x));
++        el.setAttribute("cy", String(ncy - t.y - parentOffset.y));
++        el.setAttribute("rx", String(Math.max(0.5, (nx2 - nx1) / 2)));
++        el.setAttribute("ry", String(Math.max(0.5, (ny2 - ny1) / 2)));
++        return;
++      }
++      if (el.tagName === "line") {
++        const x1 = Number(el.getAttribute("x1") || 0) + t.x + parentOffset.x;
++        const y1 = Number(el.getAttribute("y1") || 0) + t.y + parentOffset.y;
++        const x2 = Number(el.getAttribute("x2") || 0) + t.x + parentOffset.x;
++        const y2 = Number(el.getAttribute("y2") || 0) + t.y + parentOffset.y;
++        el.setAttribute("x1", String(mapX(x1, oldBox, newBox) - t.x - parentOffset.x));
++        el.setAttribute("y1", String(mapY(y1, oldBox, newBox) - t.y - parentOffset.y));
++        el.setAttribute("x2", String(mapX(x2, oldBox, newBox) - t.x - parentOffset.x));
++        el.setAttribute("y2", String(mapY(y2, oldBox, newBox) - t.y - parentOffset.y));
++        return;
++      }
++      if (el.tagName === "polygon" || el.tagName === "polyline") {
++        const pts = String(el.getAttribute("points") || "").trim();
++        if (!pts) return;
++        const mapped = pts.split(/\s+/).map((pair) => {
++          const [pxRaw, pyRaw] = pair.split(",");
++          const px = Number(pxRaw);
++          const py = Number(pyRaw);
++          if (Number.isNaN(px) || Number.isNaN(py)) return pair;
++          const wx = px + t.x + parentOffset.x;
++          const wy = py + t.y + parentOffset.y;
++          const nx = mapX(wx, oldBox, newBox) - t.x - parentOffset.x;
++          const ny = mapY(wy, oldBox, newBox) - t.y - parentOffset.y;
++          return `${nx},${ny}`;
++        });
++        el.setAttribute("points", mapped.join(" "));
++        return;
++      }
++      if (el.tagName === "path") {
++        const d = String(el.getAttribute("d") || "");
++        if (!d) return;
++        const mappedD = scalePathD(d, oldBox, newBox, { x: t.x + parentOffset.x, y: t.y + parentOffset.y });
++        if (mappedD) el.setAttribute("d", mappedD);
++        return;
++      }
++      if (el.tagName === "text") {
++        const x = Number(el.getAttribute("x") || 0) + t.x + parentOffset.x;
++        const y = Number(el.getAttribute("y") || 0) + t.y + parentOffset.y;
++        const sx = Math.max(newBox.width / Math.max(oldBox.width, 1e-6), 0.05);
++        const sy = Math.max(newBox.height / Math.max(oldBox.height, 1e-6), 0.05);
++        const fs = Number(el.getAttribute("font-size") || 16);
++        const scale = (sx + sy) / 2;
++        el.setAttribute("x", String(mapX(x, oldBox, newBox) - t.x - parentOffset.x));
++        el.setAttribute("y", String(mapY(y, oldBox, newBox) - t.y - parentOffset.y));
++        el.setAttribute("font-size", String(Math.max(6, fs * scale)));
++        return;
++      }
++      if (el.tagName === "g") {
++        const nextOffset = { x: parentOffset.x + t.x, y: parentOffset.y + t.y };
++        Array.from(el.children).forEach((child) => {
++          if (!(child instanceof SVGElement)) return;
++          scaleSingleElement(child, oldBox, newBox, nextOffset);
++        });
++      }
+     }
+ 
++    function updateResize(pt) {
++      const it = state.interaction;
++      if (!it || it.type !== "resize") return;
++      const el = getById(it.targetId);
++      if (!el) return;
++      const ob = it.originalBox;
++      let left = ob.x;
++      let right = ob.x + ob.width;
++      let top = ob.y;
++      let bottom = ob.y + ob.height;
++      if (it.handle.includes("w")) left = Math.min(pt.x, right - 1);
++      if (it.handle.includes("e")) right = Math.max(pt.x, left + 1);
++      if (it.handle.includes("n")) top = Math.min(pt.y, bottom - 1);
++      if (it.handle.includes("s")) bottom = Math.max(pt.y, top + 1);
++      const width = Math.max(1, right - left);
++      const height = Math.max(1, bottom - top);
++      scaleSingleElement(el, ob, { x: left, y: top, width, height }, { x: 0, y: 0 });
++      it.moved = true;
++      applySelectionStyles();
++    }
++
++    function finishResize() {
++      const it = state.interaction;
++      if (!it || it.type !== "resize") return;
++      if (it.moved) pushHistory("resize");
++      state.interaction = null;
++    }
++
+     function updateDrag(pt) {
+       const it = state.interaction;
+       if (!it || it.type !== "drag") return;
+@@ -922,8 +1565,12 @@
+       document.getElementById("addText").addEventListener("click", addText);
+       document.getElementById("undoBtn").addEventListener("click", undo);
+       document.getElementById("redoBtn").addEventListener("click", redo);
++      document.getElementById("copyBtn").addEventListener("click", copySelected);
++      document.getElementById("cutBtn").addEventListener("click", cutSelected);
++      document.getElementById("pasteBtn").addEventListener("click", pasteInternalClipboard);
+       document.getElementById("groupBtn").addEventListener("click", groupSelected);
+       document.getElementById("ungroupBtn").addEventListener("click", ungroupSelected);
++      document.getElementById("duplicateBtn").addEventListener("click", duplicateSelected);
+       document.getElementById("saveSvg").addEventListener("click", saveSvg);
+       document.getElementById("exportPdf").addEventListener("click", exportPdf);
+ 
+@@ -933,6 +1580,12 @@
+       document.querySelectorAll("[data-distribute]").forEach((btn) => {
+         btn.addEventListener("click", () => distributeSelected(btn.dataset.distribute));
+       });
++      document.getElementById("alignBasisSelect").addEventListener("change", (e) => {
++        const value = e.target.value === "first" ? "first" : "bbox";
++        state.alignBasis = value;
++        localStorage.setItem(ALIGN_BASIS_KEY, value);
++        setStatus(`Align base: ${value === "first" ? "first selected" : "selection box"}`);
++      });
+ 
+       const fileInput = document.getElementById("openFileInput");
+       document.getElementById("openSvg").addEventListener("click", () => fileInput.click());
+@@ -975,6 +1628,15 @@
+       canvas.addEventListener("pointerdown", (e) => {
+         if (e.button !== 0) return;
+         closeContextMenu();
++        const handleEl = e.target instanceof SVGElement ? e.target.closest(".selection-handle") : null;
++        if (handleEl instanceof SVGElement) {
++          const pt = getSvgPoint(e.clientX, e.clientY);
++          const targetId = handleEl.dataset.targetId;
++          const handle = handleEl.dataset.handle || "se";
++          const target = targetId ? getById(targetId) : null;
++          beginResize(pt, target, handle);
++          return;
++        }
+         const raw = closestEditableTarget(e.target);
+         const pt = getSvgPoint(e.clientX, e.clientY);
+         if (raw) {
+@@ -997,12 +1659,14 @@
+         if (!state.interaction) return;
+         const pt = getSvgPoint(e.clientX, e.clientY);
+         if (state.interaction.type === "drag") updateDrag(pt);
++        if (state.interaction.type === "resize") updateResize(pt);
+         if (state.interaction.type === "marquee") updateMarquee(pt);
+       });
+ 
+       window.addEventListener("pointerup", () => {
+         if (!state.interaction) return;
+         if (state.interaction.type === "drag") finishDrag();
++        if (state.interaction.type === "resize") finishResize();
+         if (state.interaction.type === "marquee") finishMarquee();
+       });
+ 
+@@ -1019,10 +1683,10 @@
+           if (!state.selectedIds.length) return;
+           e.preventDefault();
+           const step = e.shiftKey ? 10 : 1;
+-          if (e.key === "ArrowUp") moveSelection(0, -step);
+-          if (e.key === "ArrowDown") moveSelection(0, step);
+-          if (e.key === "ArrowLeft") moveSelection(-step, 0);
+-          if (e.key === "ArrowRight") moveSelection(step, 0);
++          if (e.key === "ArrowUp") moveSelection(0, -step, { reason: "move-key", coalesce: true });
++          if (e.key === "ArrowDown") moveSelection(0, step, { reason: "move-key", coalesce: true });
++          if (e.key === "ArrowLeft") moveSelection(-step, 0, { reason: "move-key", coalesce: true });
++          if (e.key === "ArrowRight") moveSelection(step, 0, { reason: "move-key", coalesce: true });
+         }
+         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+           e.preventDefault();
+@@ -1032,6 +1696,22 @@
+           e.preventDefault();
+           redo();
+         }
++        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
++          e.preventDefault();
++          duplicateSelected();
++        }
++        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
++          e.preventDefault();
++          copySelected();
++        }
++        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
++          e.preventDefault();
++          cutSelected();
++        }
++        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "v") {
++          e.preventDefault();
++          pasteInternalClipboard();
++        }
+       });
+ 
+       window.addEventListener("paste", handlePaste);
+@@ -1045,6 +1725,9 @@
+       setupEvents();
+       const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
+       document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";
++      const alignBasis = localStorage.getItem(ALIGN_BASIS_KEY);
++      state.alignBasis = alignBasis === "first" ? "first" : "bbox";
++      document.getElementById("alignBasisSelect").value = state.alignBasis;
+       refreshRestoreList();
+       updateAutosaveTimer();
+       pushHistory("init");

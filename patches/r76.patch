@@ -1,0 +1,30 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Cmd+V / Paste UX adjustment:
++ - Paste button now uses internal clipboard only (no clipboard.read permission prompt)
++ - Cmd/Ctrl+V delayed fallback no longer calls clipboard.read
++ - External paste still handled by native paste event; if not delivered, internal fallback executes
+@@
++Text selection wiring fix (White Arrow):
++ - pointerdown direct path now passes through resolveTargetByTool(...)
++ - resolveDirectTextLikeTarget() became effective in real click path
++ - isEditableElement expanded with use / foreignObject
++ - pointer-events policy keeps g/path/text/tspan selectable
+@@
++Validation:
++ - reviewer-r76-cmdv-no-prompt-and-textlike: PASS
++ - reviewer-r75-path-text-hit: PASS
++ - reviewer-r74-files-unknown-mime-and-text-hit: PASS
++ - reviewer-r72-ui-copy-paste: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] Cmd+V時の不要なclipboard許可プロンプト抑制
++[done] White Arrow text-likeターゲット解決強化
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 109/110 追加（実装 + 批判AI検証）

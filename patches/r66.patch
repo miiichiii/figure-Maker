@@ -1,0 +1,27 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Paste diagnostics improved:
++ - routeToPasteMeaning(route) を追加
++ - Paste reportに Meaning 行（vector/raster/unsupported/error）を追加
++ - image-raster 時に getPasteQualityHint(width,height) を適用
++ - 低解像度（<1000x700）時は low-res ヒントを note/status に表示
+@@
++ユーザー向け効果:
++ - 「なぜ画像になったか」がレポートで即判別可能
++ - PowerPointから低解像度bitmapしか来ていないケースを可視化
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] Paste report強化（解像度/経路の明示、低解像度時の案内文）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 93/94 追加（実装 + 批判AI検証）
+
+--- /tmp/pwfm/reviewer-r66-paste-report-meaning.js
++++ /tmp/pwfm/reviewer-r66-paste-report-meaning.js
+@@
++新規検証: Meaning行表示 / low-resヒント表示 / status反映

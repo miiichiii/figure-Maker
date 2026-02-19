@@ -1,0 +1,21 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++"R : Add Rect",
++"L : Add Line",
++"E : Add Ellipse",
++"T : Add Text",
+@@
++if (key==='r') addRect();
++if (key==='l') addLine();
++if (key==='e') addEllipse();
++if (key==='t') addText();
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Low] 図形追加ショートカット（`R/L/E/T`）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 82 - Builder implementation (shape hotkeys)
++### Step 83 - Reviewer verification (shape hotkeys)

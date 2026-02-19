@@ -1,0 +1,334 @@
+--- /tmp/index_before_r3.html	2026-02-19 03:01:25
++++ index.html	2026-02-19 03:03:46
+@@ -6,6 +6,7 @@
+   <title>Figure Maker</title>
+   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.5.0/dist/svg2pdf.umd.min.js"></script>
++  <script src="https://cdn.jsdelivr.net/npm/canvg@4.0.2/lib/umd.min.js"></script>
+   <style>
+     :root {
+       --bg: #f3f4f6;
+@@ -79,6 +80,12 @@
+       stroke-dasharray: 6 3;
+       pointer-events: none;
+     }
++    .selection-handle {
++      fill: #ffffff;
++      stroke: var(--accent);
++      stroke-width: 1.5;
++      cursor: nwse-resize;
++    }
+     .context-menu {
+       position: fixed;
+       background: #fff;
+@@ -138,6 +145,11 @@
+         <button id="ungroupBtn">Ungroup</button>
+       </div>
+       <div class="group">
++        <label for="alignBasisSelect">Align base</label>
++        <select id="alignBasisSelect">
++          <option value="bbox">Selection Box</option>
++          <option value="first">First Selected</option>
++        </select>
+         <button data-align="left">Align L</button>
+         <button data-align="hcenter">Align C</button>
+         <button data-align="right">Align R</button>
+@@ -176,6 +188,7 @@
+     const XLINK_NS = "http://www.w3.org/1999/xlink";
+     const AUTOSAVE_KEY = "figureMaker_autosave_records";
+     const AUTOSAVE_INTERVAL_KEY = "figureMaker_autosave_interval";
++    const ALIGN_BASIS_KEY = "figureMaker_align_basis";
+ 
+     const canvas = document.getElementById("canvas");
+     const statusEl = document.getElementById("status");
+@@ -191,7 +204,8 @@
+       maxHistory: 100,
+       interaction: null,
+       autosaveTimer: null,
+-      contextGroupId: null
++      contextGroupId: null,
++      alignBasis: "bbox"
+     };
+ 
+     function setStatus(msg) {
+@@ -264,7 +278,7 @@
+     }
+ 
+     function renderSelectionOutlines() {
+-      canvas.querySelectorAll(".selection-outline").forEach((el) => el.remove());
++      canvas.querySelectorAll(".selection-outline,.selection-handle").forEach((el) => el.remove());
+       const elements = getTopSelectedElements();
+       elements.forEach((el) => {
+         const b = safeBBox(el);
+@@ -276,6 +290,37 @@
+         rect.setAttribute("width", String(b.width));
+         rect.setAttribute("height", String(b.height));
+         canvas.appendChild(rect);
++      });
++      renderResizeHandles(elements);
++    }
++
++    function isResizableElement(el) {
++      return !!el && ["rect", "ellipse", "image"].includes(el.tagName);
++    }
++
++    function renderResizeHandles(elements) {
++      if (elements.length !== 1) return;
++      const target = elements[0];
++      if (!isResizableElement(target)) return;
++      const b = safeBBox(target);
++      if (!b) return;
++      const size = 8;
++      const corners = [
++        { name: "nw", x: b.x, y: b.y },
++        { name: "ne", x: b.x + b.width, y: b.y },
++        { name: "sw", x: b.x, y: b.y + b.height },
++        { name: "se", x: b.x + b.width, y: b.y + b.height }
++      ];
++      corners.forEach((c) => {
++        const h = document.createElementNS(SVG_NS, "rect");
++        h.setAttribute("class", "selection-handle");
++        h.setAttribute("x", String(c.x - size / 2));
++        h.setAttribute("y", String(c.y - size / 2));
++        h.setAttribute("width", String(size));
++        h.setAttribute("height", String(size));
++        h.dataset.handle = c.name;
++        h.dataset.targetId = target.dataset.id;
++        canvas.appendChild(h);
+       });
+     }
+ 
+@@ -385,7 +430,7 @@
+ 
+     function getCleanCanvasMarkup() {
+       const clone = canvas.cloneNode(true);
+-      clone.querySelectorAll(".selection-outline,.marquee").forEach((el) => el.remove());
++      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee").forEach((el) => el.remove());
+       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
+         el.classList.remove("fm-selected");
+         el.classList.remove("fm-group-selected");
+@@ -393,6 +438,16 @@
+       return clone.innerHTML;
+     }
+ 
++    function getCanvasDimensions() {
++      const vb = (canvas.getAttribute("viewBox") || "0 0 1200 700").split(/\s+/).map(Number);
++      return { width: vb[2] || 1200, height: vb[3] || 700 };
++    }
++
++    function getCleanSvgDocument() {
++      const { width, height } = getCanvasDimensions();
++      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
++    }
++
+     function getSnapshot() {
+       return { markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds], at: Date.now() };
+     }
+@@ -454,28 +509,41 @@
+       }
+       const bounds = elements.map(safeBBox).filter(Boolean);
+       if (!bounds.length) return;
+-      const minX = Math.min(...bounds.map((b) => b.x));
+-      const maxX = Math.max(...bounds.map((b) => b.x + b.width));
+-      const minY = Math.min(...bounds.map((b) => b.y));
+-      const maxY = Math.max(...bounds.map((b) => b.y + b.height));
+-      const centerX = (minX + maxX) / 2;
+-      const centerY = (minY + maxY) / 2;
++      let baseMinX = Math.min(...bounds.map((b) => b.x));
++      let baseMaxX = Math.max(...bounds.map((b) => b.x + b.width));
++      let baseMinY = Math.min(...bounds.map((b) => b.y));
++      let baseMaxY = Math.max(...bounds.map((b) => b.y + b.height));
++      let anchorEl = null;
++      if (state.alignBasis === "first") {
++        const firstId = state.selectedIds.find((id) => elements.some((el) => el.dataset.id === id));
++        anchorEl = firstId ? getById(firstId) : elements[0];
++        const anchorBox = anchorEl ? safeBBox(anchorEl) : null;
++        if (anchorBox) {
++          baseMinX = anchorBox.x;
++          baseMaxX = anchorBox.x + anchorBox.width;
++          baseMinY = anchorBox.y;
++          baseMaxY = anchorBox.y + anchorBox.height;
++        }
++      }
++      const centerX = (baseMinX + baseMaxX) / 2;
++      const centerY = (baseMinY + baseMaxY) / 2;
+ 
+       elements.forEach((el) => {
++        if (state.alignBasis === "first" && anchorEl && el === anchorEl) return;
+         const bRaw = el.getBBox();
+         const t = getTranslate(el);
+         let newX = t.x;
+         let newY = t.y;
+-        if (mode === "left") newX = minX - bRaw.x;
++        if (mode === "left") newX = baseMinX - bRaw.x;
+         if (mode === "hcenter") newX = centerX - (bRaw.x + bRaw.width / 2);
+-        if (mode === "right") newX = maxX - (bRaw.x + bRaw.width);
+-        if (mode === "top") newY = minY - bRaw.y;
++        if (mode === "right") newX = baseMaxX - (bRaw.x + bRaw.width);
++        if (mode === "top") newY = baseMinY - bRaw.y;
+         if (mode === "vcenter") newY = centerY - (bRaw.y + bRaw.height / 2);
+-        if (mode === "bottom") newY = maxY - (bRaw.y + bRaw.height);
++        if (mode === "bottom") newY = baseMaxY - (bRaw.y + bRaw.height);
+         setTranslate(el, newX, newY);
+       });
+       applySelectionStyles();
+-      pushHistory(`align-${mode}`);
++      pushHistory(`align-${mode}-${state.alignBasis}`);
+     }
+ 
+     function distributeSelected(axis) {
+@@ -589,7 +657,7 @@
+     }
+ 
+     function saveSvg() {
+-      const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${canvas.getAttribute("viewBox")}" width="1200" height="700">${getCleanCanvasMarkup()}</svg>`;
++      const markup = getCleanSvgDocument();
+       const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement("a");
+@@ -606,12 +674,24 @@
+           setStatus("jsPDF unavailable.");
+           return;
+         }
+-        const vb = (canvas.getAttribute("viewBox") || "0 0 1200 700").split(/\s+/).map(Number);
+-        const w = vb[2] || 1200;
+-        const h = vb[3] || 700;
++        const { width: w, height: h } = getCanvasDimensions();
+         const { jsPDF } = window.jspdf;
+         const pdf = new jsPDF({ unit: "pt", format: [w, h], orientation: w >= h ? "landscape" : "portrait" });
+-        await pdf.svg(canvas, { x: 0, y: 0, width: w, height: h });
++        try {
++          const cleanSvg = new DOMParser().parseFromString(getCleanSvgDocument(), "image/svg+xml").documentElement;
++          await pdf.svg(cleanSvg, { x: 0, y: 0, width: w, height: h });
++        } catch (_) {
++          if (!window.canvg || !window.canvg.Canvg) throw new Error("svg2pdf failed and canvg unavailable");
++          const tempCanvas = document.createElement("canvas");
++          tempCanvas.width = Math.max(1, Math.round(w));
++          tempCanvas.height = Math.max(1, Math.round(h));
++          const ctx = tempCanvas.getContext("2d");
++          if (!ctx) throw new Error("Canvas context unavailable");
++          const v = await window.canvg.Canvg.fromString(ctx, getCleanSvgDocument());
++          await v.render();
++          const pngData = tempCanvas.toDataURL("image/png");
++          pdf.addImage(pngData, "PNG", 0, 0, w, h);
++        }
+         pdf.save("figure.pdf");
+         setStatus("PDF exported.");
+       } catch (err) {
+@@ -880,8 +960,62 @@
+       const original = new Map();
+       elements.forEach((el) => original.set(el.dataset.id, getTranslate(el)));
+       state.interaction = { type: "drag", start, original, moved: false };
++    }
++
++    function beginResize(start, targetEl, handle) {
++      if (!targetEl || !isResizableElement(targetEl)) return;
++      const b = safeBBox(targetEl);
++      if (!b) return;
++      state.interaction = {
++        type: "resize",
++        start,
++        targetId: targetEl.dataset.id,
++        handle,
++        originalBox: b,
++        moved: false
++      };
++    }
++
++    function updateResize(pt) {
++      const it = state.interaction;
++      if (!it || it.type !== "resize") return;
++      const el = getById(it.targetId);
++      if (!el) return;
++      const ob = it.originalBox;
++      let left = ob.x;
++      let right = ob.x + ob.width;
++      let top = ob.y;
++      let bottom = ob.y + ob.height;
++      if (it.handle.includes("w")) left = Math.min(pt.x, right - 1);
++      if (it.handle.includes("e")) right = Math.max(pt.x, left + 1);
++      if (it.handle.includes("n")) top = Math.min(pt.y, bottom - 1);
++      if (it.handle.includes("s")) bottom = Math.max(pt.y, top + 1);
++      const width = Math.max(1, right - left);
++      const height = Math.max(1, bottom - top);
++      const t = getTranslate(el);
++
++      if (el.tagName === "rect" || el.tagName === "image") {
++        el.setAttribute("x", String(left - t.x));
++        el.setAttribute("y", String(top - t.y));
++        el.setAttribute("width", String(width));
++        el.setAttribute("height", String(height));
++      } else if (el.tagName === "ellipse") {
++        el.setAttribute("cx", String(left - t.x + width / 2));
++        el.setAttribute("cy", String(top - t.y + height / 2));
++        el.setAttribute("rx", String(width / 2));
++        el.setAttribute("ry", String(height / 2));
++      }
++      it.moved = true;
++      applySelectionStyles();
+     }
+ 
++    function finishResize() {
++      const it = state.interaction;
++      if (!it || it.type !== "resize") return;
++      if (it.moved) pushHistory("resize");
++      state.interaction = null;
++    }
++
+     function updateDrag(pt) {
+       const it = state.interaction;
+       if (!it || it.type !== "drag") return;
+@@ -933,6 +1067,12 @@
+       document.querySelectorAll("[data-distribute]").forEach((btn) => {
+         btn.addEventListener("click", () => distributeSelected(btn.dataset.distribute));
+       });
++      document.getElementById("alignBasisSelect").addEventListener("change", (e) => {
++        const value = e.target.value === "first" ? "first" : "bbox";
++        state.alignBasis = value;
++        localStorage.setItem(ALIGN_BASIS_KEY, value);
++        setStatus(`Align base: ${value === "first" ? "first selected" : "selection box"}`);
++      });
+ 
+       const fileInput = document.getElementById("openFileInput");
+       document.getElementById("openSvg").addEventListener("click", () => fileInput.click());
+@@ -975,6 +1115,15 @@
+       canvas.addEventListener("pointerdown", (e) => {
+         if (e.button !== 0) return;
+         closeContextMenu();
++        const handleEl = e.target instanceof SVGElement ? e.target.closest(".selection-handle") : null;
++        if (handleEl instanceof SVGElement) {
++          const pt = getSvgPoint(e.clientX, e.clientY);
++          const targetId = handleEl.dataset.targetId;
++          const handle = handleEl.dataset.handle || "se";
++          const target = targetId ? getById(targetId) : null;
++          beginResize(pt, target, handle);
++          return;
++        }
+         const raw = closestEditableTarget(e.target);
+         const pt = getSvgPoint(e.clientX, e.clientY);
+         if (raw) {
+@@ -997,12 +1146,14 @@
+         if (!state.interaction) return;
+         const pt = getSvgPoint(e.clientX, e.clientY);
+         if (state.interaction.type === "drag") updateDrag(pt);
++        if (state.interaction.type === "resize") updateResize(pt);
+         if (state.interaction.type === "marquee") updateMarquee(pt);
+       });
+ 
+       window.addEventListener("pointerup", () => {
+         if (!state.interaction) return;
+         if (state.interaction.type === "drag") finishDrag();
++        if (state.interaction.type === "resize") finishResize();
+         if (state.interaction.type === "marquee") finishMarquee();
+       });
+ 
+@@ -1045,6 +1196,9 @@
+       setupEvents();
+       const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
+       document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";
++      const alignBasis = localStorage.getItem(ALIGN_BASIS_KEY);
++      state.alignBasis = alignBasis === "first" ? "first" : "bbox";
++      document.getElementById("alignBasisSelect").value = state.alignBasis;
+       refreshRestoreList();
+       updateAutosaveTimer();
+       pushHistory("init");

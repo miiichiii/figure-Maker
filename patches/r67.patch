@@ -1,0 +1,33 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Startup stale error notice fix:
++ - initialize() で localStorage(last_error) を読んでも自動表示しない
++ - state.lastErrorRecord には保持し、読込後に LAST_ERROR_KEY を削除
++ => 毎回同じ旧エラーIDが起動直後に表示される問題を解消
+@@
++Arrow head forward adjustment:
++ - applyArrowStyle() に lead を追加
++ - refX = tip - lead に変更し、三角先端を線の先へ前進
++ - markerWidth/viewBox を拡張、marker overflow=visible
++ - lead は stroke 依存（整数化）で安定
+@@
++Regression tests:
++ - reviewer-r67-startup-last-error: PASS
++ - reviewer-r63-arrow-tip: PASS
++ - reviewer-r61-critical: PASS
++ - reviewer-r60-critical: PASS
++ - reviewer-r62-critical: PASS
++ - reviewer-r64-pointerup-crash: PASS
++ - reviewer-r66-paste-report-meaning: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] 起動時の前回エラー再表示ループ修正
++[done] Arrow先端（三角）の前進調整
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 95/96 追加（実装 + 批判AI検証）

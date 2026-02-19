@@ -1,0 +1,30 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++Paste best-effort unification:
++ - pasteFromClipboardApiFallback() を追加
++   * navigator.clipboard.read(): image/svg+xml, text/html, text/plain, image/png/jpeg を処理
++   * navigator.clipboard.readText(): SVGテキストの最終フォールバック
++ - pasteBestEffort() を追加（system clipboard API -> internal clipboard）
++ - Pasteボタンを pasteInternalClipboard 直呼びから pasteBestEffort へ変更
++ - Ctrl/Cmd+V の遅延フォールバックも API先行 -> internal の順へ更新
+@@
++狙い:
++ - pasteイベントが来ない/取りこぼす環境でも貼り付け成功率を上げる
++ - 外部コピーと内部コピーの双方で「貼れない」を減らす
+@@
++検証:
++ - reviewer-r70-paste-best-effort: PASS
++ - reviewer-r69-copy-paste-hotkeys: PASS
++ - reviewer-r60-critical: PASS
++ - reviewer-r62-critical: PASS
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++[done] Paste経路を一本化（Pasteボタン/Ctrl+Vで system clipboard API -> internal fallback）
+
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 99/100 追加（実装 + 批判AI検証）

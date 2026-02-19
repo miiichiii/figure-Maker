@@ -1,0 +1,46 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
++const LAST_ERROR_KEY = "figureMaker_last_error";
++const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
+@@
++state.eventRing (max 100), state.lastErrorRecord, state.autosaveParseWarned
+@@
++UI: #errorNotice (Error ID表示) + Download log / Close
+@@
++makeErrorId(): YYYYMMDD-HHMM-xxxx
++captureError(): structured console.error + localStorage(last_error) + UI通知
++setupGlobalErrorHandlers(): window.onerror / window.onunhandledrejection
++setupEventRingHooks(): click/key/route(hash/popstate/pushState/replaceState)
++downloadErrorLog(): error-<id>.json (stack + eventHistory)
+@@
+-getAutosaveRecords() catch => []
++getAutosaveRecords() catch => user message + captureError("autosave-parse")
+@@
+-file input read without catch
++file input read with catch + user message + captureError("open-file-read")
+@@
+-if (!items.length) return;
++if no payload at all return; // allow text/html/plain/svg even when items is empty
+@@
+-catch paste -> setStatus(`Paste failed: ...`)
++catch paste -> user message + captureError("paste-failed")
+@@
++initialize(): setupGlobalErrorHandlers(), setupEventRingHooks(), restore last_error notice
+--- /Users/michito/Documents/0MyApps/figure-Maker/README.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/README.md
+@@
++バグ報告テンプレ追加
++debugモード説明（?debug=1）
+--- /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/01_SPEC.md
+@@
++エラー監視仕様を追加（onerror/unhandledrejection, error_id, event ring, download, restore, debug）
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++指定10項目をtodo反映後、すべてdone化
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++Step 84/85 追加（実装 + 批判AI検証）

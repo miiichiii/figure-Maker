@@ -1,0 +1,48 @@
+--- /Users/michito/Documents/0MyApps/figure-Maker/index.html
++++ /Users/michito/Documents/0MyApps/figure-Maker/index.html
+@@
+ function resolveTargetByTool(raw) {
+   if (!raw) return null;
+   return state.tool === "select" ? resolveOuterGroup(raw) : raw;
+ }
++
++function getEditableTargetsAtPoint(clientX, clientY) {
++  const stack = [];
++  const seen = new Set();
++  const els = document.elementsFromPoint(clientX, clientY);
++  els.forEach((node) => {
++    if (!(node instanceof SVGElement)) return;
++    const target = closestEditableTarget(node);
++    if (!target || !target.dataset.id) return;
++    if (!canvas.contains(target)) return;
++    if (seen.has(target.dataset.id)) return;
++    seen.add(target.dataset.id);
++    stack.push(target);
++  });
++  return stack;
++}
++
++function pickDirectTargetFromStack(stack) {
++  if (!stack.length) return null;
++  if (state.selectedIds.length === 1) {
++    const selected = getById(state.selectedIds[0]);
++    if (selected && selected.dataset.id) {
++      const idx = stack.findIndex((el) => el.dataset.id === selected.dataset.id);
++      if (idx >= 0 && idx + 1 < stack.length) return stack[idx + 1];
++    }
++  }
++  return stack[0];
++}
+@@
+-const target = resolveTargetByTool(raw);
++const stack = getEditableTargetsAtPoint(e.clientX, e.clientY);
++const target = state.tool === "direct" ? pickDirectTargetFromStack(stack) : resolveTargetByTool(raw);
+--- /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/30_TODO.md
+@@
++- [done][P1-Med] 白矢印で重なり要素を順送り選択（再クリックで下層要素を選択）
+--- /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
++++ /Users/michito/Documents/0MyApps/figure-Maker/10_PROGRESS_LOG.md
+@@
++### Step 56 - Builder fix (overlap direct-selection cycle)
++### Step 57 - Reviewer verification (critical pass)
