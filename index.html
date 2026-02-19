@@ -48,6 +48,7 @@
       position: absolute;
       top: calc(100% + 4px);
       left: 0;
+      z-index: 30;
       min-width: 220px;
       background: #fff;
       border: 1px solid var(--line);
@@ -151,8 +152,8 @@
     }
     .canvas-wrap { padding: 10px; overflow: auto; position: relative; }
     #canvas {
-      width: 1200px;
-      height: 700px;
+      width: 794px;
+      height: 1123px;
       background: #fff;
       border: 1px solid var(--line);
       user-select: none;
@@ -197,6 +198,15 @@
       cursor: nwse-resize;
       vector-effect: non-scaling-stroke;
     }
+    .smart-guide {
+      fill: none;
+      stroke: #ef4444;
+      stroke-width: 1.2;
+      stroke-dasharray: 5 3;
+      opacity: 0.95;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
     .context-menu {
       position: fixed;
       background: #fff;
@@ -225,12 +235,76 @@
       cursor: default;
       pointer-events: none;
     }
+    .mark-editor {
+      position: fixed;
+      z-index: 40;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+    }
+    .mark-editor input {
+      width: 42px;
+      text-transform: uppercase;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 4px 6px;
+    }
+    .mark-editor button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    .figure-editor-prefix {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      min-width: 42px;
+      text-align: center;
+    }
+    #figureEditorInput {
+      width: 64px;
+      text-align: center;
+      font-weight: 700;
+    }
+    #figureEditorFontSize {
+      width: 58px;
+      text-align: center;
+    }
+    .mark-editor-spin {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 2px;
+    }
+    .mark-editor-spin button {
+      width: 28px;
+      min-width: 28px;
+      height: 20px;
+      padding: 1px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mark-editor-spin svg {
+      width: 11px;
+      height: 11px;
+      display: block;
+    }
     .fm-group-label {
       font-family: Arial, sans-serif;
-      font-size: 16px;
       font-weight: bold;
       fill: #111827;
-      pointer-events: none;
+      pointer-events: visiblePainted;
+    }
+    .fm-figure-title {
+      font-family: Arial, sans-serif;
+      font-weight: 700;
+      fill: #111827;
+      pointer-events: visiblePainted;
     }
     #toggleAdvanced { display: none; }
     body.compact .toolbar { gap: 6px; padding: 6px; }
@@ -242,7 +316,7 @@
     body.compact #restoreFromList { display: none; }
     body.compact.show-advanced #restoreList,
     body.compact.show-advanced #restoreFromList { display: inline-block; }
-    body.compact #canvas { width: 100%; min-width: 900px; height: 68vh; }
+    body.compact #canvas { max-width: 100%; min-width: 0; }
     #textEditorInput {
       position: absolute;
       display: none;
@@ -336,6 +410,7 @@
         <div class="menu-panel">
           <button class="menu-action" data-menu-action="file.new">New</button>
           <button class="menu-action" data-menu-action="file.open">Open SVG...</button>
+          <button class="menu-action" data-menu-action="file.import">Import SVG...</button>
           <button class="menu-action" data-menu-action="file.save">Save SVG</button>
           <button class="menu-action" data-menu-action="file.pdf">Export PDF</button>
         </div>
@@ -354,26 +429,26 @@
           <button class="menu-action" data-menu-action="edit.ungroup">Ungroup</button>
         </div>
       </div>
-      <div class="menu-root" data-menu-root="view">
-        <button class="menu-trigger" data-menu-trigger="view">View</button>
+      <div class="menu-root" data-menu-root="page">
+        <button class="menu-trigger" data-menu-trigger="page">Page Setup</button>
         <div class="menu-panel">
-          <button class="menu-action" data-menu-action="view.canvas.a4.portrait">A4 Portrait (794 x 1123)</button>
-          <button class="menu-action" data-menu-action="view.canvas.a4.landscape">A4 Landscape (1123 x 794)</button>
-          <button class="menu-action" data-menu-action="view.canvas.custom">Canvas Size...</button>
+          <button class="menu-action" data-menu-action="page.canvas.a4.portrait">A4 Portrait (794 x 1123)</button>
+          <button class="menu-action" data-menu-action="page.canvas.a4.landscape">A4 Landscape (1123 x 794)</button>
+          <button class="menu-action" data-menu-action="page.canvas.custom">Canvas Size...</button>
         </div>
       </div>
-      <div class="menu-root" data-menu-root="window">
-        <button class="menu-trigger" data-menu-trigger="window">Window</button>
+      <div class="menu-root" data-menu-root="maintenance">
+        <button class="menu-trigger" data-menu-trigger="maintenance">Maintenance</button>
         <div class="menu-panel">
-          <button class="menu-action" data-menu-action="window.shortcuts">Shortcuts</button>
-          <button class="menu-action" data-menu-action="window.restore">Restore Latest Autosave</button>
+          <button class="menu-action" data-menu-action="maintenance.shortcuts">Shortcuts</button>
+          <button class="menu-action" data-menu-action="maintenance.restore">Restore Latest Autosave</button>
           <div class="menu-sep"></div>
-          <button class="menu-action" data-menu-action="window.pasteReport">Paste Report</button>
-          <button class="menu-action" data-menu-action="window.pasteReport.copy">Copy Paste Report</button>
-          <button class="menu-action" data-menu-action="window.pasteReport.save">Save Paste Report</button>
-          <button class="menu-action" data-menu-action="window.pasteReport.history">Report History</button>
-          <button class="menu-action" data-menu-action="window.pasteReport.history.copy">Copy Report History</button>
-          <button class="menu-action" data-menu-action="window.pasteReport.history.clear">Clear Report History</button>
+          <button class="menu-action" data-menu-action="maintenance.pasteReport">Paste Report</button>
+          <button class="menu-action" data-menu-action="maintenance.pasteReport.copy">Copy Paste Report</button>
+          <button class="menu-action" data-menu-action="maintenance.pasteReport.save">Save Paste Report</button>
+          <button class="menu-action" data-menu-action="maintenance.pasteReport.history">Report History</button>
+          <button class="menu-action" data-menu-action="maintenance.pasteReport.history.copy">Copy Report History</button>
+          <button class="menu-action" data-menu-action="maintenance.pasteReport.history.clear">Clear Report History</button>
         </div>
       </div>
     </div>
@@ -437,6 +512,8 @@
         <input id="arrowSizeInput" type="number" min="4" max="40" step="1" value="10" style="width:64px" />
         <label for="arrowStrokeInput">Line/Arrow stroke</label>
         <input id="arrowStrokeInput" type="number" min="1" max="20" step="1" value="3" style="width:64px" />
+        <label for="markFontSizeInput">Mark size</label>
+        <input id="markFontSizeInput" type="number" min="6" max="120" step="1" value="16" style="width:64px" />
         <button id="addText">Text</button>
       </div>
       <div class="group">
@@ -509,6 +586,7 @@
       </div>
     </div>
     <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
+    <input id="importFileInput" type="file" accept=".svg,image/svg+xml" hidden />
     <div class="canvas-wrap" tabindex="0">
       <svg id="canvas" viewBox="0 0 794 1123" xmlns="http://www.w3.org/2000/svg"></svg>
       <input id="textEditorInput" type="text" />
@@ -528,6 +606,34 @@
     <button data-ctx-action="group">Group</button>
     <button data-ctx-action="ungroup">Ungroup</button>
     <button data-ctx-action="duplicate">Duplicate</button>
+  </div>
+  <div id="markEditor" class="mark-editor" role="dialog" aria-label="Edit mark">
+    <input id="markEditorInput" type="text" maxlength="1" autocomplete="off" />
+    <div class="mark-editor-spin">
+      <button id="markEditorUpBtn" type="button" aria-label="Mark Up">
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2 8 L6 3 L10 8 Z" fill="currentColor"></path>
+        </svg>
+      </button>
+      <button id="markEditorDownBtn" type="button" aria-label="Mark Down">
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2 4 L6 9 L10 4 Z" fill="currentColor"></path>
+        </svg>
+      </button>
+    </div>
+    <button id="markEditorApplyBtn" type="button">OK</button>
+    <button id="markEditorCancelBtn" type="button">Cancel</button>
+  </div>
+  <div id="figureEditor" class="mark-editor" role="dialog" aria-label="Edit figure number">
+    <select id="figureEditorType">
+      <option value="figure">Figure</option>
+      <option value="supplementary">Supplementary Figure</option>
+    </select>
+    <span class="figure-editor-prefix">Figure</span>
+    <input id="figureEditorInput" type="number" min="0" max="9999" step="1" inputmode="numeric" />
+    <input id="figureEditorFontSize" type="number" min="8" max="200" step="1" inputmode="numeric" title="Figure font size" />
+    <button id="figureEditorApplyBtn" type="button">OK</button>
+    <button id="figureEditorCancelBtn" type="button">Cancel</button>
   </div>
 
   <div id="errorNotice" role="alert" aria-live="assertive">
@@ -559,6 +665,7 @@
     const PASTE_REPORT_KEY = "figureMaker_last_paste_report";
     const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
     const LAST_ERROR_KEY = "figureMaker_last_error";
+    const LIVE_AUTOSAVE_KEY = "figureMaker_live_snapshot";
     const DEFAULT_VIEWBOX = "0 0 794 1123";
     const MIN_RESIZE_SIZE = 6;
     const MIN_VIEW_SCALE = 0.25;
@@ -573,6 +680,12 @@
     const statusEl = document.getElementById("status");
     const restoreListEl = document.getElementById("restoreList");
     const ctxMenu = document.getElementById("ctxMenu");
+    const markEditorEl = document.getElementById("markEditor");
+    const markEditorInputEl = document.getElementById("markEditorInput");
+    const figureEditorEl = document.getElementById("figureEditor");
+    const figureEditorInputEl = document.getElementById("figureEditorInput");
+    const figureEditorTypeEl = document.getElementById("figureEditorType");
+    const figureEditorFontSizeEl = document.getElementById("figureEditorFontSize");
     const textEditorInput = document.getElementById("textEditorInput");
     const pasteSinkEl = document.getElementById("pasteSink");
     const errorNoticeEl = document.getElementById("errorNotice");
@@ -591,6 +704,7 @@
       maxHistory: 100,
       interaction: null,
       autosaveTimer: null,
+      liveAutosaveTimer: 0,
       contextGroupId: null,
       contextTargetId: null,
       alignBasis: "bbox",
@@ -609,6 +723,7 @@
       pendingInternalPasteTimer: 0,
       lastExternalPasteAt: 0,
       activeMenu: "",
+      markLabelComp: {},
       viewScale: 1,
       pinch: { active: false, startScale: 1, startDistance: 0 },
       statusMessage: "Ready."
@@ -785,12 +900,17 @@
       return !!el && (
         el.classList.contains("selection-outline") ||
         el.classList.contains("selection-handle") ||
-        el.classList.contains("marquee")
+        el.classList.contains("marquee") ||
+        el.classList.contains("smart-guide")
       );
     }
 
     function isGroupLabel(el) {
       return !!el && el instanceof SVGElement && el.getAttribute("data-fm-group-label") === "1";
+    }
+
+    function isFigureTitle(el) {
+      return !!el && el instanceof SVGElement && (el.getAttribute("data-fm-figure-title") === "1" || el.classList.contains("fm-figure-title"));
     }
 
     function ensureId(el) {
@@ -902,7 +1022,7 @@
       if (!(el instanceof SVGElement)) return false;
       if (el === canvas) return false;
       if (isHelperElement(el)) return false;
-      if (isGroupLabel(el)) return false;
+      if (isGroupLabel(el)) return true;
       if (el.closest("defs,clipPath,mask,marker,symbol,pattern,metadata")) return false;
       const display = String(el.getAttribute("display") || "").trim().toLowerCase();
       const visibility = String(el.getAttribute("visibility") || "").trim().toLowerCase();
@@ -1017,6 +1137,34 @@
       renderResizeHandles(elements, displayScale);
     }
 
+    function clearSmartGuides() {
+      canvas.querySelectorAll(".smart-guide").forEach((el) => el.remove());
+    }
+
+    function drawSmartGuides(guides) {
+      clearSmartGuides();
+      if (!guides) return;
+      const { minX, minY, width, height } = getCanvasDimensions();
+      if (Number.isFinite(guides.x)) {
+        const v = document.createElementNS(SVG_NS, "line");
+        v.setAttribute("class", "smart-guide");
+        v.setAttribute("x1", String(guides.x));
+        v.setAttribute("y1", String(minY));
+        v.setAttribute("x2", String(guides.x));
+        v.setAttribute("y2", String(minY + height));
+        canvas.appendChild(v);
+      }
+      if (Number.isFinite(guides.y)) {
+        const h = document.createElementNS(SVG_NS, "line");
+        h.setAttribute("class", "smart-guide");
+        h.setAttribute("x1", String(minX));
+        h.setAttribute("y1", String(guides.y));
+        h.setAttribute("x2", String(minX + width));
+        h.setAttribute("y2", String(guides.y));
+        canvas.appendChild(h);
+      }
+    }
+
     function getSelectionRenderBox(el) {
       const it = state.interaction;
       if (!it || it.type !== "resize" || !it.liveBox) return null;
@@ -1064,6 +1212,7 @@
       });
       applySelectionStyles();
       syncArrowControlsFromSelection();
+      syncMarkControlsFromSelection();
       setStatus(state.selectedIds.length ? `Selected: ${state.selectedIds.length}` : "Ready.");
     }
 
@@ -1077,6 +1226,7 @@
     }
 
     function clearSelection() {
+      clearSmartGuides();
       setSelection([]);
     }
 
@@ -1086,6 +1236,13 @@
       try {
         pasteSinkEl.focus({ preventScroll: true });
       } catch (_) {}
+    }
+
+    function isTypingContextElement(el) {
+      if (!el) return false;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
+      if (el instanceof HTMLElement && el.isContentEditable) return true;
+      return false;
     }
 
     function closestEditableTarget(node) {
@@ -1384,15 +1541,76 @@
       return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
     }
 
+    function applyMarkLabelCompensation(labelEl) {
+      if (!(labelEl instanceof SVGElement) || !isGroupLabel(labelEl) || !labelEl.dataset?.id) return;
+      const comp = state.markLabelComp[labelEl.dataset.id];
+      if (!comp) return;
+      const a = Number(comp.a);
+      const b = Number(comp.b);
+      const c = Number(comp.c);
+      const d = Number(comp.d);
+      const hasMatrix = Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && Number.isFinite(d);
+      if (!hasMatrix) {
+        const invX = Number(comp.invX || 0);
+        const invY = Number(comp.invY || 0);
+        if (!Number.isFinite(invX) || !Number.isFinite(invY) || invX <= 0 || invY <= 0) return;
+        const x = Number(labelEl.getAttribute("x") || 0);
+        const y = Number(labelEl.getAttribute("y") || 0);
+        const baseLegacy = String(comp.baseTransform || "").trim();
+        const headLegacy = `translate(${Number(x.toFixed(4))},${Number(y.toFixed(4))}) scale(${Number(invX.toFixed(6))},${Number(invY.toFixed(6))}) translate(${-Number(x.toFixed(4))},${-Number(y.toFixed(4))})`;
+        labelEl.setAttribute("transform", `${headLegacy}${baseLegacy ? ` ${baseLegacy}` : ""}`.trim());
+        return;
+      }
+      const x = Number(labelEl.getAttribute("x") || 0);
+      const y = Number(labelEl.getAttribute("y") || 0);
+      const base = String(comp.baseTransform || "").trim();
+      const head = `translate(${Number(x.toFixed(4))},${Number(y.toFixed(4))}) matrix(${Number(a.toFixed(8))} ${Number(b.toFixed(8))} ${Number(c.toFixed(8))} ${Number(d.toFixed(8))} 0 0) translate(${-Number(x.toFixed(4))},${-Number(y.toFixed(4))})`;
+      labelEl.setAttribute("transform", `${head}${base ? ` ${base}` : ""}`.trim());
+    }
+
+    function getElementLinearMatrix(el) {
+      if (!(el instanceof SVGElement)) return { a: 1, b: 0, c: 0, d: 1 };
+      const m = el.getCTM ? el.getCTM() : null;
+      if (!m) return { a: 1, b: 0, c: 0, d: 1 };
+      const a = Number(m.a);
+      const b = Number(m.b);
+      const c = Number(m.c);
+      const d = Number(m.d);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || !Number.isFinite(d)) {
+        return { a: 1, b: 0, c: 0, d: 1 };
+      }
+      return { a, b, c, d };
+    }
+
+    function invertLinearMatrix(m) {
+      const a = Number(m?.a);
+      const b = Number(m?.b);
+      const c = Number(m?.c);
+      const d = Number(m?.d);
+      const det = a * d - b * c;
+      if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
+      return { a: d / det, b: -b / det, c: -c / det, d: a / det };
+    }
+
+    function multiplyLinearMatrix(l, r) {
+      return {
+        a: l.a * r.a + l.c * r.b,
+        b: l.b * r.a + l.d * r.b,
+        c: l.a * r.c + l.c * r.d,
+        d: l.b * r.c + l.d * r.d
+      };
+    }
+
     function refreshGroupLabelPosition(groupEl) {
       if (!(groupEl instanceof SVGElement) || groupEl.tagName !== "g") return;
       const label = groupEl.querySelector(':scope > [data-fm-group-label="1"]');
       if (!(label instanceof SVGElement)) return;
       const b = getGroupContentBBox(groupEl);
       if (!b) return;
-      const gt = getTranslate(groupEl);
-      label.setAttribute("x", String(b.x - gt.x));
-      label.setAttribute("y", String(b.y - gt.y - 6));
+      const local = canvasPointToElementLocal(groupEl, b.x, b.y - 6);
+      label.setAttribute("x", String(Number(local.x.toFixed(4))));
+      label.setAttribute("y", String(Number(local.y.toFixed(4))));
+      applyMarkLabelCompensation(label);
     }
 
     function refreshAllGroupLabels() {
@@ -1507,6 +1725,19 @@
       if (sizeEl && selected.dataset.arrowSize) sizeEl.value = selected.dataset.arrowSize;
     }
 
+    function syncMarkControlsFromSelection() {
+      const markSizeEl = document.getElementById("markFontSizeInput");
+      if (!(markSizeEl instanceof HTMLInputElement)) return;
+      if (state.selectedIds.length !== 1) return;
+      const selected = getById(state.selectedIds[0]);
+      if (!(selected instanceof SVGElement) || !isGroupLabel(selected)) return;
+      const computed = window.getComputedStyle(selected).fontSize || "";
+      const fromComputed = Number.parseFloat(computed);
+      const size = Number.isFinite(fromComputed) ? fromComputed : Number(selected.getAttribute("font-size") || 16);
+      if (!Number.isFinite(size)) return;
+      markSizeEl.value = String(Math.max(6, Math.min(120, Math.round(size))));
+    }
+
     function applyStrokeControlToSelectedLines(options = {}) {
       const push = options.push !== false;
       const withStatus = options.withStatus !== false;
@@ -1549,9 +1780,159 @@
       pushHistory("add-text");
     }
 
+    function normalizeFigureNumber(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return 1;
+      return Math.max(0, Math.min(9999, Math.round(n)));
+    }
+
+    function normalizeFigureFontSize(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return 28;
+      return Math.max(8, Math.min(200, Math.round(n)));
+    }
+
+    function normalizeFigureKind(value) {
+      return String(value || "").toLowerCase() === "supplementary" ? "supplementary" : "figure";
+    }
+
+    function getFigurePrefixLabel(kind) {
+      return normalizeFigureKind(kind) === "supplementary" ? "Supplementary Figure" : "Figure";
+    }
+
+    function readFigureNumber(el) {
+      if (!(el instanceof SVGElement)) return 1;
+      const fromData = Number(el.getAttribute("data-figure-number") || "");
+      if (Number.isFinite(fromData)) return normalizeFigureNumber(fromData);
+      const txt = String(el.textContent || "");
+      const m = txt.match(/(\d+)/);
+      return normalizeFigureNumber(m ? Number(m[1]) : 1);
+    }
+
+    function readFigureKind(el) {
+      if (!(el instanceof SVGElement)) return "figure";
+      const raw = String(el.getAttribute("data-figure-kind") || "").trim().toLowerCase();
+      if (raw === "supplementary" || raw === "figure") return raw;
+      const txt = String(el.textContent || "").trim().toLowerCase();
+      return txt.startsWith("supplementary figure") ? "supplementary" : "figure";
+    }
+
+    function readFigureFontSize(el) {
+      if (!(el instanceof SVGElement)) return 28;
+      const attr = Number(el.getAttribute("font-size") || "");
+      if (Number.isFinite(attr) && attr > 0) return normalizeFigureFontSize(attr);
+      const cs = window.getComputedStyle(el);
+      const px = Number.parseFloat(cs?.fontSize || "");
+      if (Number.isFinite(px) && px > 0) return normalizeFigureFontSize(px);
+      return 28;
+    }
+
+    function setFigureTitleNumber(el, numberValue, kindValue, fontSizeValue) {
+      if (!(el instanceof SVGElement)) return;
+      const number = normalizeFigureNumber(numberValue);
+      const kind = normalizeFigureKind(kindValue || readFigureKind(el));
+      const prefix = getFigurePrefixLabel(kind);
+      const fontSize = normalizeFigureFontSize(fontSizeValue || readFigureFontSize(el));
+      el.setAttribute("data-fm-figure-title", "1");
+      el.setAttribute("data-figure-number", String(number));
+      el.setAttribute("data-figure-kind", kind);
+      el.classList.add("fm-figure-title");
+      if (!el.getAttribute("font-family")) el.setAttribute("font-family", "Arial");
+      el.setAttribute("font-size", String(fontSize));
+      if (!el.getAttribute("font-weight")) el.setAttribute("font-weight", "700");
+      if (!el.getAttribute("fill")) el.setAttribute("fill", "#111827");
+      el.textContent = `${prefix} ${number}`;
+      applyPointerEventPolicy(el);
+    }
+
+    function ensureFigureTitle(options = {}) {
+      const select = options.select === true;
+      const push = options.push === true;
+      let title = canvas.querySelector('[data-fm-figure-title="1"], .fm-figure-title');
+      if (!(title instanceof SVGElement) || title.tagName !== "text") {
+        const dims = getCanvasDimensions();
+        title = document.createElementNS(SVG_NS, "text");
+        title.setAttribute("x", String(Number((dims.minX + 24).toFixed(2))));
+        title.setAttribute("y", String(Number((dims.minY + 42).toFixed(2))));
+        setFigureTitleNumber(title, 1);
+        ensureId(title);
+        setTranslate(title, 0, 0);
+        canvas.appendChild(title);
+        if (push) pushHistory("figure-title-add");
+      } else {
+        ensureId(title);
+        ensureTransformState(title);
+        setFigureTitleNumber(title, readFigureNumber(title));
+      }
+      if (select && title.dataset?.id) setSelection([title.dataset.id]);
+      return title;
+    }
+
+    function closeFigureEditor() {
+      if (!figureEditorEl || figureEditorEl.style.display === "none") return false;
+      figureEditorEl.style.display = "none";
+      figureEditorEl.dataset.targetId = "";
+      return true;
+    }
+
+    function cycleFigureEditorNumber(step) {
+      if (!(figureEditorInputEl instanceof HTMLInputElement)) return;
+      const dir = Number(step || 0) >= 0 ? 1 : -1;
+      const next = normalizeFigureNumber(Number(figureEditorInputEl.value || 1) + dir);
+      figureEditorInputEl.value = String(next);
+    }
+
+    function openFigureEditorFor(titleEl, clientX, clientY) {
+      if (!(titleEl instanceof SVGElement) || !isFigureTitle(titleEl) || !titleEl.dataset?.id) return;
+      if (!(figureEditorEl instanceof HTMLElement) || !(figureEditorInputEl instanceof HTMLInputElement)) return;
+      const number = readFigureNumber(titleEl);
+      const kind = readFigureKind(titleEl);
+      const fontSize = readFigureFontSize(titleEl);
+      figureEditorInputEl.value = String(number);
+      if (figureEditorFontSizeEl instanceof HTMLInputElement) {
+        figureEditorFontSizeEl.value = String(fontSize);
+      }
+      if (figureEditorTypeEl instanceof HTMLSelectElement) {
+        figureEditorTypeEl.value = kind;
+      }
+      const prefixEl = figureEditorEl.querySelector(".figure-editor-prefix");
+      if (prefixEl) prefixEl.textContent = getFigurePrefixLabel(kind);
+      figureEditorEl.dataset.targetId = titleEl.dataset.id;
+      const box = titleEl.getBoundingClientRect();
+      const rawX = Number.isFinite(clientX) ? clientX : (box.right + 8);
+      const rawY = Number.isFinite(clientY) ? clientY : box.top;
+      const x = Math.max(8, Math.min(rawX, window.innerWidth - 220));
+      const y = Math.max(8, Math.min(rawY, window.innerHeight - 56));
+      figureEditorEl.style.left = `${x}px`;
+      figureEditorEl.style.top = `${y}px`;
+      figureEditorEl.style.display = "inline-flex";
+      figureEditorInputEl.focus();
+      figureEditorInputEl.select();
+    }
+
+    function applyFigureFromEditor() {
+      const id = String(figureEditorEl?.dataset.targetId || "");
+      const target = id ? getById(id) : null;
+      if (!(target instanceof SVGElement) || !isFigureTitle(target)) {
+        closeFigureEditor();
+        return;
+      }
+      const before = readFigureNumber(target);
+      const beforeKind = readFigureKind(target);
+      const beforeFontSize = readFigureFontSize(target);
+      const next = normalizeFigureNumber(Number(figureEditorInputEl?.value || before));
+      const nextKind = normalizeFigureKind(figureEditorTypeEl?.value || beforeKind);
+      const nextFontSize = normalizeFigureFontSize(Number(figureEditorFontSizeEl?.value || beforeFontSize));
+      setFigureTitleNumber(target, next, nextKind, nextFontSize);
+      closeFigureEditor();
+      requestSelectionVisualRefresh();
+      if (next !== before || nextKind !== beforeKind || nextFontSize !== beforeFontSize) pushHistory("figure-title-number");
+      setStatus(`${getFigurePrefixLabel(nextKind)} ${next} (${nextFontSize}px)`);
+    }
+
     function getCleanCanvasMarkup() {
       const clone = canvas.cloneNode(true);
-      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee").forEach((el) => el.remove());
+      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide").forEach((el) => el.remove());
       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
         el.classList.remove("fm-selected");
         el.classList.remove("fm-group-selected");
@@ -1574,6 +1955,9 @@
     function applyCanvasMeta(meta) {
       const vb = meta?.viewBox || DEFAULT_VIEWBOX;
       canvas.setAttribute("viewBox", vb);
+      const dims = getCanvasDimensions();
+      canvas.setAttribute("width", String(Math.round(dims.width)));
+      canvas.setAttribute("height", String(Math.round(dims.height)));
       syncCanvasDisplaySizeFromViewBox();
     }
 
@@ -1581,8 +1965,8 @@
       const parts = (canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX).split(/\s+/).map(Number);
       const minX = Number.isFinite(parts[0]) ? parts[0] : 0;
       const minY = Number.isFinite(parts[1]) ? parts[1] : 0;
-      const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : 1200;
-      const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : 700;
+      const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : 794;
+      const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : 1123;
       return { minX, minY, width, height };
     }
 
@@ -1725,6 +2109,11 @@
         if (fileInput) fileInput.click();
         return;
       }
+      if (action === "file.import") {
+        const fileInput = document.getElementById("importFileInput");
+        if (fileInput) fileInput.click();
+        return;
+      }
       if (action === "file.save") return saveSvg();
       if (action === "file.pdf") return exportPdf();
       if (action === "edit.undo") return undo();
@@ -1734,17 +2123,17 @@
       if (action === "edit.paste") return pasteInternalClipboard();
       if (action === "edit.group") return groupSelected();
       if (action === "edit.ungroup") return ungroupSelected();
-      if (action === "view.canvas.a4.portrait") return setCanvasSize(794, 1123);
-      if (action === "view.canvas.a4.landscape") return setCanvasSize(1123, 794);
-      if (action === "view.canvas.custom") return promptCanvasSize();
-      if (action === "window.shortcuts") return showShortcutHelp();
-      if (action === "window.restore") return restoreLatest();
-      if (action === "window.pasteReport") return showPasteReport();
-      if (action === "window.pasteReport.copy") return copyPasteReport();
-      if (action === "window.pasteReport.save") return downloadPasteReport();
-      if (action === "window.pasteReport.history") return showPasteReportHistory();
-      if (action === "window.pasteReport.history.copy") return copyPasteReportHistory();
-      if (action === "window.pasteReport.history.clear") return clearPasteReportHistory();
+      if (action === "page.canvas.a4.portrait" || action === "view.canvas.a4.portrait") return setCanvasSize(794, 1123);
+      if (action === "page.canvas.a4.landscape" || action === "view.canvas.a4.landscape") return setCanvasSize(1123, 794);
+      if (action === "page.canvas.custom" || action === "view.canvas.custom") return promptCanvasSize();
+      if (action === "maintenance.shortcuts" || action === "window.shortcuts") return showShortcutHelp();
+      if (action === "maintenance.restore" || action === "window.restore") return restoreLatest();
+      if (action === "maintenance.pasteReport" || action === "window.pasteReport") return showPasteReport();
+      if (action === "maintenance.pasteReport.copy" || action === "window.pasteReport.copy") return copyPasteReport();
+      if (action === "maintenance.pasteReport.save" || action === "window.pasteReport.save") return downloadPasteReport();
+      if (action === "maintenance.pasteReport.history" || action === "window.pasteReport.history") return showPasteReportHistory();
+      if (action === "maintenance.pasteReport.history.copy" || action === "window.pasteReport.history.copy") return copyPasteReportHistory();
+      if (action === "maintenance.pasteReport.history.clear" || action === "window.pasteReport.history.clear") return clearPasteReportHistory();
     }
 
     function getSnapshot(reason = "") {
@@ -1762,7 +2151,10 @@
     function pushHistory(reason, options = {}) {
       const snap = getSnapshot(reason);
       const last = state.history[state.history.length - 1];
-      if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) return;
+      if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) {
+        scheduleLiveAutosave(reason || "history-nochange");
+        return;
+      }
       const sameSelection = last && JSON.stringify(last.selectedIds || []) === JSON.stringify(snap.selectedIds || []);
       if (options.coalesce && last && last.reason === reason && sameSelection) {
         const withinMs = Number(options.withinMs || 0);
@@ -1772,6 +2164,7 @@
           state.history[state.history.length - 1] = snap;
           state.future = [];
           updateHistoryButtons();
+          scheduleLiveAutosave(reason || "history-coalesce");
           setStatus(`Saved state (${reason}).`);
           return;
         }
@@ -1780,6 +2173,7 @@
       if (state.history.length > state.maxHistory) state.history.shift();
       state.future = [];
       updateHistoryButtons();
+      scheduleLiveAutosave(reason || "history");
       setStatus(`Saved state (${reason}).`);
     }
 
@@ -1788,6 +2182,7 @@
       state.history = [snap];
       state.future = [];
       updateHistoryButtons();
+      scheduleLiveAutosave(reason || "reset-history");
     }
 
     function restoreSnapshot(snap) {
@@ -1807,6 +2202,7 @@
       state.future.push(current);
       restoreSnapshot(state.history[state.history.length - 1]);
       updateHistoryButtons();
+      scheduleLiveAutosave("undo");
       setStatus("Undo.");
     }
 
@@ -1819,6 +2215,7 @@
       state.history.push(next);
       restoreSnapshot(next);
       updateHistoryButtons();
+      scheduleLiveAutosave("redo");
       setStatus("Redo.");
     }
 
@@ -2005,9 +2402,10 @@
     function serializeElementForClipboard(el) {
       const clone = el.cloneNode(true);
       if (clone instanceof SVGElement) {
+        clone.querySelectorAll?.('[data-fm-group-label="1"]').forEach((n) => n.remove());
         clone.classList.remove("fm-selected");
         clone.classList.remove("fm-group-selected");
-        clone.querySelectorAll(".fm-selected,.fm-group-selected,.selection-outline,.selection-handle,.marquee").forEach((n) => {
+        clone.querySelectorAll(".fm-selected,.fm-group-selected,.selection-outline,.selection-handle,.marquee,.smart-guide").forEach((n) => {
           if (n instanceof SVGElement) {
             n.classList.remove("fm-selected");
             n.classList.remove("fm-group-selected");
@@ -2135,6 +2533,23 @@
       }
     }
 
+    function canvasPointToElementLocal(el, x, y) {
+      if (!(el instanceof SVGElement) || el === canvas) return { x, y };
+      const elCTM = el.getScreenCTM ? el.getScreenCTM() : null;
+      const canvasCTM = canvas.getScreenCTM ? canvas.getScreenCTM() : null;
+      if (!elCTM || !canvasCTM) return { x, y };
+      try {
+        const p = canvas.createSVGPoint();
+        p.x = x;
+        p.y = y;
+        const screen = p.matrixTransform(canvasCTM);
+        const local = screen.matrixTransform(elCTM.inverse());
+        return { x: local.x, y: local.y };
+      } catch (_) {
+        return { x, y };
+      }
+    }
+
     function shouldUseTransformResize(el) {
       if (!(el instanceof SVGElement) || el === canvas) return false;
       if (el.tagName === "g") return true;
@@ -2203,21 +2618,54 @@
       return true;
     }
 
+    function getMarkFontSizeValue() {
+      const input = document.getElementById("markFontSizeInput");
+      const raw = Number(input?.value || 16);
+      const size = Math.max(6, Math.min(120, Number.isFinite(raw) ? raw : 16));
+      if (input) input.value = String(Math.round(size));
+      return Math.round(size);
+    }
+
+    function applyGlobalMarkFontSize(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const size = getMarkFontSizeValue();
+      const labels = Array.from(canvas.querySelectorAll('[data-fm-group-label="1"], .fm-group-label')).filter((n) => n instanceof SVGElement);
+      labels.forEach((label) => {
+        if (!label.getAttribute("data-fm-group-label")) label.setAttribute("data-fm-group-label", "1");
+        label.classList.add("fm-group-label");
+        label.setAttribute("font-size", String(size));
+        label.style.setProperty("font-size", `${size}px`);
+        if (label.dataset?.id) applyMarkLabelCompensation(label);
+      });
+      if (push && labels.length) pushHistory("mark-size");
+      if (withStatus) setStatus(labels.length ? `Mark size set: ${size}` : "No mark labels to resize.");
+      requestSelectionVisualRefresh();
+    }
+
     function addOrReplaceGroupLabel(groupEl, letter) {
       if (!groupEl || groupEl.tagName !== "g") return;
       const existing = groupEl.querySelector(':scope > [data-fm-group-label="1"]');
-      if (existing) existing.remove();
+      if (existing) {
+        if (existing.dataset?.id) delete state.markLabelComp[existing.dataset.id];
+        existing.remove();
+      }
       const b = getGroupContentBBox(groupEl) || safeBBox(groupEl);
       if (!b) return;
-      const gt = getTranslate(groupEl);
+      const local = canvasPointToElementLocal(groupEl, b.x, b.y - 6);
       const label = document.createElementNS(SVG_NS, "text");
       label.setAttribute("class", "fm-group-label");
       label.setAttribute("data-fm-group-label", "1");
-      label.setAttribute("x", String(b.x - gt.x));
-      label.setAttribute("y", String(b.y - gt.y - 6));
+      const markSize = getMarkFontSizeValue();
+      label.setAttribute("font-size", String(markSize));
+      label.style.setProperty("font-size", `${markSize}px`);
+      label.setAttribute("x", String(Number(local.x.toFixed(4))));
+      label.setAttribute("y", String(Number(local.y.toFixed(4))));
       label.textContent = letter;
       ensureId(label);
+      applyPointerEventPolicy(label);
       groupEl.appendChild(label);
+      if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
       pushHistory(`label-${letter}`);
     }
 
@@ -2241,21 +2689,71 @@
       return null;
     }
 
-    function promptGroupMark() {
-      const group = resolveContextGroupTarget();
-      if (!group) {
-        setStatus("Mark needs a group target.");
+    function closeMarkEditor() {
+      if (!markEditorEl || markEditorEl.style.display === "none") return false;
+      markEditorEl.style.display = "none";
+      markEditorEl.dataset.groupId = "";
+      return true;
+    }
+
+    function cycleMarkEditorLetter(step) {
+      if (!(markEditorInputEl instanceof HTMLInputElement)) return;
+      const s = Number(step || 1);
+      const dir = s >= 0 ? 1 : -1;
+      const now = String(markEditorInputEl.value || "").trim().toUpperCase();
+      if (!/^[A-Z]$/.test(now)) {
+        markEditorInputEl.value = dir > 0 ? "A" : "Z";
         return;
       }
-      const raw = window.prompt("Mark letter (A-Z)", "A");
-      if (!raw) return;
-      const letter = String(raw).trim().toUpperCase();
+      const base = now.charCodeAt(0) - 65;
+      const next = ((base + dir + 26) % 26) + 65;
+      markEditorInputEl.value = String.fromCharCode(next);
+    }
+
+    function applyMarkFromEditor() {
+      const groupId = String(markEditorEl?.dataset.groupId || "");
+      const group = groupId ? getById(groupId) : null;
+      if (!(group instanceof SVGElement) || group.tagName !== "g") {
+        setStatus("Mark needs a group target.");
+        closeMarkEditor();
+        return;
+      }
+      const letter = String(markEditorInputEl?.value || "").trim().toUpperCase();
       if (!/^[A-Z]$/.test(letter)) {
         setStatus("Mark must be A-Z.");
+        if (markEditorInputEl) {
+          markEditorInputEl.focus();
+          markEditorInputEl.select();
+        }
         return;
       }
       addOrReplaceGroupLabel(group, letter);
+      closeMarkEditor();
       setStatus(`Label ${letter} set.`);
+    }
+
+    function promptGroupMark() {
+      const group = resolveContextGroupTarget();
+      if (!group || !group.dataset?.id) {
+        setStatus("Mark needs a group target.");
+        return;
+      }
+      const existing = group.querySelector(':scope > [data-fm-group-label="1"]');
+      const current = existing instanceof SVGElement ? String(existing.textContent || "").trim().toUpperCase() : "";
+      const menuRect = ctxMenu?.getBoundingClientRect?.() || { left: 24, top: 24, right: 24, width: 0 };
+      const x = Math.max(8, Math.min(menuRect.right + 6, window.innerWidth - 180));
+      const y = Math.max(8, Math.min(menuRect.top, window.innerHeight - 56));
+      if (markEditorEl) {
+        markEditorEl.dataset.groupId = group.dataset.id;
+        markEditorEl.style.left = `${x}px`;
+        markEditorEl.style.top = `${y}px`;
+        markEditorEl.style.display = "inline-flex";
+      }
+      if (markEditorInputEl) {
+        markEditorInputEl.value = /^[A-Z]$/.test(current) ? current : "";
+        markEditorInputEl.focus();
+        markEditorInputEl.select();
+      }
     }
 
     function clearGroupMark() {
@@ -2269,12 +2767,14 @@
         setStatus("No mark to clear.");
         return;
       }
+      if (existing.dataset?.id) delete state.markLabelComp[existing.dataset.id];
       existing.remove();
       pushHistory("label-clear");
       setStatus("Mark cleared.");
     }
 
     function openContextMenu(clientX, clientY, options = {}) {
+      closeMarkEditor();
       state.contextGroupId = options.groupId || "";
       state.contextTargetId = options.targetId || "";
       const hasSelection = state.selectedIds.length > 0;
@@ -2379,14 +2879,54 @@
       applyCanvasMeta({ viewBox: root.getAttribute("viewBox") || DEFAULT_VIEWBOX });
       canvas.innerHTML = root.innerHTML;
       assignIds();
+      ensureFigureTitle();
       clearSelection();
       resetHistory("open-svg");
       setStatus("SVG opened.");
     }
 
+    function fitImportedWrapperToCanvas(wrapper, options = {}) {
+      if (!(wrapper instanceof SVGElement)) return false;
+      const dims = getCanvasDimensions();
+      const margin = Math.max(8, Number(options.margin || 24));
+      const availW = Math.max(24, dims.width - margin * 2);
+      const availH = Math.max(24, dims.height - margin * 2);
+      const initial = safeBBox(wrapper);
+      if (!initial || initial.width <= 0 || initial.height <= 0) return false;
+      let scale = Math.min(1, availW / initial.width, availH / initial.height);
+      if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+      if (scale < 0.9999) {
+        const cx = initial.x + initial.width / 2;
+        const cy = initial.y + initial.height / 2;
+        wrapper.dataset.baseTransform = `translate(${Number(cx.toFixed(4))},${Number(cy.toFixed(4))}) scale(${Number(scale.toFixed(6))}) translate(${Number((-cx).toFixed(4))},${Number((-cy).toFixed(4))})`;
+        const t0 = getTranslate(wrapper);
+        setTranslate(wrapper, t0.x, t0.y);
+      }
+      const fitted = safeBBox(wrapper) || initial;
+      const targetCx = dims.minX + dims.width / 2;
+      const targetCy = dims.minY + dims.height / 2;
+      const currentCx = fitted.x + fitted.width / 2;
+      const currentCy = fitted.y + fitted.height / 2;
+      const t = getTranslate(wrapper);
+      setTranslate(wrapper, t.x + (targetCx - currentCx), t.y + (targetCy - currentCy));
+      return true;
+    }
+
+    function importSvgTextFitted(svgText) {
+      const importedIds = importSvgText(svgText, { push: false, setMessage: false, select: false, wrap: true, offsetX: 0, offsetY: 0 });
+      if (!importedIds.length) return [];
+      const wrapper = getById(importedIds[0]);
+      if (wrapper instanceof SVGElement) fitImportedWrapperToCanvas(wrapper, { margin: 28 });
+      setSelection(importedIds);
+      pushHistory("import-svg");
+      setStatus("SVG imported and fitted to canvas.");
+      return importedIds;
+    }
+
     function newCanvas() {
       applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX });
       canvas.innerHTML = "";
+      ensureFigureTitle();
       clearSelection();
       resetHistory("new-canvas");
       setStatus("New canvas created.");
@@ -2409,6 +2949,43 @@
       localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(records.slice(-20)));
     }
 
+    function getLiveAutosaveRecord() {
+      try {
+        const raw = localStorage.getItem(LIVE_AUTOSAVE_KEY);
+        if (!raw) return null;
+        const rec = JSON.parse(raw);
+        if (!rec || typeof rec !== "object") return null;
+        if (!rec.markup || !rec.canvasMeta) return null;
+        return rec;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function writeLiveAutosave(reason = "live") {
+      try {
+        const snap = getSnapshot(`live:${reason}`);
+        const rec = {
+          id: `live-${Date.now()}`,
+          at: Number(snap.at || Date.now()),
+          markup: snap.markup,
+          selectedIds: Array.isArray(snap.selectedIds) ? [...snap.selectedIds] : [],
+          canvasMeta: snap.canvasMeta
+        };
+        localStorage.setItem(LIVE_AUTOSAVE_KEY, JSON.stringify(rec));
+      } catch (err) {
+        captureError("live-autosave-write", err, { userMessage: "Autosave write failed." });
+      }
+    }
+
+    function scheduleLiveAutosave(reason = "live") {
+      if (state.liveAutosaveTimer) clearTimeout(state.liveAutosaveTimer);
+      state.liveAutosaveTimer = window.setTimeout(() => {
+        state.liveAutosaveTimer = 0;
+        writeLiveAutosave(reason);
+      }, 450);
+    }
+
     function saveAutosave() {
       const records = getAutosaveRecords();
       records.push({
@@ -2419,6 +2996,7 @@
         canvasMeta: getCanvasMeta()
       });
       setAutosaveRecords(records);
+      writeLiveAutosave("timed");
       refreshRestoreList();
       setStatus("Autosave snapshot written.");
     }
@@ -2436,17 +3014,22 @@
 
     function restoreLatest() {
       const records = getAutosaveRecords();
-      const r = records[records.length - 1];
-      if (!r) {
+      const timed = records[records.length - 1] || null;
+      const live = getLiveAutosaveRecord();
+      const r = live && (!timed || Number(live.at || 0) >= Number(timed.at || 0)) ? live : timed;
+      if (!r || !r.markup) {
         setStatus("No autosave records.");
         return;
       }
       applyCanvasMeta(r.canvasMeta);
       canvas.innerHTML = r.markup;
       assignIds();
+      ensureFigureTitle();
       setSelection(r.selectedIds || []);
       resetHistory("restore-latest");
-      setStatus("Latest autosave restored.");
+      const source = r.id && String(r.id).startsWith("live-") ? "live" : "timed";
+      const stamp = r.at ? new Date(r.at).toLocaleString() : "";
+      setStatus(`Latest autosave restored (${source}${stamp ? `: ${stamp}` : ""}).`);
     }
 
     function restoreFromList() {
@@ -2460,6 +3043,7 @@
       applyCanvasMeta(r.canvasMeta);
       canvas.innerHTML = r.markup;
       assignIds();
+      ensureFigureTitle();
       setSelection(r.selectedIds || []);
       resetHistory("restore-from-list");
       setStatus("Autosave restored.");
@@ -2475,7 +3059,8 @@
       if (val !== "off") {
         state.autosaveTimer = setInterval(saveAutosave, Number(val) * 60 * 1000);
       }
-      setStatus(`Autosave set: ${val}`);
+      if (val === "off") setStatus("Autosave off. Live restore snapshot remains available.");
+      else setStatus(`Autosave set: ${val} min (timed) + live snapshot on edit.`);
     }
 
     function insertImageElement(src, width, height, offsetIndex = 0, options = {}) {
@@ -2947,6 +3532,7 @@
         "Ctrl/Cmd+Y : Redo",
         "Delete/Backspace : Delete selection",
         "Arrow keys : Nudge (Shift=10px)",
+        "Alt/Ctrl (during drag/resize) : Temporarily disable snapping",
         "Ctrl/Cmd+D : Duplicate",
         "Ctrl/Cmd+C/X : Copy/Cut",
         "Ctrl/Cmd+V : Paste from OS clipboard (or internal fallback if OS paste not delivered)",
@@ -3289,6 +3875,7 @@
     }
 
     function beginMarquee(start, keepCurrent) {
+      clearSmartGuides();
       const rect = document.createElementNS(SVG_NS, "rect");
       rect.setAttribute("class", "marquee");
       rect.setAttribute("x", String(start.x));
@@ -3338,12 +3925,71 @@
       state.interaction = null;
     }
 
+    function combineBoxes(boxes) {
+      const valid = (boxes || []).filter((b) => !!b && Number.isFinite(b.x) && Number.isFinite(b.y) && Number.isFinite(b.width) && Number.isFinite(b.height));
+      if (!valid.length) return null;
+      const minX = Math.min(...valid.map((b) => b.x));
+      const minY = Math.min(...valid.map((b) => b.y));
+      const maxX = Math.max(...valid.map((b) => b.x + b.width));
+      const maxY = Math.max(...valid.map((b) => b.y + b.height));
+      return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+    }
+
+    function buildDragSnapTargets(selectedElements) {
+      const xTargets = [];
+      const yTargets = [];
+      const shouldSkip = (el) => selectedElements.some((s) => s === el || s.contains(el) || el.contains(s));
+      canvas.querySelectorAll("[data-id]").forEach((el) => {
+        if (!(el instanceof SVGElement) || !isEditableElement(el)) return;
+        if (shouldSkip(el)) return;
+        const b = safeBBox(el);
+        if (!b || !Number.isFinite(b.width) || !Number.isFinite(b.height) || b.width <= 0 || b.height <= 0) return;
+        const left = b.x;
+        const cx = b.x + b.width / 2;
+        const right = b.x + b.width;
+        const top = b.y;
+        const cy = b.y + b.height / 2;
+        const bottom = b.y + b.height;
+        xTargets.push({ value: left }, { value: cx }, { value: right });
+        yTargets.push({ value: top }, { value: cy }, { value: bottom });
+      });
+      return { xTargets, yTargets };
+    }
+
+    function pickBestSnapDelta(rawDelta, movingValues, targets, threshold) {
+      if (!targets.length || !movingValues.length) return null;
+      let best = null;
+      movingValues.forEach((mv) => {
+        targets.forEach((target) => {
+          const deltaAdjust = target.value - mv;
+          const dist = Math.abs(deltaAdjust);
+          if (dist > threshold) return;
+          if (!best || dist < best.dist) {
+            best = { dist, delta: rawDelta + deltaAdjust, guide: target.value };
+          }
+        });
+      });
+      return best;
+    }
+
     function beginDrag(start) {
       const elements = getTopSelectedElements();
       if (!elements.length) return;
       const original = new Map();
       elements.forEach((el) => original.set(el.dataset.id, getTranslate(el)));
-      state.interaction = { type: "drag", start, original, moved: false, pointerId: null };
+      const movingBoxes = elements.map((el) => safeBBox(el)).filter(Boolean);
+      const movingBounds = combineBoxes(movingBoxes);
+      const snapTargets = buildDragSnapTargets(elements);
+      state.interaction = {
+        type: "drag",
+        start,
+        original,
+        moved: false,
+        pointerId: null,
+        movingBounds,
+        snapTargets
+      };
+      clearSmartGuides();
     }
 
     function beginResize(start, targetEl, handle) {
@@ -3351,6 +3997,28 @@
       const b = safeBBox(targetEl);
       if (!b) return;
       const aspect = b.height > 0 ? b.width / b.height : 1;
+      const snapTargets = buildDragSnapTargets([targetEl]);
+      const groupLinearStart = targetEl.tagName === "g" ? getElementLinearMatrix(targetEl) : null;
+      const groupLabelCompensations = targetEl.tagName === "g"
+        ? Array.from(targetEl.querySelectorAll(':scope > [data-fm-group-label="1"]'))
+          .filter((n) => n instanceof SVGElement && n.dataset?.id)
+          .map((label) => {
+            const attrSize = Number(label.getAttribute("font-size") || "");
+            const computedSize = Number.parseFloat(window.getComputedStyle(label).fontSize || "");
+            const fontSize = Number.isFinite(attrSize) && attrSize > 0
+              ? attrSize
+              : (Number.isFinite(computedSize) && computedSize > 0 ? computedSize : 16);
+            const prior = state.markLabelComp[label.dataset.id] || null;
+            const baseRaw = prior && typeof prior.baseTransform === "string"
+              ? prior.baseTransform
+              : String(label.getAttribute("transform") || "");
+            return {
+              id: label.dataset.id,
+              fontSize,
+              baseTransform: String(baseRaw || "").trim()
+            };
+          })
+        : [];
       // Regression note: pasted SVG often carries parent/child transforms.
       // Resizing by editing geometry attrs caused position drift, so resize stays transform-based.
       state.interaction = {
@@ -3363,10 +4031,14 @@
         baseTransformRaw: String(targetEl.getAttribute("transform") || "").trim(),
         transformResize: true,
         liveBox: b,
+        snapTargets,
+        groupLinearStart,
+        groupLabelCompensations,
         aspect,
         moved: false,
         pointerId: null
       };
+      clearSmartGuides();
     }
 
     function mapX(x, oldBox, newBox) {
@@ -3584,7 +4256,7 @@
       }
     }
 
-    function updateResize(pt, keepAspect = false) {
+    function updateResize(pt, keepAspect = false, options = {}) {
       const it = state.interaction;
       if (!it || it.type !== "resize") return;
       const el = getById(it.targetId);
@@ -3612,8 +4284,80 @@
         if (it.handle.includes("n")) top = bottom - height;
         else bottom = top + height;
       }
+      const disableSnap = !!options.disableSnap;
+      let guides = null;
+      if (!disableSnap) {
+        const displayScale = Math.max(getCanvasDisplayScale(), 1e-6);
+        const snapThreshold = 7 / displayScale;
+        const xTargets = it.snapTargets?.xTargets || [];
+        const yTargets = it.snapTargets?.yTargets || [];
+        if (xTargets.length && (it.handle.includes("w") || it.handle.includes("e"))) {
+          const xValues = [];
+          if (it.handle.includes("w")) xValues.push(left);
+          if (it.handle.includes("e")) xValues.push(right);
+          xValues.push((left + right) / 2);
+          const bestX = pickBestSnapDelta(0, xValues, xTargets, snapThreshold);
+          if (bestX) {
+            const ddx = bestX.delta;
+            if (it.handle.includes("w")) left += ddx;
+            if (it.handle.includes("e")) right += ddx;
+            guides = { ...(guides || {}), x: bestX.guide };
+          }
+        }
+        if (yTargets.length && (it.handle.includes("n") || it.handle.includes("s"))) {
+          const yValues = [];
+          if (it.handle.includes("n")) yValues.push(top);
+          if (it.handle.includes("s")) yValues.push(bottom);
+          yValues.push((top + bottom) / 2);
+          const bestY = pickBestSnapDelta(0, yValues, yTargets, snapThreshold);
+          if (bestY) {
+            const ddy = bestY.delta;
+            if (it.handle.includes("n")) top += ddy;
+            if (it.handle.includes("s")) bottom += ddy;
+            guides = { ...(guides || {}), y: bestY.guide };
+          }
+        }
+      }
+      if (right - left < MIN_RESIZE_SIZE) {
+        if (it.handle.includes("w")) left = right - MIN_RESIZE_SIZE;
+        else right = left + MIN_RESIZE_SIZE;
+      }
+      if (bottom - top < MIN_RESIZE_SIZE) {
+        if (it.handle.includes("n")) top = bottom - MIN_RESIZE_SIZE;
+        else bottom = top + MIN_RESIZE_SIZE;
+      }
+      if (disableSnap) clearSmartGuides();
+      else drawSmartGuides(guides);
+      width = Math.max(MIN_RESIZE_SIZE, right - left);
+      height = Math.max(MIN_RESIZE_SIZE, bottom - top);
       it.liveBox = { x: left, y: top, width, height };
       applyResizeByTransform(el, ob, it.liveBox, it.baseTransformRaw || "");
+      if (el.tagName === "g" && Array.isArray(it.groupLabelCompensations) && it.groupLabelCompensations.length) {
+        const startLinear = it.groupLinearStart || { a: 1, b: 0, c: 0, d: 1 };
+        const currentLinear = getElementLinearMatrix(el);
+        const invCurrent = invertLinearMatrix(currentLinear);
+        const compLinear = invCurrent ? multiplyLinearMatrix(invCurrent, startLinear) : { a: 1, b: 0, c: 0, d: 1 };
+        const cb = getGroupContentBBox(el);
+        it.groupLabelCompensations.forEach((info) => {
+          if (!info?.id) return;
+          const label = getById(info.id);
+          if (!(label instanceof SVGElement) || !isGroupLabel(label)) return;
+          if (cb) {
+            const local = canvasPointToElementLocal(el, cb.x, cb.y - 6);
+            label.setAttribute("x", String(Number(local.x.toFixed(4))));
+            label.setAttribute("y", String(Number(local.y.toFixed(4))));
+          }
+          state.markLabelComp[info.id] = {
+            a: Number(compLinear.a.toFixed(8)),
+            b: Number(compLinear.b.toFixed(8)),
+            c: Number(compLinear.c.toFixed(8)),
+            d: Number(compLinear.d.toFixed(8)),
+            baseTransform: String(info.baseTransform || "")
+          };
+          applyMarkLabelCompensation(label);
+          label.setAttribute("font-size", String(Number(info.fontSize || 16)));
+        });
+      }
       it.moved = true;
       requestSelectionVisualRefresh();
     }
@@ -3621,27 +4365,51 @@
     function finishResize() {
       const it = state.interaction;
       if (!it || it.type !== "resize") return;
+      clearSmartGuides();
       if (it.moved) pushHistory("resize");
       state.interaction = null;
     }
 
-    function updateDrag(pt) {
+    function updateDrag(pt, options = {}) {
       const it = state.interaction;
       if (!it || it.type !== "drag") return;
-      const dx = pt.x - it.start.x;
-      const dy = pt.y - it.start.y;
+      let dx = pt.x - it.start.x;
+      let dy = pt.y - it.start.y;
+      const disableSnap = !!options.disableSnap;
+      const movingBounds = it.movingBounds;
+      const xTargets = it.snapTargets?.xTargets || [];
+      const yTargets = it.snapTargets?.yTargets || [];
+      const displayScale = Math.max(getCanvasDisplayScale(), 1e-6);
+      const snapThreshold = 7 / displayScale;
+      let guides = null;
+      if (!disableSnap && movingBounds && (xTargets.length || yTargets.length)) {
+        const movedLeft = movingBounds.x + dx;
+        const movedCx = movingBounds.x + movingBounds.width / 2 + dx;
+        const movedRight = movingBounds.x + movingBounds.width + dx;
+        const movedTop = movingBounds.y + dy;
+        const movedCy = movingBounds.y + movingBounds.height / 2 + dy;
+        const movedBottom = movingBounds.y + movingBounds.height + dy;
+        const bestX = pickBestSnapDelta(dx, [movedLeft, movedCx, movedRight], xTargets, snapThreshold);
+        const bestY = pickBestSnapDelta(dy, [movedTop, movedCy, movedBottom], yTargets, snapThreshold);
+        if (bestX) dx = bestX.delta;
+        if (bestY) dy = bestY.delta;
+        guides = { x: bestX?.guide, y: bestY?.guide };
+      }
+      if (disableSnap) clearSmartGuides();
       if (Math.abs(dx) > 0.3 || Math.abs(dy) > 0.3) it.moved = true;
       getTopSelectedElements().forEach((el) => {
         const o = it.original.get(el.dataset.id);
         if (!o) return;
         setTranslate(el, o.x + dx, o.y + dy);
       });
+      if (!disableSnap) drawSmartGuides(guides);
       requestSelectionVisualRefresh();
     }
 
     function finishDrag() {
       const it = state.interaction;
       if (!it || it.type !== "drag") return;
+      clearSmartGuides();
       if (it.moved) pushHistory("drag-move", { coalesce: true, withinMs: 400 });
       state.interaction = null;
     }
@@ -3650,13 +4418,15 @@
       const menuBar = document.getElementById("menuBar");
       if (menuBar) {
         menuBar.addEventListener("click", (e) => {
-          const trigger = e.target.closest("[data-menu-trigger]");
+          const clickTarget = e.target instanceof Element ? e.target : null;
+          if (!clickTarget) return;
+          const trigger = clickTarget.closest("[data-menu-trigger]");
           if (trigger) {
             e.preventDefault();
             toggleAppMenu(trigger.dataset.menuTrigger || "");
             return;
           }
-          const actionBtn = e.target.closest("[data-menu-action]");
+          const actionBtn = clickTarget.closest("[data-menu-action]");
           if (actionBtn) {
             e.preventDefault();
             runMenuAction(actionBtn.dataset.menuAction || "");
@@ -3666,7 +4436,7 @@
       }
       window.addEventListener("pointerdown", (e) => {
         if (!menuBar) return;
-        if (!menuBar.contains(e.target)) closeAppMenus();
+        if (!(e.target instanceof Node) || !menuBar.contains(e.target)) closeAppMenus();
       });
       const bindClick = (id, handler) => {
         const el = document.getElementById(id);
@@ -3687,6 +4457,111 @@
       });
       document.getElementById("shortcutsBtn").addEventListener("click", showShortcutHelp);
       document.getElementById("shortcutCloseBtn").addEventListener("click", closeShortcutHelp);
+      document.getElementById("markEditorUpBtn").addEventListener("click", () => {
+        cycleMarkEditorLetter(1);
+        if (markEditorInputEl) {
+          markEditorInputEl.focus();
+          markEditorInputEl.select();
+        }
+      });
+      document.getElementById("markEditorDownBtn").addEventListener("click", () => {
+        cycleMarkEditorLetter(-1);
+        if (markEditorInputEl) {
+          markEditorInputEl.focus();
+          markEditorInputEl.select();
+        }
+      });
+      document.getElementById("markEditorApplyBtn").addEventListener("click", applyMarkFromEditor);
+      document.getElementById("markEditorCancelBtn").addEventListener("click", () => {
+        closeMarkEditor();
+      });
+      document.getElementById("figureEditorApplyBtn").addEventListener("click", applyFigureFromEditor);
+      document.getElementById("figureEditorCancelBtn").addEventListener("click", () => {
+        closeFigureEditor();
+      });
+      if (figureEditorTypeEl instanceof HTMLSelectElement) {
+        figureEditorTypeEl.addEventListener("change", () => {
+          const prefixEl = figureEditorEl?.querySelector(".figure-editor-prefix");
+          if (prefixEl) prefixEl.textContent = getFigurePrefixLabel(figureEditorTypeEl.value);
+        });
+      }
+      if (markEditorInputEl) {
+        markEditorInputEl.addEventListener("input", () => {
+          markEditorInputEl.value = String(markEditorInputEl.value || "").replace(/[^a-z]/gi, "").slice(0, 1).toUpperCase();
+        });
+        markEditorInputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            applyMarkFromEditor();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            closeMarkEditor();
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            e.stopPropagation();
+            cycleMarkEditorLetter(1);
+            markEditorInputEl.select();
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            e.stopPropagation();
+            cycleMarkEditorLetter(-1);
+            markEditorInputEl.select();
+          }
+        });
+      }
+      if (figureEditorInputEl) {
+        figureEditorInputEl.addEventListener("input", () => {
+          const next = normalizeFigureNumber(Number(figureEditorInputEl.value || 1));
+          figureEditorInputEl.value = String(next);
+        });
+        figureEditorInputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            applyFigureFromEditor();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            closeFigureEditor();
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            e.stopPropagation();
+            cycleFigureEditorNumber(1);
+            figureEditorInputEl.select();
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            e.stopPropagation();
+            cycleFigureEditorNumber(-1);
+            figureEditorInputEl.select();
+          }
+        });
+      }
+      if (figureEditorFontSizeEl) {
+        figureEditorFontSizeEl.addEventListener("input", () => {
+          const next = normalizeFigureFontSize(Number(figureEditorFontSizeEl.value || 28));
+          figureEditorFontSizeEl.value = String(next);
+        });
+        figureEditorFontSizeEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            applyFigureFromEditor();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            closeFigureEditor();
+          }
+        });
+      }
       if (shortcutModalEl) {
         shortcutModalEl.addEventListener("pointerdown", (e) => {
           if (e.target === shortcutModalEl) closeShortcutHelp();
@@ -3755,8 +4630,15 @@
       document.getElementById("arrowStrokeInput").addEventListener("input", () => {
         applyStrokeControlToSelectedLines({ push: false, withStatus: false });
       });
+      document.getElementById("markFontSizeInput").addEventListener("change", () => {
+        applyGlobalMarkFontSize({ push: true, withStatus: true });
+      });
+      document.getElementById("markFontSizeInput").addEventListener("input", () => {
+        applyGlobalMarkFontSize({ push: false, withStatus: false });
+      });
 
       const fileInput = document.getElementById("openFileInput");
+      const importInput = document.getElementById("importFileInput");
       bindClick("openSvg", () => {
         if (fileInput) fileInput.click();
       });
@@ -3771,6 +4653,19 @@
           captureError("open-file-read", err, { userMessage: "File read failed." });
         }
         fileInput.value = "";
+      });
+      if (importInput) importInput.addEventListener("change", async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const imported = importSvgTextFitted(text);
+          if (!imported.length) setStatus("Import failed: invalid SVG.");
+        } catch (err) {
+          setStatus("Import failed. Please select a valid SVG file.");
+          captureError("import-file-read", err, { userMessage: "SVG import failed." });
+        }
+        importInput.value = "";
       });
 
       document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
@@ -3860,7 +4755,15 @@
       window.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
         focusPasteSink();
+        if (!(e.target instanceof Node)) {
+          closeContextMenu();
+          closeMarkEditor();
+          closeFigureEditor();
+          return;
+        }
         if (!ctxMenu.contains(e.target)) closeContextMenu();
+        if (markEditorEl && !markEditorEl.contains(e.target)) closeMarkEditor();
+        if (figureEditorEl && !figureEditorEl.contains(e.target)) closeFigureEditor();
       });
 
       canvas.addEventListener("pointerdown", (e) => {
@@ -3868,6 +4771,7 @@
         if (state.pinch.active) return;
         focusPasteSink();
         closeContextMenu();
+        closeFigureEditor();
         const handleEl = e.target instanceof SVGElement ? e.target.closest(".selection-handle") : null;
         if (handleEl instanceof SVGElement) {
           const pt = getSvgPoint(e.clientX, e.clientY);
@@ -3933,6 +4837,15 @@
         if (!e.shiftKey) clearSelection();
       });
 
+      canvas.addEventListener("click", (e) => {
+        if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+        const raw = closestEditableTarget(e.target);
+        if (!(raw instanceof SVGElement)) return;
+        const target = resolveDirectTextLikeTarget(raw);
+        if (!(target instanceof SVGElement) || !isFigureTitle(target)) return;
+        openFigureEditorFor(target, e.clientX, e.clientY);
+      });
+
       canvas.addEventListener("dblclick", (e) => {
         let textEl = null;
         if (e.target instanceof SVGElement) {
@@ -3949,6 +4862,11 @@
           if (selected instanceof SVGElement && selected.tagName === "text" && !isGroupLabel(selected)) {
             textEl = selected;
           }
+        }
+        if (textEl instanceof SVGElement && isFigureTitle(textEl)) {
+          e.preventDefault();
+          openFigureEditorFor(textEl, e.clientX, e.clientY);
+          return;
         }
         if (!(textEl instanceof SVGElement) || !textEl.dataset.id || isGroupLabel(textEl)) return;
         e.preventDefault();
@@ -3975,8 +4893,9 @@
         if (!it) return;
         if (it.pointerId !== null && e.pointerId !== it.pointerId) return;
         const pt = getSvgPoint(e.clientX, e.clientY);
-        if (it.type === "drag") updateDrag(pt);
-        if (it.type === "resize") updateResize(pt, e.shiftKey);
+        const disableSnap = !!(e.altKey || e.ctrlKey);
+        if (it.type === "drag") updateDrag(pt, { disableSnap });
+        if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
         if (it.type === "marquee") updateMarquee(pt);
       });
 
@@ -3998,6 +4917,7 @@
         if (!state.interaction) return;
         if (state.interaction.pointerId !== null && e.pointerId !== state.interaction.pointerId) return;
         const capturedId = state.interaction.pointerId;
+        clearSmartGuides();
         state.interaction = null;
         if (capturedId !== null && canvas.releasePointerCapture) {
           try { canvas.releasePointerCapture(capturedId); } catch (_) {}
@@ -4008,7 +4928,31 @@
         if (state.textEdit) {
           return;
         }
+        const activeEl = document.activeElement;
+        if (isTypingContextElement(activeEl)) {
+          if (e.key === "Escape" && closeShortcutHelp()) {
+            e.preventDefault();
+            return;
+          }
+          if (e.key === "Escape" && closeMarkEditor()) {
+            e.preventDefault();
+            return;
+          }
+          if (e.key === "Escape" && closeFigureEditor()) {
+            e.preventDefault();
+            return;
+          }
+          return;
+        }
         if (e.key === "Escape" && closeShortcutHelp()) {
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Escape" && closeMarkEditor()) {
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Escape" && closeFigureEditor()) {
           e.preventDefault();
           return;
         }
@@ -4174,6 +5118,7 @@
       window.addEventListener("focus", focusPasteSink);
       window.addEventListener("resize", renderStatus);
       window.addEventListener("beforeunload", () => {
+        writeLiveAutosave("beforeunload");
         if (document.getElementById("autosaveSelect").value !== "off") saveAutosave();
       });
     }
@@ -4181,6 +5126,8 @@
     function initialize() {
       setupGlobalErrorHandlers();
       setupEventRingHooks();
+      state.viewScale = 1;
+      applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX });
       assignIds();
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();
@@ -4214,6 +5161,7 @@
       document.getElementById("alignBasisSelect").value = state.alignBasis;
       refreshRestoreList();
       updateAutosaveTimer();
+      ensureFigureTitle();
       pushHistory("init");
       setStatus("Figure Maker ready.");
     }
