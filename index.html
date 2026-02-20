@@ -2976,10 +2976,18 @@
       const margin = Math.max(8, Number(options.margin || 24));
       const availW = Math.max(24, dims.width - margin * 2);
       const availH = Math.max(24, dims.height - margin * 2);
-      const initial = safeBBox(wrapper);
+      
+      let initial = null;
+      try {
+        initial = wrapper.getBBox();
+      } catch (_) {
+        initial = safeBBox(wrapper);
+      }
+
       if (!initial || initial.width <= 0 || initial.height <= 0) return false;
       let scale = Math.min(1, availW / initial.width, availH / initial.height);
       if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+      
       if (scale < 0.9999) {
         const cx = initial.x + initial.width / 2;
         const cy = initial.y + initial.height / 2;
@@ -2987,7 +2995,16 @@
         const t0 = getTranslate(wrapper);
         setTranslate(wrapper, t0.x, t0.y);
       }
-      const fitted = safeBBox(wrapper) || initial;
+      
+      // Re-measure after scaling to center it correctly
+      let fitted = null;
+      try {
+        // Force a layout/reflow check if possible, or trust safeBBox which uses screenCTM
+        fitted = safeBBox(wrapper); 
+      } catch(_) {}
+      
+      if (!fitted) fitted = initial; // Fallback (might be off if scaled, but better than crash)
+
       const targetCx = dims.minX + dims.width / 2;
       const targetCy = dims.minY + dims.height / 2;
       const currentCx = fitted.x + fitted.width / 2;
