@@ -695,6 +695,61 @@
     const shortcutHelpTextEl = document.getElementById("shortcutHelpText");
     const processedPasteEvents = new WeakSet();
 
+    /* --- Image Pool (Memory Optimization) --- */
+    const imagePool = new Map(); // dataUrl -> id
+    const imagePoolRev = new Map(); // id -> dataUrl
+    let imagePoolCounter = 0;
+
+    function registerImage(dataUrl) {
+      if (!dataUrl || !dataUrl.startsWith("data:image/")) return dataUrl;
+      if (imagePool.has(dataUrl)) return imagePool.get(dataUrl);
+      const id = `pool-${++imagePoolCounter}`;
+      imagePool.set(dataUrl, id);
+      imagePoolRev.set(id, dataUrl);
+      return id;
+    }
+
+    function resolveImage(ref) {
+      if (!ref || !ref.startsWith("img-ref:")) return ref;
+      const id = ref.substring("img-ref:".length);
+      return imagePoolRev.get(id) || ref;
+    }
+
+    function processMarkupForRefs(markup) {
+      if (!markup.includes("data:image/")) return markup;
+      const div = document.createElement("div");
+      div.innerHTML = markup;
+      const images = div.querySelectorAll("image");
+      if (images.length === 0) return markup;
+      let changed = false;
+      images.forEach((img) => {
+        const href = img.getAttribute("href") || img.getAttribute("xlink:href");
+        if (href && href.startsWith("data:image/")) {
+          const id = registerImage(href);
+          img.setAttribute("href", `img-ref:${id}`);
+          if (img.hasAttribute("xlink:href")) img.removeAttribute("xlink:href");
+          changed = true;
+        }
+      });
+      return changed ? div.innerHTML : markup;
+    }
+
+    function restoreMarkupFromRefs(markup) {
+      if (!markup.includes("img-ref:")) return markup;
+      const div = document.createElement("div");
+      div.innerHTML = markup;
+      const images = div.querySelectorAll("image");
+      images.forEach((img) => {
+        const href = img.getAttribute("href");
+        if (href && href.startsWith("img-ref:")) {
+          const resolved = resolveImage(href);
+          if (resolved) img.setAttribute("href", resolved);
+        }
+      });
+      return div.innerHTML;
+    }
+    /* ---------------------------------------- */
+
     const state = {
       tool: "select",
       selectedIds: [],
@@ -2136,9 +2191,13 @@
       if (action === "maintenance.pasteReport.history.clear" || action === "window.pasteReport.history.clear") return clearPasteReportHistory();
     }
 
-    function getSnapshot(reason = "") {
+    function getSnapshot(reason = "", options = {}) {
       refreshAllGroupLabels();
-      return { markup: getCleanCanvasMarkup(), selectedIds: [...state.selectedIds], canvasMeta: getCanvasMeta(), at: Date.now(), reason };
+      let markup = getCleanCanvasMarkup();
+      if (options.useRefs) {
+        markup = processMarkupForRefs(markup);
+      }
+      return { markup, selectedIds: [...state.selectedIds], canvasMeta: getCanvasMeta(), at: Date.now(), reason };
     }
 
     function updateHistoryButtons() {
@@ -2149,7 +2208,7 @@
     }
 
     function pushHistory(reason, options = {}) {
-      const snap = getSnapshot(reason);
+      const snap = getSnapshot(reason, { useRefs: true });
       const last = state.history[state.history.length - 1];
       if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) {
         scheduleLiveAutosave(reason || "history-nochange");
@@ -2178,7 +2237,7 @@
     }
 
     function resetHistory(reason) {
-      const snap = getSnapshot(reason);
+      const snap = getSnapshot(reason, { useRefs: true });
       state.history = [snap];
       state.future = [];
       updateHistoryButtons();
@@ -2189,6 +2248,16 @@
       if (!snap) return;
       applyCanvasMeta(snap.canvasMeta);
       canvas.innerHTML = snap.markup;
+      if (snap.markup.includes("img-ref:")) {
+        const images = canvas.querySelectorAll("image");
+        images.forEach((img) => {
+          const href = img.getAttribute("href");
+          if (href && href.startsWith("img-ref:")) {
+            const resolved = resolveImage(href);
+            if (resolved) img.setAttribute("href", resolved);
+          }
+        });
+      }
       assignIds();
       setSelection(snap.selectedIds || []);
     }

@@ -143,3 +143,8 @@
 - [done][P1-Low] テキスト編集ショートカット（Enter/F2で編集開始）+ 編集中グローバルキー抑止
 - [done][P1-Low] ツール切替ショートカット（`V`=Black Arrow, `A`=White Arrow）
 - [done][P1-Low] 図形追加ショートカット（`R/L/E/T`）
+
+## P0 (Critical Fixes)
+- [ ] [P0-Crit] メモリリーク対策: Undo/Redo履歴の最適化 (innerHTML全保存の廃止、差分管理または参照管理へ移行)
+- [ ] [P0-Crit] クリップボード処理の堅牢化: pasteSink依存の廃止とClipboard APIへの完全移行
+- [ ] [P0-Crit] 単一ファイル分割の検討: 保守性向上のため、JS/CSSのモジュール化 (ES Modules) を検討
