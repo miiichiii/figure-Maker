@@ -600,7 +600,7 @@
       <svg id="canvas" viewBox="0 0 794 1123" xmlns="http://www.w3.org/2000/svg"></svg>
       <input id="textEditorInput" type="text" />
     </div>
-    <textarea id="pasteSink" aria-hidden="true"></textarea>
+    <textarea id="pasteSink" aria-hidden="true" inputmode="none"></textarea>
     <div id="status" class="status">
       <span id="statusMessage">Ready.</span>
       <span id="copyright">© 2026 Michito Hamada (Beta)</span>
@@ -4839,7 +4839,7 @@
 
       window.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
-        focusPasteSink();
+        if (e.pointerType !== "touch") focusPasteSink();
         if (!(e.target instanceof Node)) {
           closeContextMenu();
           closeMarkEditor();
@@ -4854,7 +4854,7 @@
       canvas.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
         if (state.pinch.active) return;
-        focusPasteSink();
+        if (e.pointerType !== "touch") focusPasteSink();
         closeContextMenu();
         closeFigureEditor();
         const handleEl = e.target instanceof SVGElement ? e.target.closest(".selection-handle") : null;
@@ -5200,7 +5200,7 @@
       document.addEventListener("paste", handlePaste);
       canvasWrapEl.addEventListener("paste", handlePaste);
       if (pasteSinkEl) pasteSinkEl.addEventListener("paste", handlePaste);
-      window.addEventListener("focus", focusPasteSink);
+      // window.addEventListener("focus", focusPasteSink);
       window.addEventListener("resize", renderStatus);
       window.addEventListener("beforeunload", () => {
         writeLiveAutosave("beforeunload");
@@ -5216,7 +5216,7 @@
       assignIds();
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();
-      focusPasteSink();
+      // focusPasteSink();
       updateToolCursor();
       try {
         const lastErr = JSON.parse(localStorage.getItem(LAST_ERROR_KEY) || "null");
