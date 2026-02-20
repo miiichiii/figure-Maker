@@ -159,13 +159,22 @@
       user-select: none;
       touch-action: none;
     }
-    .status {
+    #status.status {
       padding: 6px 10px;
       font-size: 12px;
       color: var(--muted);
       border-top: 1px solid var(--line);
       background: var(--panel);
       min-height: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #copyright {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-left: auto;
+      padding-left: 8px;
     }
     .fm-selected {
       stroke: var(--accent) !important;
@@ -592,7 +601,10 @@
       <input id="textEditorInput" type="text" />
     </div>
     <textarea id="pasteSink" aria-hidden="true"></textarea>
-    <div id="status" class="status">Ready.</div>
+    <div id="status" class="status">
+      <span id="statusMessage">Ready.</span>
+      <span id="copyright">© 2026 Michito Hamada (Beta)</span>
+    </div>
   </div>
 
   <div id="ctxMenu" class="context-menu">
@@ -934,10 +946,14 @@
       const autosave = autosaveSel ? autosaveSel.value : "off";
       const alignBase = state.alignBasis === "first" ? "first" : "bbox";
       const zoomPct = Math.round(state.viewScale * 100);
-      if (compact) {
-        statusEl.textContent = `${state.statusMessage} | ${toolName} | sel:${selectedCount} | z:${zoomPct}% | h:${histPos}/${histTotal}`;
-      } else {
-        statusEl.textContent = `${state.statusMessage} | tool:${toolName} | sel:${selectedCount} | zoom:${zoomPct}% | hist:${histPos}/${histTotal} | autosave:${autosave} | align:${alignBase}`;
+      
+      const statusMsgEl = document.getElementById("statusMessage");
+      if (statusMsgEl) {
+        if (compact) {
+          statusMsgEl.textContent = `${state.statusMessage} | ${toolName} | sel:${selectedCount} | z:${zoomPct}% | h:${histPos}/${histTotal}`;
+        } else {
+          statusMsgEl.textContent = `${state.statusMessage} | tool:${toolName} | sel:${selectedCount} | zoom:${zoomPct}% | hist:${histPos}/${histTotal} | autosave:${autosave} | align:${alignBase}`;
+        }
       }
     }
 
