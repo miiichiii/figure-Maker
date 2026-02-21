@@ -469,6 +469,29 @@
       background: var(--card);
       color: var(--ink);
     }
+    #uiTooltip {
+      position: fixed;
+      left: 0;
+      top: 0;
+      transform: translate(-9999px, -9999px);
+      z-index: 9999;
+      pointer-events: none;
+      max-width: min(420px, 86vw);
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #fffdf8;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
+      box-shadow: 0 6px 16px rgba(43, 42, 39, 0.2);
+      opacity: 0;
+      transition: opacity 0.08s ease;
+      white-space: normal;
+    }
+    #uiTooltip.show {
+      opacity: 1;
+    }
   </style>
 </head>
   <body>
@@ -3362,6 +3385,7 @@
       Object.entries(explicit).forEach(([id, text]) => {
         const el = document.getElementById(id);
         if (!(el instanceof HTMLButtonElement)) return;
+        el.dataset.tooltip = text;
         el.setAttribute("title", text);
         if (!el.getAttribute("aria-label")) el.setAttribute("aria-label", text);
       });
@@ -3372,8 +3396,97 @@
         if (cur) return;
         const aria = String(btn.getAttribute("aria-label") || "").trim();
         const label = aria || String(btn.textContent || "").replace(/\s+/g, " ").trim();
-        if (label) btn.setAttribute("title", label);
+        if (label) {
+          btn.dataset.tooltip = label;
+          btn.setAttribute("title", label);
+        }
       });
+
+      document.querySelectorAll("button[title]").forEach((btn) => {
+        if (!(btn instanceof HTMLButtonElement)) return;
+        const t = String(btn.getAttribute("title") || "").trim();
+        if (t && !btn.dataset.tooltip) btn.dataset.tooltip = t;
+      });
+    }
+
+    function setupHoverTooltips() {
+      const tooltip = document.createElement("div");
+      tooltip.id = "uiTooltip";
+      tooltip.setAttribute("role", "tooltip");
+      document.body.appendChild(tooltip);
+
+      let activeBtn = null;
+
+      const hideTooltip = () => {
+        tooltip.classList.remove("show");
+        tooltip.style.transform = "translate(-9999px, -9999px)";
+        activeBtn = null;
+      };
+
+      const placeTooltip = (x, y) => {
+        const ox = 12;
+        const oy = 14;
+        tooltip.style.transform = "translate(-9999px, -9999px)";
+        tooltip.classList.add("show");
+        const rect = tooltip.getBoundingClientRect();
+        const maxX = Math.max(8, window.innerWidth - rect.width - 8);
+        const maxY = Math.max(8, window.innerHeight - rect.height - 8);
+        const nx = Math.max(8, Math.min(maxX, Number(x || 0) + ox));
+        const ny = Math.max(8, Math.min(maxY, Number(y || 0) + oy));
+        tooltip.style.transform = `translate(${Math.round(nx)}px, ${Math.round(ny)}px)`;
+      };
+
+      const showTooltip = (btn, x, y) => {
+        if (!(btn instanceof HTMLButtonElement) || btn.hidden) {
+          hideTooltip();
+          return;
+        }
+        const text = String(btn.dataset.tooltip || btn.getAttribute("title") || btn.getAttribute("aria-label") || "").trim();
+        if (!text) {
+          hideTooltip();
+          return;
+        }
+        if (btn.hasAttribute("title")) btn.removeAttribute("title");
+        tooltip.textContent = text;
+        activeBtn = btn;
+        placeTooltip(x, y);
+      };
+
+      document.addEventListener("pointerover", (e) => {
+        const btn = e.target instanceof Element ? e.target.closest("button") : null;
+        if (!(btn instanceof HTMLButtonElement)) {
+          hideTooltip();
+          return;
+        }
+        showTooltip(btn, e.clientX, e.clientY);
+      });
+
+      document.addEventListener("pointermove", (e) => {
+        if (!activeBtn) return;
+        placeTooltip(e.clientX, e.clientY);
+      });
+
+      document.addEventListener("pointerout", (e) => {
+        if (!activeBtn) return;
+        const to = e.relatedTarget instanceof Element ? e.relatedTarget.closest("button") : null;
+        if (to === activeBtn) return;
+        hideTooltip();
+      });
+
+      document.addEventListener("focusin", (e) => {
+        const btn = e.target instanceof Element ? e.target.closest("button") : null;
+        if (!(btn instanceof HTMLButtonElement)) return;
+        const r = btn.getBoundingClientRect();
+        showTooltip(btn, r.right, r.top);
+      });
+
+      document.addEventListener("focusout", () => {
+        hideTooltip();
+      });
+
+      window.addEventListener("blur", hideTooltip);
+      document.addEventListener("pointerdown", hideTooltip, true);
+      document.addEventListener("scroll", hideTooltip, true);
     }
 
     function openAppMenu(name) {
@@ -7985,6 +8098,7 @@
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();
       setupButtonTooltips();
+      setupHoverTooltips();
       setupToolbarTabs();
       // focusPasteSink();
       syncToolButtons();
