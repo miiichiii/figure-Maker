@@ -637,7 +637,6 @@
           <option value="10">10 min</option>
           <option value="30">30 min</option>
         </select>
-        <button id="restoreLatest">Restore latest</button>
         <button id="toggleAdvanced">More</button>
         <select id="restoreList"></select>
         <button id="restoreFromList">Restore selected</button>
@@ -5079,7 +5078,7 @@
       assignIds();
       ensureFigureTitle();
       clearSelection();
-      resetHistory("open-svg");
+      pushHistory("open-svg");
       state.fileHandle = options.fileHandle || null;
       setStatus("SVG opened.");
       return true;
@@ -5411,7 +5410,17 @@
 
     async function refreshRestoreList() {
       const records = await getAutosaveRecords();
+      const live = await getLiveAutosaveRecord();
       restoreListEl.innerHTML = "";
+      
+      if (live) {
+        const option = document.createElement("option");
+        option.value = "live_latest";
+        const time = new Date(live.at).toLocaleTimeString();
+        option.textContent = `(Live) Latest - ${time}`;
+        restoreListEl.appendChild(option);
+      }
+
       records.slice().reverse().forEach((r) => {
         const option = document.createElement("option");
         option.value = r.id;
@@ -5436,7 +5445,7 @@
         assignIds();
         ensureFigureTitle();
         setSelection(r.selectedIds || []);
-        resetHistory("restore-latest");
+        pushHistory("restore-latest");
         const source = r.id && String(r.id).startsWith("live-") ? "live" : "timed";
         const stamp = r.at ? new Date(r.at).toLocaleString() : "";
         setStatus(`Latest autosave restored (${source}${stamp ? `: ${stamp}` : ""}).`);
@@ -5449,9 +5458,15 @@
     async function restoreFromList() {
       cancelImageCropMode({ silent: true });
       try {
-        const records = await getAutosaveRecords();
         const id = restoreListEl.value;
-        const r = records.find((x) => x.id === id);
+        let r = null;
+        if (id === "live_latest") {
+          r = await getLiveAutosaveRecord();
+        } else {
+          const records = await getAutosaveRecords();
+          r = records.find((x) => x.id === id);
+        }
+        
         if (!r) {
           setStatus("Selected autosave not found.");
           return;
@@ -5461,7 +5476,7 @@
         assignIds();
         ensureFigureTitle();
         setSelection(r.selectedIds || []);
-        resetHistory("restore-from-list");
+        pushHistory("restore-from-list");
         setStatus("Autosave restored.");
       } catch (err) {
         captureError("autosave-restore-selected", err, { userMessage: "Restore selected failed." });
@@ -5560,6 +5575,7 @@
         offsetX: nudge.x + Number(options.offsetX || 0),
         offsetY: nudge.y + Number(options.offsetY || 0)
       });
+      if (options.skipHistory !== true && id) pushHistory("import-image");
       return id;
     }
 
@@ -6119,7 +6135,7 @@
       const nudge = getPasteNudgeOffset();
       const id = insertImageElement(displaySrc, provisionalW, provisionalH, 0, { select: false, offsetX: nudge.x, offsetY: nudge.y });
       if (id) setSelection([id]);
-      pushHistory(historyReason);
+      // pushHistory(historyReason);
       setLastPasteReport(route, types, `${mime}:pending${noteTail}`);
       setStatus(`${statusPrefix}. Resolving size...`);
 
@@ -6155,6 +6171,7 @@
         const hint = getPasteQualityHint(size.width, size.height);
         setLastPasteReport(route, types, `${mime}:${size.width}x${size.height}${hint ? ` | ${hint}` : ""}${noteTail}`);
         setStatus(`${statusPrefix} ${size.width}x${size.height}. ${hint || ""}`);
+        pushHistory(historyReason);
       }).catch(() => {
         setStatus(statusPrefix);
       });
@@ -8028,7 +8045,7 @@
         const ids = [];
         for (const file of files.slice(0, 20)) {
           try {
-            const id = await importImageFile(file, { select: false });
+            const id = await importImageFile(file, { select: false, skipHistory: true });
             if (id) ids.push(id);
           } catch (err) {
             captureError("drop-image-import", err, { userMessage: "Dropped image import failed." });
@@ -8044,7 +8061,7 @@
       });
 
       document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
-      document.getElementById("restoreLatest").addEventListener("click", () => { void restoreLatest(); });
+      // document.getElementById("restoreLatest").addEventListener("click", () => { void restoreLatest(); });
       document.getElementById("toggleAdvanced").addEventListener("click", () => {
         if (!document.body.classList.contains("compact")) return;
         document.body.classList.toggle("show-advanced");
