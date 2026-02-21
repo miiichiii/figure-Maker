@@ -3665,9 +3665,10 @@
     }
 
     function pushHistory(reason, options = {}) {
+      const skipAutosave = options.skipAutosave === true;
       const snap = getSnapshot(reason, { useRefs: true });
       if (Number(snap.sizeBytes || 0) > MAX_HISTORY_SNAPSHOT_BYTES) {
-        scheduleLiveAutosave(reason || "history-too-large");
+        if (!skipAutosave) scheduleLiveAutosave(reason || "history-too-large");
         if (!state.historySizeWarned) {
           state.historySizeWarned = true;
           setStatus("History snapshot skipped: canvas is too large. Use Save SVG.");
@@ -3677,7 +3678,7 @@
       state.historySizeWarned = false;
       const last = state.history[state.history.length - 1];
       if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) {
-        scheduleLiveAutosave(reason || "history-nochange");
+        if (!skipAutosave) scheduleLiveAutosave(reason || "history-nochange");
         return;
       }
       const sameSelection = last && JSON.stringify(last.selectedIds || []) === JSON.stringify(snap.selectedIds || []);
@@ -3689,7 +3690,7 @@
           state.history[state.history.length - 1] = snap;
           state.future = [];
           updateHistoryButtons();
-          scheduleLiveAutosave(reason || "history-coalesce");
+          if (!skipAutosave) scheduleLiveAutosave(reason || "history-coalesce");
           setStatus(`Saved state (${reason}).`);
           return;
         }
@@ -3704,17 +3705,18 @@
       garbageCollectImagePool();
       state.future = [];
       updateHistoryButtons();
-      scheduleLiveAutosave(reason || "history");
+      if (!skipAutosave) scheduleLiveAutosave(reason || "history");
       setStatus(`Saved state (${reason}).`);
     }
 
-    function resetHistory(reason) {
+    function resetHistory(reason, options = {}) {
+      const skipAutosave = options.skipAutosave === true;
       const snap = getSnapshot(reason, { useRefs: true });
       state.history = [snap];
       state.future = [];
       garbageCollectImagePool();
       updateHistoryButtons();
-      scheduleLiveAutosave(reason || "reset-history");
+      if (!skipAutosave) scheduleLiveAutosave(reason || "reset-history");
     }
 
     function restoreSnapshot(snap) {
@@ -8696,7 +8698,7 @@
       await refreshRestoreList();
       updateAutosaveTimer();
       ensureFigureTitle();
-      pushHistory("init");
+      pushHistory("init", { skipAutosave: true });
       setStatus("Figure Maker ready.");
     }
 
