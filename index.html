@@ -1895,22 +1895,62 @@
     function renderSelectionOutlines() {
       canvas.querySelectorAll(".selection-outline,.selection-handle").forEach((el) => el.remove());
       const elements = getTopSelectedElements();
+      if (!elements.length) return;
+
       const displayScale = getCanvasDisplayScale();
       const outlineStroke = Math.max(0.7, 1.5 / Math.max(displayScale, 1e-6));
-      elements.forEach((el) => {
-        if (el.tagName === "line") return;
-        const b = getSelectionRenderBox(el) || safeBBox(el);
-        if (!b || b.width <= 0 || b.height <= 0) return;
-        const rect = document.createElementNS(SVG_NS, "rect");
-        rect.setAttribute("class", "selection-outline");
-        rect.setAttribute("stroke-width", String(outlineStroke));
-        rect.setAttribute("x", String(b.x));
-        rect.setAttribute("y", String(b.y));
-        rect.setAttribute("width", String(b.width));
-        rect.setAttribute("height", String(b.height));
-        canvas.appendChild(rect);
-      });
-      renderResizeHandles(elements, displayScale);
+
+      // Handle interaction override
+      if (state.interaction && state.interaction.type === "resize" && state.interaction.isMulti) {
+         const b = state.interaction.liveBox;
+         if (b) {
+            const rect = document.createElementNS(SVG_NS, "rect");
+            rect.setAttribute("class", "selection-outline");
+            rect.setAttribute("stroke-width", String(outlineStroke));
+            rect.setAttribute("x", String(b.x));
+            rect.setAttribute("y", String(b.y));
+            rect.setAttribute("width", String(b.width));
+            rect.setAttribute("height", String(b.height));
+            canvas.appendChild(rect);
+            renderResizeHandles(elements, displayScale, b);
+            return;
+         }
+      }
+
+      if (elements.length === 1) {
+        elements.forEach((el) => {
+          if (el.tagName === "line") return;
+          const b = getSelectionRenderBox(el) || safeBBox(el);
+          if (!b || b.width <= 0 || b.height <= 0) return;
+          const rect = document.createElementNS(SVG_NS, "rect");
+          rect.setAttribute("class", "selection-outline");
+          rect.setAttribute("stroke-width", String(outlineStroke));
+          rect.setAttribute("x", String(b.x));
+          rect.setAttribute("y", String(b.y));
+          rect.setAttribute("width", String(b.width));
+          rect.setAttribute("height", String(b.height));
+          canvas.appendChild(rect);
+        });
+        renderResizeHandles(elements, displayScale);
+      } else {
+        // Multi-selection
+        const boxes = elements.map((el) => getSelectionRenderBox(el) || safeBBox(el)).filter(Boolean);
+        const combined = combineBoxes(boxes);
+        if (combined) {
+          // Draw individual faint outlines? Optional.
+          // Draw combined box
+          const rect = document.createElementNS(SVG_NS, "rect");
+          rect.setAttribute("class", "selection-outline");
+          rect.setAttribute("stroke-width", String(outlineStroke));
+          rect.setAttribute("x", String(combined.x));
+          rect.setAttribute("y", String(combined.y));
+          rect.setAttribute("width", String(combined.width));
+          rect.setAttribute("height", String(combined.height));
+          canvas.appendChild(rect);
+          
+          renderResizeHandles(elements, displayScale, combined);
+        }
+      }
     }
 
     function clearSmartGuides() {
