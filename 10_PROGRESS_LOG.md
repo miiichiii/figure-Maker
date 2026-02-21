@@ -1154,3 +1154,15 @@
 - Changes: ツールバーから`Copy/Cut/Paste`ボタンを削除。`Undo/Redo`をSVGアイコンボタンへ変更。イベント登録は`bindClick`でnull安全化。`arrowStrokeInput`の`input/change`処理を`applyStrokeControlToSelectedLines`に統一し、選択中Line/Arrowへリアルタイム反映（複数line選択も対応）。検証: `toolbar-stroke-smoke: PASS`。
 - Open issues: なし。
 - Next action: 実機で操作体感（Undo/Redoの視認性、stroke入力追従）を確認。
+
+### Step 144 - Builder + Reviewer regression fix (resize stroke/mark lock)
+- Date: 2026-02-20
+- Owner: Builder, Reviewer
+- Decisions: 非等方リサイズ時の線幅崩れとMark変形を「仕様固定の回帰チェック対象」に昇格する。
+- Changes:
+  - `applyPointerEventPolicy`でRect/Ellipse/Circle/Path/Polygonにも`vector-effect: non-scaling-stroke`を適用。
+  - Markラベルに`data-mark-base-size`を導入し、リサイズ中/再配置時に`font-size`を固定再適用。
+  - Markラベルをリサイズ対象から除外（誤操作での形状崩れ防止）。
+  - `00_SUPERVISOR_BRIEF.md` / `01_SPEC.md` / `02_BUILD_PLAN.md` / `03_REVIEW_CHECKLIST.md` / `30_TODO.md`に再発防止ルールを追記。
+- Open issues: 実ブラウザで「全ハンドル非等方リサイズ時の線幅不変」「Mark非変形」の最終確認が必要。
+- Next action: transform系変更時はレビューで必ず回帰3点（線幅・Mark・Paste/Undo）を検証する。

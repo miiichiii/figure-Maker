@@ -13,9 +13,12 @@
 - 整列基準: 「選択集合の外接BBox」を基準に左/中央/右・上/中/下。
 - Group/Ungroup: 複数選択を `<g>` で包む / `<g>` を解除。
 - Duplicate: 選択要素をオフセット複製（ボタンと `Ctrl/Cmd + D`）。
+- リサイズ時の線幅: Rect/Ellipse/Circle/Path/Polygon/Line/Polyline は `vector-effect: non-scaling-stroke` を維持し、拡大縮小しても線幅を変えない。
 - Clipboard: 内部Copy/Cut/Paste（`Ctrl/Cmd + C/X`、内部Pasteは`Ctrl/Cmd + Shift + V`）。
   - 内部Pasteは可能なら元の親階層（`<g>`）へ復元し、存在しない場合はルートへ配置。
 - ラベル: グループ右クリックで A/B/C を付与。`<text class="group-label">` を子として保持。
+  - Markラベルは `data-mark-base-size` を保持し、グループの拡大縮小時も文字サイズ・形状を変えない。
+  - Markラベル自体はリサイズハンドル対象にしない（誤変形防止）。
 - Undo/Redo: SVGシリアライズ + 選択IDスナップショット方式。最大100手。
 - 履歴セッション境界: `New / Open / Restore` 実行時は履歴を新規セッションにリセット。
 - 自動保存: `localStorage` に Off/10/30分。復元は latest と履歴一覧。
@@ -64,6 +67,8 @@
 - 例外操作（未選択でAlign/Group等）でクラッシュしない。
 - Undo/Redoで主要操作（追加/移動/整列/グループ化/貼り付け/読み込み）が戻せる。
 - 自動保存から復元できる。
+- オブジェクトを非等方リサイズしても、同じ線種の線幅が縦横で不一致にならない。
+- グループを拡大/縮小しても Mark（A/B/C）のフォントサイズと字形が変化しない。
 
 ## Known limitations
 - P1残項目: PDFはフォールバックで出力安定性を上げたが、ベクター保持を常に保証しない。

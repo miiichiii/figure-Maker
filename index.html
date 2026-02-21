@@ -82,8 +82,26 @@
       background: var(--panel);
       align-items: center;
     }
+    .toolbar-tabs {
+      width: 100%;
+      display: flex;
+      gap: 6px;
+      margin-bottom: 2px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .toolbar-tab-btn {
+      min-width: 72px;
+      font-weight: 700;
+    }
+    .toolbar-tab-btn.active {
+      background: #111827;
+      color: #fff;
+      border-color: #111827;
+    }
     .group { display: flex; gap: 6px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
     .group:last-child { border-right: none; }
+    .group[hidden] { display: none !important; }
     button, select {
       border: 1px solid var(--line);
       background: #fff;
@@ -150,7 +168,21 @@
       white-space: nowrap;
       border: 0;
     }
-    .canvas-wrap { padding: 10px; overflow: auto; position: relative; }
+    .toolbar input[type="number"] {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 12px;
+    }
+    .zoom-group { gap: 4px; }
+    #zoomSlider { width: 120px; }
+    #zoomPercentInput { width: 62px; text-align: right; }
+    .canvas-wrap { padding: 10px; overflow: auto; position: relative; transition: background-color 0.12s ease, box-shadow 0.12s ease; }
+    .canvas-wrap.drag-over { background: #f0f7ff; box-shadow: inset 0 0 0 2px #60a5fa; }
+    .canvas-wrap.hand-mode { cursor: grab; }
+    .canvas-wrap.is-panning { cursor: grabbing; }
     #canvas {
       width: 794px;
       height: 1123px;
@@ -213,6 +245,22 @@
       stroke-width: 1.2;
       stroke-dasharray: 5 3;
       opacity: 0.95;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+    .crop-boundary {
+      fill: rgba(16, 185, 129, 0.08);
+      stroke: #10b981;
+      stroke-width: 1.2;
+      stroke-dasharray: 6 4;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+    .crop-draft {
+      fill: rgba(16, 185, 129, 0.2);
+      stroke: #047857;
+      stroke-width: 1.4;
+      stroke-dasharray: 5 3;
       pointer-events: none;
       vector-effect: non-scaling-stroke;
     }
@@ -462,7 +510,12 @@
       </div>
     </div>
     <div class="toolbar">
-      <div class="group">
+      <div class="toolbar-tabs" id="toolbarTabBar">
+        <button class="toolbar-tab-btn active" data-toolbar-tab-btn="tool">Tool</button>
+        <button class="toolbar-tab-btn" data-toolbar-tab-btn="object">Object</button>
+        <button class="toolbar-tab-btn" data-toolbar-tab-btn="text">Text</button>
+      </div>
+      <div class="group" data-toolbar-tab="tool">
         <button id="toolSelect" class="active tool-icon-btn" title="Black Arrow (V)" aria-label="Black Arrow (V)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
@@ -474,6 +527,12 @@
             <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ffffff" stroke="#111827" stroke-width="1.3"></path>
           </svg>
           <span class="sr-only">White Arrow</span>
+        </button>
+        <button id="toolHand" class="tool-icon-btn" title="Hand tool (H / hold Space)" aria-label="Hand tool (H / hold Space)">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M7 18 C5.5 18 4.4 16.9 4.3 15.4 L3.8 10.3 C3.7 9.4 4.4 8.6 5.3 8.6 C6.1 8.6 6.8 9.2 6.9 10 L7.2 12.5 V4.7 C7.2 3.8 7.9 3.1 8.8 3.1 C9.7 3.1 10.4 3.8 10.4 4.7 V10.4 H10.8 V3.9 C10.8 3 11.5 2.3 12.4 2.3 C13.3 2.3 14 3 14 3.9 V10.4 H14.4 V5 C14.4 4.1 15.1 3.4 16 3.4 C16.9 3.4 17.6 4.1 17.6 5 V12.2 C17.6 15.4 14.9 18 11.7 18 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <span class="sr-only">Hand</span>
         </button>
         <button id="undoBtn" class="tool-icon-btn" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo (Ctrl/Cmd+Z)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -491,7 +550,43 @@
         </button>
         <button id="shortcutsBtn">Shortcuts</button>
       </div>
-      <div class="group">
+      <div class="group zoom-group" data-toolbar-tab="tool">
+        <label for="zoomSlider">Zoom</label>
+        <button id="zoomOutBtn" title="Zoom out">-</button>
+        <input id="zoomSlider" type="range" min="5" max="12800" step="1" value="100" />
+        <input id="zoomPercentInput" type="number" min="5" max="12800" step="1" value="100" />
+        <span>%</span>
+        <button id="zoomInBtn" title="Zoom in">+</button>
+        <button id="zoomResetBtn" title="Reset zoom">Reset</button>
+        <button id="cropImageBtn" title="Crop selected image">Crop</button>
+        <button id="cropApplyBtn" title="Apply crop" hidden>Apply Crop</button>
+        <button id="cropCancelBtn" title="Cancel crop" hidden>Cancel Crop</button>
+      </div>
+      <div class="group" data-toolbar-tab="tool">
+        <button id="newCanvas">New</button>
+        <button id="openSvg">Open SVG</button>
+        <button id="importSvgBtn">Import SVG</button>
+        <button id="saveSvg">Save SVG</button>
+        <button id="exportPdf">Export PDF</button>
+      </div>
+      <div class="group" data-toolbar-tab="tool">
+        <button id="groupBtn">Group</button>
+        <button id="ungroupBtn">Ungroup</button>
+        <button id="duplicateBtn">Duplicate</button>
+      </div>
+      <div class="group" data-toolbar-tab="tool">
+        <label for="autosaveSelect">Autosave</label>
+        <select id="autosaveSelect">
+          <option value="off">Off</option>
+          <option value="10">10 min</option>
+          <option value="30">30 min</option>
+        </select>
+        <button id="restoreLatest">Restore latest</button>
+        <button id="toggleAdvanced">More</button>
+        <select id="restoreList"></select>
+        <button id="restoreFromList">Restore selected</button>
+      </div>
+      <div class="group" data-toolbar-tab="object">
         <button id="addRect" class="shape-icon-btn" title="Rect (R)" aria-label="Rect (R)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <rect x="3" y="4" width="14" height="12" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
@@ -517,20 +612,18 @@
           </svg>
           <span class="sr-only">Arrow</span>
         </button>
-        <label for="arrowSizeInput">Arrow head</label>
-        <input id="arrowSizeInput" type="number" min="4" max="40" step="1" value="10" style="width:64px" />
+        <label for="arrowSizeInput">Arrow len</label>
+        <input id="arrowSizeInput" type="number" min="20" max="2000" step="1" value="190" style="width:64px" />
         <label for="arrowStrokeInput">Line/Arrow stroke</label>
         <input id="arrowStrokeInput" type="number" min="1" max="20" step="1" value="3" style="width:64px" />
-        <label for="markFontSizeInput">Mark size</label>
-        <input id="markFontSizeInput" type="number" min="6" max="120" step="1" value="16" style="width:64px" />
-        <button id="addText">Text</button>
+        <label for="objectFillColorInput">Fill</label>
+        <input id="objectFillColorInput" type="color" value="#dbeafe" />
+        <label for="objectStrokeColorInput">Stroke</label>
+        <input id="objectStrokeColorInput" type="color" value="#1e3a8a" />
+        <label for="objectStrokeToggle">Stroke on</label>
+        <input id="objectStrokeToggle" type="checkbox" checked />
       </div>
-      <div class="group">
-        <button id="groupBtn">Group</button>
-        <button id="ungroupBtn">Ungroup</button>
-        <button id="duplicateBtn">Duplicate</button>
-      </div>
-      <div class="group">
+      <div class="group" data-toolbar-tab="object">
         <label for="alignBasisSelect">Align base</label>
         <select id="alignBasisSelect">
           <option value="bbox">Selection Box</option>
@@ -581,17 +674,18 @@
           </svg>
         </button>
       </div>
-      <div class="group">
-        <label for="autosaveSelect">Autosave</label>
-        <select id="autosaveSelect">
-          <option value="off">Off</option>
-          <option value="10">10 min</option>
-          <option value="30">30 min</option>
-        </select>
-        <button id="restoreLatest">Restore latest</button>
-        <button id="toggleAdvanced">More</button>
-        <select id="restoreList"></select>
-        <button id="restoreFromList">Restore selected</button>
+      <div class="group" data-toolbar-tab="text">
+        <button id="addText">Text</button>
+        <button id="textBoldBtn" title="Bold"><strong>B</strong></button>
+        <button id="textItalicBtn" title="Italic"><em>I</em></button>
+        <button id="textSuperBtn" title="Superscript">X<sup>2</sup></button>
+        <button id="textSubBtn" title="Subscript">X<sub>2</sub></button>
+        <label for="textFontSizeInput">Text size</label>
+        <input id="textFontSizeInput" type="number" min="6" max="240" step="1" value="28" style="width:64px" />
+        <label for="textColorInput">Color</label>
+        <input id="textColorInput" type="color" value="#111827" />
+        <label for="markFontSizeInput">Mark size</label>
+        <input id="markFontSizeInput" type="number" min="6" max="120" step="1" value="16" style="width:64px" />
       </div>
     </div>
     <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
@@ -678,10 +772,12 @@
     const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
     const LAST_ERROR_KEY = "figureMaker_last_error";
     const LIVE_AUTOSAVE_KEY = "figureMaker_live_snapshot";
+    const AUTOSAVE_MAX_RECORDS = 20;
     const DEFAULT_VIEWBOX = "0 0 794 1123";
+    const FIGURE_TITLE_DEFAULT_FONT_SIZE = 16;
     const MIN_RESIZE_SIZE = 6;
-    const MIN_VIEW_SCALE = 0.25;
-    const MAX_VIEW_SCALE = 8;
+    const MIN_VIEW_SCALE = 0.05;
+    const MAX_VIEW_SCALE = 128;
     const PASTE_LOCK_TIMEOUT_MS = 900;
     const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
     const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
@@ -760,6 +856,67 @@
       });
       return div.innerHTML;
     }
+
+    function hydrateImageRefs(imageRefs) {
+      if (!imageRefs || typeof imageRefs !== "object") return;
+      Object.entries(imageRefs).forEach(([id, dataUrl]) => {
+        if (!id || typeof id !== "string") return;
+        if (!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) return;
+        imagePoolRev.set(id, dataUrl);
+        if (!imagePool.has(dataUrl)) imagePool.set(dataUrl, id);
+        const m = /^pool-(\d+)$/.exec(id);
+        if (m) {
+          const n = Number(m[1]);
+          if (Number.isFinite(n) && n > imagePoolCounter) imagePoolCounter = n;
+        }
+      });
+    }
+
+    function collectImageRefsForMarkup(markup) {
+      if (!markup || !markup.includes("img-ref:")) return null;
+      const ids = new Set();
+      const regex = /img-ref:([A-Za-z0-9_-]+)/g;
+      let m = regex.exec(markup);
+      while (m) {
+        ids.add(m[1]);
+        m = regex.exec(markup);
+      }
+      if (!ids.size) return null;
+      const refs = {};
+      ids.forEach((id) => {
+        const dataUrl = imagePoolRev.get(id);
+        if (typeof dataUrl === "string" && dataUrl.startsWith("data:image/")) refs[id] = dataUrl;
+      });
+      return Object.keys(refs).length ? refs : null;
+    }
+
+    function applySnapshotMarkup(markup, imageRefs = null) {
+      hydrateImageRefs(imageRefs);
+      const resolved = restoreMarkupFromRefs(String(markup || ""));
+      canvas.innerHTML = resolved;
+    }
+
+    function isQuotaExceededError(err) {
+      if (!err) return false;
+      if (err.name === "QuotaExceededError") return true;
+      if (err.code === 22 || err.code === 1014) return true;
+      const msg = String(err.message || "");
+      return msg.includes("exceeded the quota") || msg.includes("QuotaExceededError");
+    }
+
+    function makeAutosaveRecord(prefix, reason) {
+      const snap = getSnapshot(`${prefix}:${reason}`, { useRefs: true });
+      const rec = {
+        id: `${prefix}-${Date.now()}`,
+        at: Number(snap.at || Date.now()),
+        markup: snap.markup,
+        selectedIds: Array.isArray(snap.selectedIds) ? [...snap.selectedIds] : [],
+        canvasMeta: snap.canvasMeta
+      };
+      const refs = collectImageRefsForMarkup(snap.markup);
+      if (refs) rec.imageRefs = refs;
+      return rec;
+    }
     /* ---------------------------------------- */
 
     const state = {
@@ -793,6 +950,13 @@
       markLabelComp: {},
       viewScale: 1,
       pinch: { active: false, startScale: 1, startDistance: 0 },
+      spacePanActive: false,
+      toolbarTab: "tool",
+      cropMode: null,
+      autosaveQuotaWarned: false,
+      liveAutosaveQuotaWarned: false,
+      pasteNudgeCounter: 0,
+      suppressContextMenuOnce: false,
       statusMessage: "Ready."
     };
 
@@ -938,7 +1102,10 @@
         advancedBtn.textContent = expanded ? "Less" : "More";
         advancedBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
       }
-      const toolName = state.tool === "direct" ? "White Arrow" : "Black Arrow";
+      const effectiveTool = getEffectiveTool();
+      const toolName = effectiveTool === "direct"
+        ? "White Arrow"
+        : (effectiveTool === "hand" ? "Hand" : "Black Arrow");
       const selectedCount = state.selectedIds.length;
       const histPos = Math.max(1, state.history.length - state.future.length);
       const histTotal = Math.max(1, state.history.length);
@@ -1012,16 +1179,22 @@
         el.removeAttribute("pointer-events");
         el.style.removeProperty("pointer-events");
       } catch (_) {}
+      const enableNonScalingStroke = () => {
+        el.setAttribute("vector-effect", "non-scaling-stroke");
+        el.style.setProperty("vector-effect", "non-scaling-stroke", "important");
+      };
       if (el.tagName === "line" || el.tagName === "polyline") {
         el.setAttribute("pointer-events", "stroke");
         el.style.setProperty("pointer-events", "stroke", "important");
-        el.setAttribute("vector-effect", "non-scaling-stroke");
-        el.style.setProperty("vector-effect", "non-scaling-stroke", "important");
+        enableNonScalingStroke();
         return;
       }
       if (el.tagName === "path" || el.tagName === "text" || el.tagName === "tspan" || el.tagName === "rect" || el.tagName === "ellipse" || el.tagName === "circle" || el.tagName === "polygon") {
         el.setAttribute("pointer-events", "visiblePainted");
         el.style.setProperty("pointer-events", "visiblePainted", "important");
+        if (el.tagName === "path" || el.tagName === "rect" || el.tagName === "ellipse" || el.tagName === "circle" || el.tagName === "polygon") {
+          enableNonScalingStroke();
+        }
         return;
       }
       if (el.tagName === "g") {
@@ -1244,7 +1417,9 @@
     }
 
     function isResizableElement(el) {
-      return !!el && ["rect", "ellipse", "circle", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
+      if (!el) return false;
+      if (isGroupLabel(el)) return false;
+      return ["rect", "ellipse", "circle", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
     }
 
     function renderResizeHandles(elements, precomputedScale = null) {
@@ -1256,6 +1431,7 @@
       const displayScale = precomputedScale || getCanvasDisplayScale();
       const size = 10 / Math.max(displayScale, 1e-6);
       const stroke = Math.max(0.7, 1.5 / Math.max(displayScale, 1e-6));
+      const r = size / 2;
       const corners = [
         { name: "nw", x: b.x, y: b.y },
         { name: "ne", x: b.x + b.width, y: b.y },
@@ -1263,12 +1439,11 @@
         { name: "se", x: b.x + b.width, y: b.y + b.height }
       ];
       corners.forEach((c) => {
-        const h = document.createElementNS(SVG_NS, "rect");
+        const h = document.createElementNS(SVG_NS, "circle");
         h.setAttribute("class", "selection-handle");
-        h.setAttribute("x", String(c.x - size / 2));
-        h.setAttribute("y", String(c.y - size / 2));
-        h.setAttribute("width", String(size));
-        h.setAttribute("height", String(size));
+        h.setAttribute("cx", String(c.x));
+        h.setAttribute("cy", String(c.y));
+        h.setAttribute("r", String(r));
         h.setAttribute("stroke-width", String(stroke));
         h.dataset.handle = c.name;
         h.dataset.targetId = target.dataset.id;
@@ -1284,6 +1459,11 @@
       applySelectionStyles();
       syncArrowControlsFromSelection();
       syncMarkControlsFromSelection();
+      syncTextControlsFromSelection();
+      syncObjectColorControlsFromSelection();
+      if (state.cropMode && !state.selectedIds.includes(state.cropMode.targetId)) {
+        cancelImageCropMode({ silent: true });
+      }
       setStatus(state.selectedIds.length ? `Selected: ${state.selectedIds.length}` : "Ready.");
     }
 
@@ -1357,7 +1537,8 @@
 
     function resolveTargetByTool(raw) {
       if (!raw) return null;
-      return state.tool === "select" ? resolveOuterGroup(raw) : resolveDirectTextLikeTarget(raw);
+      const tool = getEffectiveTool();
+      return (tool === "select" || tool === "hand") ? resolveOuterGroup(raw) : resolveDirectTextLikeTarget(raw);
     }
 
     function isTextLikeElement(el) {
@@ -1681,6 +1862,13 @@
       const local = canvasPointToElementLocal(groupEl, b.x, b.y - 6);
       label.setAttribute("x", String(Number(local.x.toFixed(4))));
       label.setAttribute("y", String(Number(local.y.toFixed(4))));
+      const baseSize = Number(label.dataset.markBaseSize || label.getAttribute("font-size") || "");
+      if (Number.isFinite(baseSize) && baseSize > 0) {
+        const locked = Math.max(6, Math.round(baseSize));
+        label.dataset.markBaseSize = String(locked);
+        label.setAttribute("font-size", String(locked));
+        label.style.setProperty("font-size", `${locked}px`);
+      }
       applyMarkLabelCompensation(label);
     }
 
@@ -1730,9 +1918,37 @@
     function getArrowControlValues() {
       const sizeEl = document.getElementById("arrowSizeInput");
       const strokeEl = document.getElementById("arrowStrokeInput");
-      const size = Math.max(4, Math.min(40, Number(sizeEl?.value || 10) || 10));
+      const size = Math.max(20, Math.min(2000, Number(sizeEl?.value || 190) || 190));
       const stroke = Math.max(1, Math.min(20, Number(strokeEl?.value || 3) || 3));
       return { size, stroke };
+    }
+
+    function getLineLength(lineEl) {
+      if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return 0;
+      const x1 = Number(lineEl.getAttribute("x1") || 0);
+      const y1 = Number(lineEl.getAttribute("y1") || 0);
+      const x2 = Number(lineEl.getAttribute("x2") || 0);
+      const y2 = Number(lineEl.getAttribute("y2") || 0);
+      return Math.hypot(x2 - x1, y2 - y1);
+    }
+
+    function setLineLength(lineEl, length) {
+      if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return;
+      const x1 = Number(lineEl.getAttribute("x1") || 0);
+      const y1 = Number(lineEl.getAttribute("y1") || 0);
+      const x2 = Number(lineEl.getAttribute("x2") || 0);
+      const y2 = Number(lineEl.getAttribute("y2") || 0);
+      const current = Math.hypot(x2 - x1, y2 - y1);
+      const target = Math.max(20, Math.min(2000, Number(length || current || 190)));
+      let ux = 1;
+      let uy = 0;
+      if (current > 1e-6) {
+        ux = (x2 - x1) / current;
+        uy = (y2 - y1) / current;
+      }
+      lineEl.setAttribute("x2", String(x1 + ux * target));
+      lineEl.setAttribute("y2", String(y1 + uy * target));
+      lineEl.dataset.arrowLength = String(Math.round(target));
     }
 
     function ensureCanvasDefs() {
@@ -1751,29 +1967,29 @@
       const markerId = lineEl.dataset.arrowMarkerId || `arrow-m-${lineEl.dataset.id || createId()}`;
       lineEl.dataset.arrowMarkerId = markerId;
       lineEl.dataset.arrow = "1";
-      lineEl.dataset.arrowSize = String(size);
+      lineEl.dataset.arrowLength = String(Math.round(Math.max(20, Number(size || getLineLength(lineEl) || 190))));
       let marker = defs.querySelector(`#${CSS.escape(markerId)}`);
       if (!(marker instanceof SVGElement)) {
         marker = document.createElementNS(SVG_NS, "marker");
         marker.setAttribute("id", markerId);
         marker.setAttribute("orient", "auto");
-        marker.setAttribute("markerUnits", "userSpaceOnUse");
+        marker.setAttribute("markerUnits", "strokeWidth");
         defs.appendChild(marker);
       }
-      const tip = size + 2;
-      const lead = Math.max(2, Math.min(8, Math.round(Number(stroke || 1) * 1.2)));
-      marker.setAttribute("markerWidth", String(tip + lead));
-      marker.setAttribute("markerHeight", String(size));
-      marker.setAttribute("refX", String(tip - lead));
-      marker.setAttribute("refY", String(size / 2));
-      marker.setAttribute("viewBox", `0 0 ${tip + lead} ${size}`);
+      const head = 6.5;
+      marker.setAttribute("markerWidth", String(head));
+      marker.setAttribute("markerHeight", String(head));
+      marker.setAttribute("refX", String(head));
+      marker.setAttribute("refY", String(head / 2));
+      marker.setAttribute("viewBox", `0 0 ${head} ${head}`);
       marker.setAttribute("overflow", "visible");
       marker.innerHTML = "";
       const p = document.createElementNS(SVG_NS, "path");
-      p.setAttribute("d", `M 0 0 L ${tip} ${size / 2} L 0 ${size} z`);
+      p.setAttribute("d", `M 0 0 L ${head} ${head / 2} L 0 ${head} z`);
       p.setAttribute("fill", String(lineEl.getAttribute("stroke") || "#0f172a"));
       marker.appendChild(p);
       lineEl.setAttribute("marker-end", `url(#${markerId})`);
+      setLineLength(lineEl, size);
       applyLineStyle(lineEl, stroke);
     }
 
@@ -1792,8 +2008,9 @@
       const selected = getById(state.selectedIds[0]);
       if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
       if (strokeEl) strokeEl.value = String(Number(selected.getAttribute("stroke-width") || 3) || 3);
-      if (selected.dataset.arrow !== "1") return;
-      if (sizeEl && selected.dataset.arrowSize) sizeEl.value = selected.dataset.arrowSize;
+      if (!sizeEl) return;
+      const len = Math.round(getLineLength(selected));
+      if (selected.dataset.arrow === "1" || len > 0) sizeEl.value = String(Math.max(20, Math.min(2000, len || 190)));
     }
 
     function syncMarkControlsFromSelection() {
@@ -1809,17 +2026,535 @@
       markSizeEl.value = String(Math.max(6, Math.min(120, Math.round(size))));
     }
 
+    function getNormalSelectedTextElements() {
+      const out = [];
+      const seen = new Set();
+      const push = (node) => {
+        if (!(node instanceof SVGElement)) return;
+        if (node.tagName !== "text") return;
+        if (!node.dataset.id) ensureId(node);
+        const id = node.dataset.id || "";
+        if (!id || seen.has(id)) return;
+        if (isGroupLabel(node) || isFigureTitle(node)) return;
+        seen.add(id);
+        out.push(node);
+      };
+      getTopSelectedElements().forEach((el) => {
+        if (!(el instanceof SVGElement)) return;
+        push(el);
+        if (el.tagName === "g") {
+          el.querySelectorAll("text").forEach((n) => push(n));
+        }
+      });
+      return out;
+    }
+
+    function getTextFontSizeValue() {
+      const input = document.getElementById("textFontSizeInput");
+      const raw = Number(input?.value || 28);
+      const size = Math.max(6, Math.min(240, Number.isFinite(raw) ? raw : 28));
+      if (input) input.value = String(Math.round(size));
+      return Math.round(size);
+    }
+
+    function normalizeTextScriptMode(raw) {
+      const s = String(raw || "").trim().toLowerCase();
+      if (s === "super" || s === "superscript") return "super";
+      if (s === "sub" || s === "subscript") return "sub";
+      return "normal";
+    }
+
+    function syncTextControlsFromSelection() {
+      const textSizeEl = document.getElementById("textFontSizeInput");
+      if (!(textSizeEl instanceof HTMLInputElement)) return;
+      const texts = getNormalSelectedTextElements();
+      if (!texts.length) return;
+      const first = texts[0];
+      const baseScript = Number(first.getAttribute("data-fm-script-base-size") || "");
+      const attr = Number(first.getAttribute("font-size") || "");
+      const computed = Number.parseFloat(window.getComputedStyle(first).fontSize || "");
+      const size = Number.isFinite(baseScript) && baseScript > 0
+        ? baseScript
+        : (Number.isFinite(attr) && attr > 0 ? attr : (Number.isFinite(computed) && computed > 0 ? computed : 28));
+      if (!Number.isFinite(size)) return;
+      textSizeEl.value = String(Math.max(6, Math.min(240, Math.round(size))));
+      const colorInput = document.getElementById("textColorInput");
+      if (colorInput instanceof HTMLInputElement) {
+        colorInput.value = normalizeCssColorToHex(first.getAttribute("fill"), "#111827");
+      }
+    }
+
+    function applyTextFontSizeToSelection(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const size = getTextFontSizeValue();
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        if (withStatus) setStatus("Select text object(s) to change Text size.");
+        return false;
+      }
+      targets.forEach((el) => {
+        const directTspans = Array.from(el.children).filter((n) => n instanceof SVGElement && n.tagName === "tspan");
+        if (directTspans.length) {
+          el.setAttribute("font-size", String(size));
+          el.style.setProperty("font-size", `${size}px`);
+          el.removeAttribute("data-fm-script-base-size");
+          el.removeAttribute("data-fm-script");
+          el.removeAttribute("baseline-shift");
+          directTspans.forEach((span) => {
+            const mode = normalizeTextScriptMode(span.getAttribute("baseline-shift") || span.getAttribute("data-fm-script"));
+            if (mode === "super" || mode === "sub") {
+              const scaled = Math.max(6, Math.round(size * 0.75));
+              span.setAttribute("baseline-shift", mode);
+              span.setAttribute("data-fm-script", mode);
+              span.setAttribute("font-size", String(scaled));
+              span.style.setProperty("font-size", `${scaled}px`);
+            } else {
+              span.removeAttribute("baseline-shift");
+              span.removeAttribute("data-fm-script");
+              span.removeAttribute("font-size");
+              span.style.removeProperty("font-size");
+            }
+          });
+          return;
+        }
+        const scriptMode = String(el.getAttribute("data-fm-script") || "");
+        if (scriptMode === "super" || scriptMode === "sub") {
+          el.setAttribute("data-fm-script-base-size", String(size));
+          const scaled = Math.max(6, Math.round(size * 0.75));
+          el.setAttribute("font-size", String(scaled));
+          el.style.setProperty("font-size", `${scaled}px`);
+        } else {
+          el.removeAttribute("data-fm-script-base-size");
+          el.setAttribute("font-size", String(size));
+          el.style.setProperty("font-size", `${size}px`);
+        }
+      });
+      requestSelectionVisualRefresh();
+      if (push) pushHistory("text-size");
+      if (withStatus) setStatus(`Text size set: ${size}`);
+      return true;
+    }
+
+    function normalizeCssColorToHex(value, fallback = "#111827") {
+      const canvasTmp = normalizeCssColorToHex._canvas || document.createElement("canvas");
+      normalizeCssColorToHex._canvas = canvasTmp;
+      const ctx = normalizeCssColorToHex._ctx || canvasTmp.getContext("2d");
+      normalizeCssColorToHex._ctx = ctx;
+      if (!ctx) return fallback;
+      let v = String(value || "").trim();
+      if (!v || v === "none" || v === "transparent") return fallback;
+      try {
+        ctx.fillStyle = "#000000";
+        ctx.fillStyle = v;
+        const computed = String(ctx.fillStyle || "").trim();
+        if (/^#[0-9a-f]{6}$/i.test(computed)) return computed.toLowerCase();
+        const rgb = computed.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        if (rgb) {
+          const toHex = (n) => Number(n).toString(16).padStart(2, "0");
+          return `#${toHex(rgb[1])}${toHex(rgb[2])}${toHex(rgb[3])}`;
+        }
+      } catch (_) {}
+      return fallback;
+    }
+
+    function collectSelectedShapeElements() {
+      const result = [];
+      const seen = new Set();
+      const push = (node) => {
+        if (!(node instanceof SVGElement)) return;
+        if (isGroupLabel(node) || isFigureTitle(node)) return;
+        if (!isEditableElement(node)) return;
+        if (!node.dataset.id) ensureId(node);
+        const id = node.dataset.id || "";
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        result.push(node);
+      };
+      getTopSelectedElements().forEach((el) => {
+        if (!(el instanceof SVGElement)) return;
+        if (el.tagName === "g") {
+          el.querySelectorAll("rect,ellipse,circle,path,polygon,polyline,line").forEach((n) => push(n));
+        } else {
+          push(el);
+        }
+      });
+      return result;
+    }
+
+    function syncObjectColorControlsFromSelection() {
+      const fillInput = document.getElementById("objectFillColorInput");
+      const strokeInput = document.getElementById("objectStrokeColorInput");
+      const strokeToggleEl = document.getElementById("objectStrokeToggle");
+      if (!(fillInput instanceof HTMLInputElement) || !(strokeInput instanceof HTMLInputElement)) return;
+      const targets = collectSelectedShapeElements();
+      if (!targets.length) return;
+      const fillEl = targets.find((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline"].includes(el.tagName)) || targets[0];
+      const strokeEl = targets.find((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)) || targets[0];
+      fillInput.value = normalizeCssColorToHex(fillEl.getAttribute("fill"), "#dbeafe");
+      strokeInput.value = normalizeCssColorToHex(strokeEl.getAttribute("stroke"), "#1e3a8a");
+      if (strokeToggleEl instanceof HTMLInputElement) {
+        const outlineTargets = targets.filter((el) => el.tagName === "rect" || el.tagName === "ellipse" || el.tagName === "circle");
+        if (outlineTargets.length) {
+          strokeToggleEl.checked = outlineTargets.every((el) => String(el.getAttribute("stroke") || "").trim().toLowerCase() !== "none");
+        }
+      }
+    }
+
+    function applyObjectFillColor(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const input = document.getElementById("objectFillColorInput");
+      const color = String(input?.value || "").trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) return false;
+      const targets = collectSelectedShapeElements().filter((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline"].includes(el.tagName));
+      if (!targets.length) {
+        if (withStatus) setStatus("Select shape object(s) to change fill.");
+        return false;
+      }
+      targets.forEach((el) => el.setAttribute("fill", color));
+      if (push) pushHistory("object-fill");
+      requestSelectionVisualRefresh();
+      if (withStatus) setStatus(`Object fill set: ${color}`);
+      return true;
+    }
+
+    function applyObjectStrokeColor(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const input = document.getElementById("objectStrokeColorInput");
+      const color = String(input?.value || "").trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) return false;
+      const targets = collectSelectedShapeElements().filter((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName));
+      if (!targets.length) {
+        if (withStatus) setStatus("Select shape object(s) to change stroke.");
+        return false;
+      }
+      targets.forEach((el) => {
+        el.setAttribute("stroke", color);
+        if (el.tagName === "rect" || el.tagName === "ellipse" || el.tagName === "circle") {
+          el.dataset.prevStrokeColor = color;
+          if (!el.getAttribute("stroke-width")) el.setAttribute("stroke-width", "2");
+        }
+        if (el.dataset.arrow === "1") {
+          const markerId = el.dataset.arrowMarkerId || "";
+          const marker = markerId ? canvas.querySelector(`#${CSS.escape(markerId)} path`) : null;
+          if (marker instanceof SVGElement) marker.setAttribute("fill", color);
+        }
+      });
+      if (push) pushHistory("object-stroke");
+      requestSelectionVisualRefresh();
+      if (withStatus) setStatus(`Object stroke set: ${color}`);
+      return true;
+    }
+
+    function applyObjectStrokeToggle(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const toggle = document.getElementById("objectStrokeToggle");
+      const strokeInput = document.getElementById("objectStrokeColorInput");
+      if (!(toggle instanceof HTMLInputElement)) return false;
+      const enabled = !!toggle.checked;
+      const strokeColor = String((strokeInput instanceof HTMLInputElement ? strokeInput.value : "#1e3a8a") || "#1e3a8a");
+      const targets = collectSelectedShapeElements().filter((el) => el.tagName === "rect" || el.tagName === "ellipse" || el.tagName === "circle");
+      if (!targets.length) {
+        if (withStatus) setStatus("Select rect/circle/ellipse object(s) first.");
+        return false;
+      }
+      targets.forEach((el) => {
+        if (enabled) {
+          const restore = String(el.dataset.prevStrokeColor || "").trim();
+          el.setAttribute("stroke", /^#[0-9a-f]{6}$/i.test(restore) ? restore : strokeColor);
+          const w = Number(el.dataset.prevStrokeWidth || el.getAttribute("stroke-width") || 2);
+          el.setAttribute("stroke-width", String(Math.max(0.5, Number.isFinite(w) ? w : 2)));
+        } else {
+          const current = String(el.getAttribute("stroke") || "").trim();
+          if (current && current.toLowerCase() !== "none") el.dataset.prevStrokeColor = current;
+          const currentW = Number(el.getAttribute("stroke-width") || "");
+          if (Number.isFinite(currentW) && currentW > 0) el.dataset.prevStrokeWidth = String(currentW);
+          el.setAttribute("stroke", "none");
+        }
+      });
+      if (push) pushHistory(enabled ? "stroke-on" : "stroke-off");
+      requestSelectionVisualRefresh();
+      if (withStatus) setStatus(enabled ? "Stroke enabled." : "Stroke disabled.");
+      return true;
+    }
+
+    function applyTextColorToSelection(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const input = document.getElementById("textColorInput");
+      const color = String(input?.value || "").trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) return false;
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        if (withStatus) setStatus("Select text object(s) to change color.");
+        return false;
+      }
+      targets.forEach((el) => el.setAttribute("fill", color));
+      if (push) pushHistory("text-color");
+      requestSelectionVisualRefresh();
+      if (withStatus) setStatus(`Text color set: ${color}`);
+      return true;
+    }
+
+    function toggleTextBold() {
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        setStatus("Select text object(s) first.");
+        return;
+      }
+      const allBold = targets.every((el) => {
+        const attr = String(el.getAttribute("font-weight") || "").toLowerCase();
+        if (attr === "bold") return true;
+        const n = Number(attr);
+        return Number.isFinite(n) && n >= 600;
+      });
+      targets.forEach((el) => el.setAttribute("font-weight", allBold ? "400" : "700"));
+      pushHistory("text-bold");
+      setStatus(allBold ? "Text bold off." : "Text bold on.");
+    }
+
+    function toggleTextItalic() {
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        setStatus("Select text object(s) first.");
+        return;
+      }
+      const allItalic = targets.every((el) => String(el.getAttribute("font-style") || "").toLowerCase() === "italic");
+      targets.forEach((el) => el.setAttribute("font-style", allItalic ? "normal" : "italic"));
+      pushHistory("text-italic");
+      setStatus(allItalic ? "Text italic off." : "Text italic on.");
+    }
+
+    function normalizeScriptRuns(textLength, runs) {
+      const len = Math.max(0, Number(textLength || 0));
+      if (!len) return [];
+      const list = Array.isArray(runs) ? runs : [];
+      const clipped = list
+        .map((run) => ({
+          start: Math.max(0, Math.min(len, Number(run?.start || 0))),
+          end: Math.max(0, Math.min(len, Number(run?.end || 0))),
+          mode: normalizeTextScriptMode(run?.mode)
+        }))
+        .filter((run) => run.end > run.start)
+        .sort((a, b) => a.start - b.start || a.end - b.end);
+      if (!clipped.length) return [{ start: 0, end: len, mode: "normal" }];
+      const merged = [];
+      let cursor = 0;
+      clipped.forEach((run) => {
+        if (cursor < run.start) merged.push({ start: cursor, end: run.start, mode: "normal" });
+        const s = Math.max(cursor, run.start);
+        const e = Math.max(s, run.end);
+        if (!merged.length || merged[merged.length - 1].mode !== run.mode || merged[merged.length - 1].end !== s) {
+          merged.push({ start: s, end: e, mode: run.mode });
+        } else {
+          merged[merged.length - 1].end = e;
+        }
+        cursor = Math.max(cursor, e);
+      });
+      if (cursor < len) merged.push({ start: cursor, end: len, mode: "normal" });
+      return merged.filter((run) => run.end > run.start);
+    }
+
+    function scriptRunsToModeArray(textLength, runs) {
+      const len = Math.max(0, Number(textLength || 0));
+      const arr = new Array(len).fill("normal");
+      normalizeScriptRuns(len, runs).forEach((run) => {
+        for (let i = run.start; i < run.end; i += 1) arr[i] = run.mode;
+      });
+      return arr;
+    }
+
+    function modeArrayToScriptRuns(modeArray) {
+      if (!Array.isArray(modeArray) || !modeArray.length) return [];
+      const runs = [];
+      let start = 0;
+      let cur = normalizeTextScriptMode(modeArray[0]);
+      for (let i = 1; i <= modeArray.length; i += 1) {
+        const mode = i < modeArray.length ? normalizeTextScriptMode(modeArray[i]) : null;
+        if (mode !== cur) {
+          runs.push({ start, end: i, mode: cur });
+          start = i;
+          cur = mode;
+        }
+      }
+      return runs;
+    }
+
+    function extractTextRunsForEditing(textEl) {
+      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") {
+        return { text: "", runs: [] };
+      }
+      const chunks = [];
+      const pushChunk = (txt, mode) => {
+        const value = String(txt || "");
+        if (!value) return;
+        chunks.push({ text: value, mode: normalizeTextScriptMode(mode) });
+      };
+      const children = Array.from(textEl.childNodes);
+      if (!children.length) {
+        const plain = String(textEl.textContent || "");
+        return {
+          text: plain,
+          runs: plain ? [{ start: 0, end: plain.length, mode: normalizeTextScriptMode(textEl.getAttribute("data-fm-script")) }] : []
+        };
+      }
+      children.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          pushChunk(node.textContent || "", textEl.getAttribute("data-fm-script"));
+          return;
+        }
+        if (node instanceof SVGElement && node.tagName === "tspan") {
+          pushChunk(node.textContent || "", node.getAttribute("baseline-shift") || node.getAttribute("data-fm-script"));
+          return;
+        }
+        pushChunk(node.textContent || "", "normal");
+      });
+      const text = chunks.map((c) => c.text).join("");
+      let cursor = 0;
+      const runs = chunks.map((c) => {
+        const run = { start: cursor, end: cursor + c.text.length, mode: c.mode };
+        cursor += c.text.length;
+        return run;
+      });
+      return { text, runs: normalizeScriptRuns(text.length, runs) };
+    }
+
+    function applyTextRunsToElement(textEl, text, runs, options = {}) {
+      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return;
+      const rawText = String(text || "");
+      const currentSizeAttr = Number(textEl.getAttribute("font-size") || "");
+      const currentSizeCss = Number.parseFloat(window.getComputedStyle(textEl).fontSize || "");
+      const baseSize = Math.max(6, Number(options.baseSize || (Number.isFinite(currentSizeAttr) && currentSizeAttr > 0 ? currentSizeAttr : (Number.isFinite(currentSizeCss) && currentSizeCss > 0 ? currentSizeCss : 28))));
+      const normalizedRuns = normalizeScriptRuns(rawText.length, runs);
+      while (textEl.firstChild) textEl.removeChild(textEl.firstChild);
+      textEl.removeAttribute("baseline-shift");
+      textEl.removeAttribute("data-fm-script");
+      textEl.removeAttribute("data-fm-script-base-size");
+      textEl.setAttribute("font-size", String(Math.round(baseSize)));
+      textEl.style.setProperty("font-size", `${Math.round(baseSize)}px`);
+      if (!rawText) return;
+      if (normalizedRuns.length === 1 && normalizedRuns[0].mode === "normal") {
+        textEl.textContent = rawText;
+        return;
+      }
+      normalizedRuns.forEach((run) => {
+        const segment = rawText.slice(run.start, run.end);
+        if (!segment) return;
+        if (run.mode === "normal") {
+          textEl.appendChild(document.createTextNode(segment));
+          return;
+        }
+        const span = document.createElementNS(SVG_NS, "tspan");
+        span.textContent = segment;
+        span.setAttribute("baseline-shift", run.mode);
+        span.setAttribute("data-fm-script", run.mode);
+        const scaled = Math.max(6, Math.round(baseSize * 0.75));
+        span.setAttribute("font-size", String(scaled));
+        span.style.setProperty("font-size", `${scaled}px`);
+        textEl.appendChild(span);
+      });
+    }
+
+    function setScriptModeInRange(textLength, runs, start, end, mode) {
+      const len = Math.max(0, Number(textLength || 0));
+      const s = Math.max(0, Math.min(len, Number(start || 0)));
+      const e = Math.max(0, Math.min(len, Number(end || 0)));
+      if (e <= s) return normalizeScriptRuns(len, runs);
+      const normalizedMode = normalizeTextScriptMode(mode);
+      const arr = scriptRunsToModeArray(len, runs);
+      for (let i = s; i < e; i += 1) arr[i] = normalizedMode;
+      return modeArrayToScriptRuns(arr);
+    }
+
+    function isRangeAllMode(textLength, runs, start, end, mode) {
+      const len = Math.max(0, Number(textLength || 0));
+      const s = Math.max(0, Math.min(len, Number(start || 0)));
+      const e = Math.max(0, Math.min(len, Number(end || 0)));
+      if (e <= s) return false;
+      const target = normalizeTextScriptMode(mode);
+      const arr = scriptRunsToModeArray(len, runs);
+      for (let i = s; i < e; i += 1) {
+        if (arr[i] !== target) return false;
+      }
+      return true;
+    }
+
+    function toggleTextScript(mode) {
+      const targetMode = mode === "sub" ? "sub" : "super";
+      if (state.textEdit) {
+        const target = getById(state.textEdit.targetId || "");
+        if (!(target instanceof SVGElement) || target.tagName !== "text") {
+          setStatus("Text editing target not found.");
+          return;
+        }
+        const text = String(textEditorInput.value || "");
+        const selStart = Number(textEditorInput.selectionStart || 0);
+        const selEnd = Number(textEditorInput.selectionEnd || 0);
+        if (selEnd <= selStart) {
+          setStatus("Select characters in the text editor first.");
+          return;
+        }
+        const currentRuns = normalizeScriptRuns(text.length, state.textEdit.runs);
+        const allSame = isRangeAllMode(text.length, currentRuns, selStart, selEnd, targetMode);
+        const nextMode = allSame ? "normal" : targetMode;
+        const nextRuns = setScriptModeInRange(text.length, currentRuns, selStart, selEnd, nextMode);
+        state.textEdit.text = text;
+        state.textEdit.runs = nextRuns;
+        applyTextRunsToElement(target, text, nextRuns);
+        requestSelectionVisualRefresh();
+        setStatus(nextMode === "normal" ? "Selected script cleared." : `Selected text ${nextMode}script.`);
+        return;
+      }
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        setStatus("Select text object(s) first.");
+        return;
+      }
+      const allSame = targets.every((el) => String(el.getAttribute("data-fm-script") || "") === targetMode);
+      const nextMode = allSame ? "normal" : targetMode;
+      targets.forEach((el) => {
+        const currentSizeAttr = Number(el.getAttribute("font-size") || "");
+        const currentSizeCss = Number.parseFloat(window.getComputedStyle(el).fontSize || "");
+        let base = Number(el.getAttribute("data-fm-script-base-size") || "");
+        if (!Number.isFinite(base) || base <= 0) {
+          base = Number.isFinite(currentSizeAttr) && currentSizeAttr > 0
+            ? currentSizeAttr
+            : (Number.isFinite(currentSizeCss) && currentSizeCss > 0 ? currentSizeCss : 28);
+        }
+        if (nextMode === "normal") {
+          el.setAttribute("font-size", String(Math.round(base)));
+          el.style.setProperty("font-size", `${Math.round(base)}px`);
+          el.removeAttribute("baseline-shift");
+          el.removeAttribute("data-fm-script");
+          el.removeAttribute("data-fm-script-base-size");
+        } else {
+          el.setAttribute("data-fm-script", nextMode);
+          el.setAttribute("data-fm-script-base-size", String(Math.round(base)));
+          const scaled = Math.max(6, Math.round(base * 0.75));
+          el.setAttribute("font-size", String(scaled));
+          el.style.setProperty("font-size", `${scaled}px`);
+          el.setAttribute("baseline-shift", nextMode === "super" ? "super" : "sub");
+        }
+      });
+      syncTextControlsFromSelection();
+      pushHistory(`text-${nextMode}`);
+      setStatus(nextMode === "normal" ? "Text script cleared." : `Text ${nextMode}script on.`);
+    }
+
     function applyStrokeControlToSelectedLines(options = {}) {
       const push = options.push !== false;
       const withStatus = options.withStatus !== false;
       const selectedLines = getTopSelectedElements().filter((el) => el instanceof SVGElement && el.tagName === "line");
       if (!selectedLines.length) return false;
-      const { size, stroke } = getArrowControlValues();
+      const { stroke } = getArrowControlValues();
       let lineCount = 0;
       let arrowCount = 0;
       selectedLines.forEach((line) => {
         if (line.dataset.arrow === "1") {
-          applyArrowStyle(line, size, stroke);
+          applyArrowStyle(line, getLineLength(line), stroke);
           arrowCount += 1;
         } else {
           applyLineStyle(line, stroke);
@@ -1859,7 +2594,7 @@
 
     function normalizeFigureFontSize(value) {
       const n = Number(value);
-      if (!Number.isFinite(n)) return 28;
+      if (!Number.isFinite(n)) return FIGURE_TITLE_DEFAULT_FONT_SIZE;
       return Math.max(8, Math.min(200, Math.round(n)));
     }
 
@@ -1889,13 +2624,13 @@
     }
 
     function readFigureFontSize(el) {
-      if (!(el instanceof SVGElement)) return 28;
+      if (!(el instanceof SVGElement)) return FIGURE_TITLE_DEFAULT_FONT_SIZE;
       const attr = Number(el.getAttribute("font-size") || "");
       if (Number.isFinite(attr) && attr > 0) return normalizeFigureFontSize(attr);
       const cs = window.getComputedStyle(el);
       const px = Number.parseFloat(cs?.fontSize || "");
       if (Number.isFinite(px) && px > 0) return normalizeFigureFontSize(px);
-      return 28;
+      return FIGURE_TITLE_DEFAULT_FONT_SIZE;
     }
 
     function setFigureTitleNumber(el, numberValue, kindValue, fontSizeValue) {
@@ -2003,7 +2738,7 @@
 
     function getCleanCanvasMarkup() {
       const clone = canvas.cloneNode(true);
-      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide").forEach((el) => el.remove());
+      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft").forEach((el) => el.remove());
       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
         el.classList.remove("fm-selected");
         el.classList.remove("fm-group-selected");
@@ -2084,6 +2819,7 @@
       state.viewScale = next;
       syncCanvasDisplaySizeFromViewBox();
       requestSelectionVisualRefresh();
+      syncZoomControls();
       renderStatus();
 
       const newSize = getCanvasDisplaySize();
@@ -2123,8 +2859,93 @@
       return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${getCleanCanvasMarkup()}</svg>`;
     }
 
+    function getEffectiveTool() {
+      return state.spacePanActive ? "hand" : state.tool;
+    }
+
+    function syncToolButtons() {
+      const effective = getEffectiveTool();
+      const selectBtn = document.getElementById("toolSelect");
+      const directBtn = document.getElementById("toolDirect");
+      const handBtn = document.getElementById("toolHand");
+      if (selectBtn) selectBtn.classList.toggle("active", effective === "select");
+      if (directBtn) directBtn.classList.toggle("active", effective === "direct");
+      if (handBtn) handBtn.classList.toggle("active", effective === "hand");
+    }
+
+    function setTool(tool, options = {}) {
+      const withStatus = options.withStatus !== false;
+      const next = tool === "direct" || tool === "hand" ? tool : "select";
+      state.tool = next;
+      if (options.clearSpacePan !== false) state.spacePanActive = false;
+      syncToolButtons();
+      updateToolCursor();
+      if (withStatus) {
+        const label = next === "direct" ? "White Arrow" : (next === "hand" ? "Hand" : "Black Arrow");
+        setStatus(`Tool: ${label}`);
+      }
+    }
+
+    function switchToolbarTab(tab, options = {}) {
+      const next = tab === "object" || tab === "text" ? tab : "tool";
+      if (state.cropMode && next !== "tool") {
+        cancelImageCropMode({ silent: true });
+      }
+      state.toolbarTab = next;
+      document.querySelectorAll("[data-toolbar-tab-btn]").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-toolbar-tab-btn") === next);
+      });
+      document.querySelectorAll(".toolbar .group[data-toolbar-tab]").forEach((group) => {
+        group.hidden = group.getAttribute("data-toolbar-tab") !== next;
+      });
+      if (!options.silent) setStatus(`Toolbar tab: ${next}`);
+    }
+
+    function setupToolbarTabs() {
+      const bar = document.getElementById("toolbarTabBar");
+      if (!bar) return;
+      bar.addEventListener("click", (e) => {
+        const btn = e.target instanceof Element ? e.target.closest("[data-toolbar-tab-btn]") : null;
+        if (!btn) return;
+        const tab = btn.getAttribute("data-toolbar-tab-btn") || "tool";
+        switchToolbarTab(tab);
+      });
+      switchToolbarTab(state.toolbarTab || "tool", { silent: true });
+    }
+
+    function syncZoomControls() {
+      const slider = document.getElementById("zoomSlider");
+      const input = document.getElementById("zoomPercentInput");
+      const pct = Math.round(Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, Number(state.viewScale) || 1)) * 100);
+      if (slider) slider.value = String(pct);
+      if (input) input.value = String(pct);
+    }
+
     function updateToolCursor() {
-      canvas.style.cursor = state.tool === "direct" ? CURSOR_WHITE : CURSOR_BLACK;
+      const effective = getEffectiveTool();
+      if (effective === "direct") {
+        canvas.style.cursor = CURSOR_WHITE;
+      } else if (effective === "hand") {
+        canvas.style.cursor = state.interaction && state.interaction.type === "pan" ? "grabbing" : "grab";
+      } else {
+        canvas.style.cursor = CURSOR_BLACK;
+      }
+      if (canvasWrapEl) {
+        canvasWrapEl.classList.toggle("hand-mode", effective === "hand");
+      }
+    }
+
+    function updateCropUi() {
+      const cropBtn = document.getElementById("cropImageBtn");
+      const applyBtn = document.getElementById("cropApplyBtn");
+      const cancelBtn = document.getElementById("cropCancelBtn");
+      const active = !!state.cropMode;
+      if (cropBtn) cropBtn.textContent = active ? "Re-drag Crop" : "Crop";
+      if (applyBtn) {
+        applyBtn.hidden = !active;
+        applyBtn.disabled = !active || !state.cropMode?.draftRect;
+      }
+      if (cancelBtn) cancelBtn.hidden = !active;
     }
 
     function setCanvasSize(width, height, options = {}) {
@@ -2262,18 +3083,9 @@
 
     function restoreSnapshot(snap) {
       if (!snap) return;
+      cancelImageCropMode({ silent: true });
       applyCanvasMeta(snap.canvasMeta);
-      canvas.innerHTML = snap.markup;
-      if (snap.markup.includes("img-ref:")) {
-        const images = canvas.querySelectorAll("image");
-        images.forEach((img) => {
-          const href = img.getAttribute("href");
-          if (href && href.startsWith("img-ref:")) {
-            const resolved = resolveImage(href);
-            if (resolved) img.setAttribute("href", resolved);
-          }
-        });
-      }
+      applySnapshotMarkup(snap.markup, snap.imageRefs || null);
       assignIds();
       setSelection(snap.selectedIds || []);
     }
@@ -2427,6 +3239,29 @@
       pushHistory("group");
     }
 
+    function reparentChildPreserveWorldTransform(child, newParent, worldMatrix = null) {
+      if (!(child instanceof SVGElement) || !(newParent instanceof SVGElement)) return;
+      const childMatrix = worldMatrix || (child.getScreenCTM ? child.getScreenCTM() : null);
+      const parentMatrix = newParent.getScreenCTM ? newParent.getScreenCTM() : null;
+      if (!childMatrix || !parentMatrix || typeof parentMatrix.inverse !== "function" || typeof parentMatrix.multiply !== "function") return;
+      let relative;
+      try {
+        relative = parentMatrix.inverse().multiply(childMatrix);
+      } catch (_) {
+        return;
+      }
+      if (!relative) return;
+      const toNum = (v) => Number(Number(v || 0).toFixed(8));
+      child.setAttribute(
+        "transform",
+        `matrix(${toNum(relative.a)} ${toNum(relative.b)} ${toNum(relative.c)} ${toNum(relative.d)} ${toNum(relative.e)} ${toNum(relative.f)})`
+      );
+      child.removeAttribute("data-base-transform");
+      child.removeAttribute("data-tx");
+      child.removeAttribute("data-ty");
+      ensureTransformState(child);
+    }
+
     function ungroupSelected() {
       const groups = getTopSelectedElements().filter((el) => el.tagName === "g");
       if (!groups.length) {
@@ -2442,7 +3277,9 @@
             child.remove();
             return;
           }
+          const preserve = child instanceof SVGElement ? (child.getScreenCTM ? child.getScreenCTM() : null) : null;
           parent.insertBefore(child, g);
+          reparentChildPreserveWorldTransform(child, parent, preserve);
           if (child instanceof SVGElement && child.dataset.id) selected.push(child.dataset.id);
         });
         g.remove();
@@ -2457,19 +3294,7 @@
         setStatus("Duplicate needs selected object.");
         return;
       }
-      const clones = [];
-      elements.forEach((el) => {
-        const clone = el.cloneNode(true);
-        clone.querySelectorAll?.("[data-id]").forEach((n) => n.removeAttribute("data-id"));
-        clone.removeAttribute("data-id");
-        sanitizeSvgTree(clone);
-        ensureId(clone);
-        const t = getTranslate(el);
-        setTranslate(clone, t.x + 20, t.y + 20);
-        el.parentNode.appendChild(clone);
-        assignIds(clone);
-        if (clone.dataset.id) clones.push(clone.dataset.id);
-      });
+      const clones = cloneElements(elements, { offsetX: 20, offsetY: 20, stripGroupLabels: false });
       setSelection(clones);
       pushHistory("duplicate");
       setStatus(`Duplicated ${clones.length} object(s).`);
@@ -2688,9 +3513,15 @@
         setStatus("Clipboard is empty.");
         return false;
       }
+      const baseNudge = getPasteNudgeOffset();
       const inserted = [];
       items.forEach((item, idx) => {
-        const id = importMarkupFragment(item.markup, 24 * (idx + 1), 24 * (idx + 1), item.parentId || "");
+        const id = importMarkupFragment(
+          item.markup,
+          baseNudge.x + 24 * (idx + 1),
+          baseNudge.y + 24 * (idx + 1),
+          item.parentId || ""
+        );
         if (id) inserted.push(id);
       });
       if (!inserted.length) {
@@ -2721,6 +3552,7 @@
         label.classList.add("fm-group-label");
         label.setAttribute("font-size", String(size));
         label.style.setProperty("font-size", `${size}px`);
+        label.dataset.markBaseSize = String(size);
         if (label.dataset?.id) applyMarkLabelCompensation(label);
       });
       if (push && labels.length) pushHistory("mark-size");
@@ -2744,6 +3576,7 @@
       const markSize = getMarkFontSizeValue();
       label.setAttribute("font-size", String(markSize));
       label.style.setProperty("font-size", `${markSize}px`);
+      label.dataset.markBaseSize = String(markSize);
       label.setAttribute("x", String(Number(local.x.toFixed(4))));
       label.setAttribute("y", String(Number(local.y.toFixed(4))));
       label.textContent = letter;
@@ -2960,6 +3793,7 @@
         setStatus("Invalid SVG file.");
         return;
       }
+      cancelImageCropMode({ silent: true });
       sanitizeSvgTree(root);
       applyCanvasMeta({ viewBox: root.getAttribute("viewBox") || DEFAULT_VIEWBOX });
       canvas.innerHTML = root.innerHTML;
@@ -3026,6 +3860,7 @@
     }
 
     function newCanvas() {
+      cancelImageCropMode({ silent: true });
       applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX });
       canvas.innerHTML = "";
       ensureFigureTitle();
@@ -3036,7 +3871,8 @@
 
     function getAutosaveRecords() {
       try {
-        return JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "[]");
+        const parsed = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
       } catch (err) {
         if (!state.autosaveParseWarned) {
           state.autosaveParseWarned = true;
@@ -3048,7 +3884,25 @@
     }
 
     function setAutosaveRecords(records) {
-      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(records.slice(-20)));
+      const capped = Array.isArray(records) ? records.slice(-AUTOSAVE_MAX_RECORDS) : [];
+      let working = capped.slice();
+      while (true) {
+        try {
+          if (!working.length) {
+            localStorage.removeItem(AUTOSAVE_KEY);
+            return { stored: 0, dropped: capped.length };
+          }
+          localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(working));
+          return { stored: working.length, dropped: capped.length - working.length };
+        } catch (err) {
+          if (!isQuotaExceededError(err)) throw err;
+          if (!working.length) {
+            localStorage.removeItem(AUTOSAVE_KEY);
+            return { stored: 0, dropped: capped.length };
+          }
+          working = working.slice(1);
+        }
+      }
     }
 
     function getLiveAutosaveRecord() {
@@ -3066,16 +3920,18 @@
 
     function writeLiveAutosave(reason = "live") {
       try {
-        const snap = getSnapshot(`live:${reason}`);
-        const rec = {
-          id: `live-${Date.now()}`,
-          at: Number(snap.at || Date.now()),
-          markup: snap.markup,
-          selectedIds: Array.isArray(snap.selectedIds) ? [...snap.selectedIds] : [],
-          canvasMeta: snap.canvasMeta
-        };
+        const rec = makeAutosaveRecord("live", reason);
         localStorage.setItem(LIVE_AUTOSAVE_KEY, JSON.stringify(rec));
+        state.liveAutosaveQuotaWarned = false;
       } catch (err) {
+        if (isQuotaExceededError(err)) {
+          if (!state.liveAutosaveQuotaWarned) {
+            state.liveAutosaveQuotaWarned = true;
+            setStatus("Live autosave skipped: storage is full. Use Save SVG.");
+          }
+          try { localStorage.removeItem(LIVE_AUTOSAVE_KEY); } catch (_) {}
+          return;
+        }
         captureError("live-autosave-write", err, { userMessage: "Autosave write failed." });
       }
     }
@@ -3090,17 +3946,26 @@
 
     function saveAutosave() {
       const records = getAutosaveRecords();
-      records.push({
-        id: `as-${Date.now()}`,
-        at: Date.now(),
-        markup: getCleanCanvasMarkup(),
-        selectedIds: [...state.selectedIds],
-        canvasMeta: getCanvasMeta()
-      });
-      setAutosaveRecords(records);
+      records.push(makeAutosaveRecord("as", "timed"));
+      let result = { stored: 0, dropped: 0 };
+      try {
+        result = setAutosaveRecords(records);
+      } catch (err) {
+        captureError("autosave-write", err, { userMessage: "Autosave write failed." });
+        return;
+      }
       writeLiveAutosave("timed");
       refreshRestoreList();
-      setStatus("Autosave snapshot written.");
+      if (!result.stored) {
+        if (!state.autosaveQuotaWarned) {
+          state.autosaveQuotaWarned = true;
+          setStatus("Autosave skipped: storage is full. Use Save SVG.");
+        }
+        return;
+      }
+      state.autosaveQuotaWarned = false;
+      const dropped = result.dropped > 0 ? ` (${result.dropped} old record(s) dropped)` : "";
+      setStatus(`Autosave snapshot written.${dropped}`);
     }
 
     function refreshRestoreList() {
@@ -3115,6 +3980,7 @@
     }
 
     function restoreLatest() {
+      cancelImageCropMode({ silent: true });
       const records = getAutosaveRecords();
       const timed = records[records.length - 1] || null;
       const live = getLiveAutosaveRecord();
@@ -3124,7 +3990,7 @@
         return;
       }
       applyCanvasMeta(r.canvasMeta);
-      canvas.innerHTML = r.markup;
+      applySnapshotMarkup(r.markup, r.imageRefs || null);
       assignIds();
       ensureFigureTitle();
       setSelection(r.selectedIds || []);
@@ -3135,6 +4001,7 @@
     }
 
     function restoreFromList() {
+      cancelImageCropMode({ silent: true });
       const records = getAutosaveRecords();
       const id = restoreListEl.value;
       const r = records.find((x) => x.id === id);
@@ -3143,7 +4010,7 @@
         return;
       }
       applyCanvasMeta(r.canvasMeta);
-      canvas.innerHTML = r.markup;
+      applySnapshotMarkup(r.markup, r.imageRefs || null);
       assignIds();
       ensureFigureTitle();
       setSelection(r.selectedIds || []);
@@ -3165,10 +4032,23 @@
       else setStatus(`Autosave set: ${val} min (timed) + live snapshot on edit.`);
     }
 
+    function consumePasteNudgeStep() {
+      state.pasteNudgeCounter = (Number(state.pasteNudgeCounter || 0) + 1) % 16;
+      return state.pasteNudgeCounter;
+    }
+
+    function getPasteNudgeOffset(stepMultiplier = 1) {
+      const idx = consumePasteNudgeStep();
+      const step = 18 * Math.max(1, Number(stepMultiplier || 1));
+      return { x: idx * step, y: idx * step };
+    }
+
     function insertImageElement(src, width, height, offsetIndex = 0, options = {}) {
       const step = 24;
-      const x = 600 - width / 2 + offsetIndex * step;
-      const y = 350 - height / 2 + offsetIndex * step;
+      const extraX = Number(options.offsetX || 0);
+      const extraY = Number(options.offsetY || 0);
+      const x = 600 - width / 2 + offsetIndex * step + extraX;
+      const y = 350 - height / 2 + offsetIndex * step + extraY;
       const el = document.createElementNS(SVG_NS, "image");
       el.setAttribute("x", String(x));
       el.setAttribute("y", String(y));
@@ -3201,6 +4081,268 @@
       });
     }
 
+    function isImageFile(file) {
+      if (!file) return false;
+      const t = String(file.type || "").toLowerCase();
+      if (t.startsWith("image/")) return true;
+      return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(String(file.name || ""));
+    }
+
+    async function importImageFile(file, options = {}) {
+      if (!isImageFile(file)) return "";
+      const dataUrl = await fileToDataUrl(file);
+      if (!dataUrl) return "";
+      const nativeSize = await getImageSize(dataUrl);
+      const dims = getCanvasDimensions();
+      const maxW = Math.max(80, dims.width * 0.82);
+      const maxH = Math.max(80, dims.height * 0.82);
+      let scale = Math.min(1, maxW / Math.max(1, nativeSize.width), maxH / Math.max(1, nativeSize.height));
+      if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+      const width = Math.max(1, Math.round(nativeSize.width * scale));
+      const height = Math.max(1, Math.round(nativeSize.height * scale));
+      const nudge = options.usePasteNudge === false ? { x: 0, y: 0 } : getPasteNudgeOffset();
+      const id = insertImageElement(dataUrl, width, height, 0, {
+        select: options.select !== false,
+        offsetX: nudge.x + Number(options.offsetX || 0),
+        offsetY: nudge.y + Number(options.offsetY || 0)
+      });
+      return id;
+    }
+
+    function loadImageElement(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.decoding = "async";
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Image decode failed."));
+        img.src = src;
+      });
+    }
+
+    async function cropImageSourceToDataUrl(src, crop) {
+      const img = await loadImageElement(src);
+      const naturalW = Math.max(1, Number(img.naturalWidth || img.width || 1));
+      const naturalH = Math.max(1, Number(img.naturalHeight || img.height || 1));
+      const renderW = Math.max(1, Number(crop.renderW || naturalW));
+      const renderH = Math.max(1, Number(crop.renderH || naturalH));
+      const scaleX = naturalW / renderW;
+      const scaleY = naturalH / renderH;
+      const sx = Math.max(0, Math.min(naturalW - 1, Number(crop.left || 0) * scaleX));
+      const sy = Math.max(0, Math.min(naturalH - 1, Number(crop.top || 0) * scaleY));
+      const sw = Math.max(1, Math.min(naturalW - sx, Number(crop.width || renderW) * scaleX));
+      const sh = Math.max(1, Math.min(naturalH - sy, Number(crop.height || renderH) * scaleY));
+      const outW = Math.max(1, Math.round(Number(crop.width || renderW)));
+      const outH = Math.max(1, Math.round(Number(crop.height || renderH)));
+      const tmp = document.createElement("canvas");
+      tmp.width = outW;
+      tmp.height = outH;
+      const ctx = tmp.getContext("2d");
+      if (!ctx) throw new Error("Crop canvas context unavailable.");
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+      return tmp.toDataURL("image/png");
+    }
+
+    function clampToRect(pt, rect) {
+      const x = Math.max(rect.x, Math.min(rect.x + rect.width, Number(pt?.x || rect.x)));
+      const y = Math.max(rect.y, Math.min(rect.y + rect.height, Number(pt?.y || rect.y)));
+      return { x, y };
+    }
+
+    function pointInRect(pt, rect) {
+      if (!pt || !rect) return false;
+      return pt.x >= rect.x && pt.x <= rect.x + rect.width && pt.y >= rect.y && pt.y <= rect.y + rect.height;
+    }
+
+    function computeRectFromPoints(a, b) {
+      const x = Math.min(Number(a?.x || 0), Number(b?.x || 0));
+      const y = Math.min(Number(a?.y || 0), Number(b?.y || 0));
+      const width = Math.abs(Number(a?.x || 0) - Number(b?.x || 0));
+      const height = Math.abs(Number(a?.y || 0) - Number(b?.y || 0));
+      return { x, y, width, height };
+    }
+
+    function renderCropOverlay() {
+      const cm = state.cropMode;
+      if (!cm) return;
+      const ensureRect = (key, className) => {
+        let el = cm[key];
+        if (!(el instanceof SVGElement)) {
+          el = document.createElementNS(SVG_NS, "rect");
+          el.setAttribute("class", className);
+          canvas.appendChild(el);
+          cm[key] = el;
+        }
+        return el;
+      };
+      const boundary = ensureRect("boundaryEl", "crop-boundary");
+      boundary.setAttribute("x", String(cm.imageBox.x));
+      boundary.setAttribute("y", String(cm.imageBox.y));
+      boundary.setAttribute("width", String(cm.imageBox.width));
+      boundary.setAttribute("height", String(cm.imageBox.height));
+      if (cm.draftRect && cm.draftRect.width > 1 && cm.draftRect.height > 1) {
+        const draft = ensureRect("draftEl", "crop-draft");
+        draft.setAttribute("x", String(cm.draftRect.x));
+        draft.setAttribute("y", String(cm.draftRect.y));
+        draft.setAttribute("width", String(cm.draftRect.width));
+        draft.setAttribute("height", String(cm.draftRect.height));
+      } else if (cm.draftEl instanceof SVGElement) {
+        cm.draftEl.remove();
+        cm.draftEl = null;
+      }
+      updateCropUi();
+    }
+
+    function clearCropOverlay(cm) {
+      if (!cm) return;
+      if (cm.boundaryEl instanceof SVGElement) cm.boundaryEl.remove();
+      if (cm.draftEl instanceof SVGElement) cm.draftEl.remove();
+      cm.boundaryEl = null;
+      cm.draftEl = null;
+    }
+
+    function startCropDraft(pt) {
+      const cm = state.cropMode;
+      if (!cm) return;
+      const start = clampToRect(pt, cm.imageBox);
+      cm.dragStart = start;
+      cm.dragCurrent = start;
+      cm.draftRect = null;
+      renderCropOverlay();
+      state.interaction = { type: "crop-drag", pointerId: null };
+    }
+
+    function updateCropDraft(pt) {
+      const cm = state.cropMode;
+      if (!cm || !cm.dragStart) return;
+      cm.dragCurrent = clampToRect(pt, cm.imageBox);
+      const rect = computeRectFromPoints(cm.dragStart, cm.dragCurrent);
+      cm.draftRect = (rect.width > 1 && rect.height > 1) ? rect : null;
+      renderCropOverlay();
+    }
+
+    function finishCropDraft() {
+      const cm = state.cropMode;
+      if (!cm) return;
+      cm.dragStart = null;
+      cm.dragCurrent = null;
+      if (cm.draftRect) {
+        setStatus("Crop area selected. Press Apply Crop or Enter.");
+      } else {
+        setStatus("Crop mode: drag inside image to select crop area.");
+      }
+      updateCropUi();
+      state.interaction = null;
+    }
+
+    function cancelImageCropMode(options = {}) {
+      const cm = state.cropMode;
+      if (!cm) return false;
+      if (state.interaction && state.interaction.type === "crop-drag") state.interaction = null;
+      clearCropOverlay(cm);
+      state.cropMode = null;
+      updateCropUi();
+      if (!options.silent) setStatus("Crop canceled.");
+      return true;
+    }
+
+    async function applyCropFromMode() {
+      const cm = state.cropMode;
+      if (!cm || !cm.draftRect) {
+        setStatus("Drag crop area first.");
+        return;
+      }
+      const imgEl = getById(cm.targetId);
+      if (!(imgEl instanceof SVGElement) || imgEl.tagName !== "image") {
+        cancelImageCropMode({ silent: true });
+        setStatus("Crop target not found.");
+        return;
+      }
+      const xAttr = Number(imgEl.getAttribute("x") || 0);
+      const yAttr = Number(imgEl.getAttribute("y") || 0);
+      const wAttr = Number(imgEl.getAttribute("width") || 0);
+      const hAttr = Number(imgEl.getAttribute("height") || 0);
+      if (wAttr < 2 || hAttr < 2) {
+        setStatus("Image size is invalid for crop.");
+        return;
+      }
+      const p1 = canvasPointToElementLocal(imgEl, cm.draftRect.x, cm.draftRect.y);
+      const p2 = canvasPointToElementLocal(imgEl, cm.draftRect.x + cm.draftRect.width, cm.draftRect.y + cm.draftRect.height);
+      const leftLocal = Math.max(xAttr, Math.min(xAttr + wAttr, Math.min(p1.x, p2.x)));
+      const topLocal = Math.max(yAttr, Math.min(yAttr + hAttr, Math.min(p1.y, p2.y)));
+      const rightLocal = Math.max(xAttr, Math.min(xAttr + wAttr, Math.max(p1.x, p2.x)));
+      const bottomLocal = Math.max(yAttr, Math.min(yAttr + hAttr, Math.max(p1.y, p2.y)));
+      const cropW = rightLocal - leftLocal;
+      const cropH = bottomLocal - topLocal;
+      if (cropW < 2 || cropH < 2) {
+        setStatus("Crop area too small.");
+        return;
+      }
+      const hrefRaw = imgEl.getAttribute("href") || imgEl.getAttribute("xlink:href") || "";
+      const source = resolveImage(hrefRaw) || hrefRaw;
+      if (!source) {
+        setStatus("Image source not found.");
+        return;
+      }
+      try {
+        const cropped = await cropImageSourceToDataUrl(source, {
+          left: leftLocal - xAttr,
+          top: topLocal - yAttr,
+          width: cropW,
+          height: cropH,
+          renderW: wAttr,
+          renderH: hAttr
+        });
+        imgEl.setAttribute("x", String(leftLocal));
+        imgEl.setAttribute("y", String(topLocal));
+        imgEl.setAttribute("width", String(cropW));
+        imgEl.setAttribute("height", String(cropH));
+        imgEl.setAttribute("href", cropped);
+        imgEl.setAttributeNS(XLINK_NS, "href", cropped);
+        requestSelectionVisualRefresh();
+        pushHistory("crop-image");
+        cancelImageCropMode({ silent: true });
+        setStatus(`Image cropped: ${Math.round(cropW)}x${Math.round(cropH)}`);
+      } catch (err) {
+        setStatus("Image crop failed.");
+        captureError("image-crop", err, { userMessage: "Image crop failed." });
+      }
+    }
+
+    function cropSelectedImage() {
+      if (state.selectedIds.length !== 1) {
+        setStatus("Select one image to crop.");
+        return;
+      }
+      const imgEl = getById(state.selectedIds[0]);
+      if (!(imgEl instanceof SVGElement) || imgEl.tagName !== "image") {
+        setStatus("Crop requires one selected image.");
+        return;
+      }
+      const width = Number(imgEl.getAttribute("width") || 0);
+      const height = Number(imgEl.getAttribute("height") || 0);
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width < 2 || height < 2) {
+        setStatus("Image size is invalid for crop.");
+        return;
+      }
+      const box = safeBBox(imgEl);
+      if (!box || box.width < 2 || box.height < 2) {
+        setStatus("Image bounding box is invalid for crop.");
+        return;
+      }
+      cancelImageCropMode({ silent: true });
+      state.cropMode = {
+        targetId: imgEl.dataset.id,
+        imageBox: { x: box.x, y: box.y, width: box.width, height: box.height },
+        boundaryEl: null,
+        draftEl: null,
+        dragStart: null,
+        dragCurrent: null,
+        draftRect: null
+      };
+      renderCropOverlay();
+      setStatus("Crop mode: drag inside image to select crop area.");
+    }
+
     function pasteRasterImageQuick(source, options = {}) {
       const mime = String(options.mime || "image/unknown");
       const types = Array.isArray(options.types) ? options.types : [];
@@ -3213,7 +4355,8 @@
       const isBlob = typeof Blob !== "undefined" && source instanceof Blob;
       const displaySrc = isBlob ? URL.createObjectURL(source) : String(source || "");
       if (!displaySrc) return "";
-      const id = insertImageElement(displaySrc, provisionalW, provisionalH, 0, { select: false });
+      const nudge = getPasteNudgeOffset();
+      const id = insertImageElement(displaySrc, provisionalW, provisionalH, 0, { select: false, offsetX: nudge.x, offsetY: nudge.y });
       if (id) setSelection([id]);
       pushHistory(historyReason);
       setLastPasteReport(route, types, `${mime}:pending${noteTail}`);
@@ -3427,10 +4570,17 @@
         if ((item?.type || "") === "text/html") {
           const htmlSvgs = extractSvgFromHtml(raw);
           if (htmlSvgs.length) {
+            const nudge = getPasteNudgeOffset();
             let count = 0;
             const allIds = [];
             htmlSvgs.forEach((svgText, idx) => {
-              const ids = importSvgText(svgText, { push: false, setMessage: false, select: false, offsetX: idx * 24, offsetY: idx * 24 });
+              const ids = importSvgText(svgText, {
+                push: false,
+                setMessage: false,
+                select: false,
+                offsetX: nudge.x + idx * 24,
+                offsetY: nudge.y + idx * 24
+              });
               if (ids.length) count += 1;
               allIds.push(...ids);
             });
@@ -3445,7 +4595,7 @@
         }
         const snippet = raw.trim().startsWith("<svg") ? raw : extractSvgSnippet(raw);
         if (!snippet) continue;
-        const ok = importSvgText(snippet).length > 0;
+        const ok = importSvgTextWithPasteNudge(snippet).length > 0;
         setLastPasteReport("item-string-svg", types, ok ? `type=${item?.type || "unknown"}` : "item parse failed");
         if (ok) return true;
       }
@@ -3624,6 +4774,8 @@
         "",
         "V : Black Arrow tool",
         "A : White Arrow tool",
+        "H : Hand tool",
+        "Space (hold) : Temporary hand/pan",
         "R : Add Rect",
         "L : Add Line",
         "Q : Add Arrow",
@@ -3634,7 +4786,10 @@
         "Ctrl/Cmd+Y : Redo",
         "Delete/Backspace : Delete selection",
         "Arrow keys : Nudge (Shift=10px)",
+        "Ctrl/Cmd+Wheel or Pinch : Zoom",
         "Alt/Ctrl (during drag/resize) : Temporarily disable snapping",
+        "Enter (in crop mode) : Apply crop",
+        "Esc (in crop mode) : Cancel crop",
         "Ctrl/Cmd+D : Duplicate",
         "Ctrl/Cmd+C/X : Copy/Cut",
         "Ctrl/Cmd+V : Paste from OS clipboard (or internal fallback if OS paste not delivered)",
@@ -3666,10 +4821,15 @@
       if (!state.textEdit) return;
       const target = getById(state.textEdit.targetId);
       if (commit && target && target.tagName === "text") {
-        target.textContent = textEditorInput.value;
+        const text = String(textEditorInput.value || "");
+        const runs = normalizeScriptRuns(text.length, state.textEdit.runs);
+        applyTextRunsToElement(target, text, runs);
         setSelection([target.dataset.id]);
         pushHistory("edit-text");
         setStatus("Text updated.");
+      } else if (!commit && target && target.tagName === "text") {
+        applyTextRunsToElement(target, state.textEdit.originalText || "", state.textEdit.originalRuns || []);
+        requestSelectionVisualRefresh();
       }
       textEditorInput.style.display = "none";
       state.textEdit = null;
@@ -3679,8 +4839,15 @@
       if (!(textEl instanceof SVGElement) || textEl.tagName !== "text" || !textEl.dataset.id) return;
       const box = textEl.getBoundingClientRect();
       const wrap = canvasWrapEl.getBoundingClientRect();
-      state.textEdit = { targetId: textEl.dataset.id };
-      textEditorInput.value = textEl.textContent || "";
+      const extracted = extractTextRunsForEditing(textEl);
+      state.textEdit = {
+        targetId: textEl.dataset.id,
+        text: extracted.text,
+        runs: normalizeScriptRuns(extracted.text.length, extracted.runs),
+        originalText: extracted.text,
+        originalRuns: normalizeScriptRuns(extracted.text.length, extracted.runs)
+      };
+      textEditorInput.value = extracted.text || "";
       textEditorInput.style.left = `${Math.max(0, box.left - wrap.left + canvasWrapEl.scrollLeft - 4)}px`;
       textEditorInput.style.top = `${Math.max(0, box.top - wrap.top + canvasWrapEl.scrollTop - 4)}px`;
       textEditorInput.style.width = `${Math.max(120, box.width + 24)}px`;
@@ -3740,6 +4907,15 @@
       return importedIds;
     }
 
+    function importSvgTextWithPasteNudge(svgText, options = {}) {
+      const nudge = getPasteNudgeOffset();
+      return importSvgText(svgText, {
+        ...options,
+        offsetX: Number(options.offsetX || 0) + nudge.x,
+        offsetY: Number(options.offsetY || 0) + nudge.y
+      });
+    }
+
     async function handlePaste(ev) {
       if (ev && typeof ev === "object") {
         if (processedPasteEvents.has(ev)) return;
@@ -3785,7 +4961,7 @@
         const plain = getDataSafe("text/plain");
         if (svgXmlText.trim().startsWith("<svg")) {
           ev.preventDefault();
-          const ok = importSvgText(svgXmlText).length > 0;
+          const ok = importSvgTextWithPasteNudge(svgXmlText).length > 0;
           setLastPasteReport("image-svg+xml", types, ok ? "vector imported" : "parse failed");
           if (!ok) setStatus("Paste SVG(XML) parse failed.");
           return;
@@ -3796,7 +4972,7 @@
           ev.preventDefault();
           const raw = await readClipboardItemAsText(svgItem);
           const snippet = extractSvgSnippet(raw);
-          const ok = snippet ? importSvgText(snippet).length > 0 : false;
+          const ok = snippet ? importSvgTextWithPasteNudge(snippet).length > 0 : false;
           setLastPasteReport("item-image-svg+xml", types, ok ? "vector imported" : "item parse failed");
           if (ok) return;
         }
@@ -3804,7 +4980,7 @@
         const plainSvg = plain.trim().startsWith("<svg") ? plain : extractSvgSnippet(plain);
         if (plainSvg) {
           ev.preventDefault();
-          const ok = importSvgText(plainSvg).length > 0;
+          const ok = importSvgTextWithPasteNudge(plainSvg).length > 0;
           setLastPasteReport("plain-svg", types, ok ? "vector imported" : "parse failed");
           if (!ok) setStatus("Paste SVG parse failed.");
           return;
@@ -3820,10 +4996,17 @@
         const htmlSvgs = extractSvgFromHtml(htmlText);
         if (htmlSvgs.length) {
           ev.preventDefault();
+          const nudge = getPasteNudgeOffset();
           let count = 0;
           const allIds = [];
           htmlSvgs.forEach((svgText, idx) => {
-            const ids = importSvgText(svgText, { push: false, setMessage: false, select: false, offsetX: idx * 24, offsetY: idx * 24 });
+            const ids = importSvgText(svgText, {
+              push: false,
+              setMessage: false,
+              select: false,
+              offsetX: nudge.x + idx * 24,
+              offsetY: nudge.y + idx * 24
+            });
             if (ids.length > 0) count += 1;
             allIds.push(...ids);
           });
@@ -3855,11 +5038,16 @@
         const htmlImgSrcs = extractImageSrcFromHtml(htmlText);
         if (htmlImgSrcs.length) {
           ev.preventDefault();
+          const nudge = getPasteNudgeOffset();
           let inserted = 0;
           const allIds = [];
           for (const [idx, src] of htmlImgSrcs.slice(0, 20).entries()) {
             const size = await getImageSize(src);
-            const id = insertImageElement(src, size.width, size.height, idx, { select: false });
+            const id = insertImageElement(src, size.width, size.height, idx, {
+              select: false,
+              offsetX: nudge.x,
+              offsetY: nudge.y
+            });
             if (id) allIds.push(id);
             inserted += 1;
           }
@@ -3899,7 +5087,7 @@
                   const blob = await cItem.getType("image/svg+xml");
                   const raw = await blob.text();
                   const snippet = extractSvgSnippet(raw);
-                  if (snippet && importSvgText(snippet).length > 0) {
+                  if (snippet && importSvgTextWithPasteNudge(snippet).length > 0) {
                     setLastPasteReport("clipboard-api-svg", cTypes, "vector imported via clipboard.read");
                     return true;
                   }
@@ -3909,10 +5097,17 @@
                   const html = await blob.text();
                   const htmlSvgs = extractSvgFromHtml(html);
                   if (htmlSvgs.length) {
+                    const nudge = getPasteNudgeOffset();
                     let count = 0;
                     const allIds = [];
                     htmlSvgs.forEach((svgText, idx) => {
-                      const ids = importSvgText(svgText, { push: false, setMessage: false, select: false, offsetX: idx * 24, offsetY: idx * 24 });
+                      const ids = importSvgText(svgText, {
+                        push: false,
+                        setMessage: false,
+                        select: false,
+                        offsetX: nudge.x + idx * 24,
+                        offsetY: nudge.y + idx * 24
+                      });
                       if (ids.length) count += 1;
                       allIds.push(...ids);
                     });
@@ -3929,7 +5124,7 @@
                   const blob = await cItem.getType("text/plain");
                   const plain = await blob.text();
                   const snippet = plain.trim().startsWith("<svg") ? plain : extractSvgSnippet(plain);
-                  if (snippet && importSvgText(snippet).length > 0) {
+                  if (snippet && importSvgTextWithPasteNudge(snippet).length > 0) {
                     setLastPasteReport("clipboard-api-plain-svg", cTypes, "vector imported via clipboard.read");
                     return true;
                   }
@@ -3939,7 +5134,12 @@
                   const blob = await cItem.getType(imageType);
                   const dataUrl = await fileToDataUrl(blob);
                   const size = await getImageSize(dataUrl);
-                  const id = insertImageElement(dataUrl, size.width, size.height, 0, { select: false });
+                  const nudge = getPasteNudgeOffset();
+                  const id = insertImageElement(dataUrl, size.width, size.height, 0, {
+                    select: false,
+                    offsetX: nudge.x,
+                    offsetY: nudge.y
+                  });
                   if (id) {
                     setSelection([id]);
                     pushHistory("paste-clipboard-api-image");
@@ -3958,7 +5158,7 @@
           if (typeof cb.readText === "function") {
             const t = await cb.readText();
             const snippet = t && (t.trim().startsWith("<svg") ? t : extractSvgSnippet(t));
-            if (snippet && importSvgText(snippet).length > 0) {
+            if (snippet && importSvgTextWithPasteNudge(snippet).length > 0) {
               setLastPasteReport("clipboard-api-readText-svg", ["text/plain"], "vector imported via readText");
               return true;
             }
@@ -3986,6 +5186,37 @@
       rect.setAttribute("height", "0");
       canvas.appendChild(rect);
       state.interaction = { type: "marquee", start, rect, keepCurrent, pointerId: null };
+    }
+
+    function beginPan(clientX, clientY) {
+      clearSmartGuides();
+      state.interaction = {
+        type: "pan",
+        startClientX: Number(clientX),
+        startClientY: Number(clientY),
+        startScrollLeft: canvasWrapEl.scrollLeft,
+        startScrollTop: canvasWrapEl.scrollTop,
+        pointerId: null
+      };
+      canvasWrapEl.classList.add("is-panning");
+      updateToolCursor();
+    }
+
+    function updatePan(clientX, clientY) {
+      const it = state.interaction;
+      if (!it || it.type !== "pan") return;
+      const dx = Number(clientX) - it.startClientX;
+      const dy = Number(clientY) - it.startClientY;
+      canvasWrapEl.scrollLeft = it.startScrollLeft - dx;
+      canvasWrapEl.scrollTop = it.startScrollTop - dy;
+    }
+
+    function finishPan() {
+      const it = state.interaction;
+      if (!it || it.type !== "pan") return;
+      state.interaction = null;
+      canvasWrapEl.classList.remove("is-panning");
+      updateToolCursor();
     }
 
     function updateMarquee(pt) {
@@ -4074,8 +5305,34 @@
       return best;
     }
 
-    function beginDrag(start) {
-      const elements = getTopSelectedElements();
+    function cloneElements(elements, options = {}) {
+      const offsetX = Number(options.offsetX || 0);
+      const offsetY = Number(options.offsetY || 0);
+      const stripGroupLabels = options.stripGroupLabels !== false;
+      const clones = [];
+      (Array.isArray(elements) ? elements : []).forEach((el) => {
+        if (!(el instanceof SVGElement) || !(el.parentNode instanceof SVGElement)) return;
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll?.("[data-id]").forEach((n) => n.removeAttribute("data-id"));
+        clone.removeAttribute("data-id");
+        sanitizeSvgTree(clone);
+        if (stripGroupLabels && clone instanceof SVGElement) {
+          clone.querySelectorAll?.('[data-fm-group-label="1"]').forEach((n) => n.remove());
+        }
+        ensureId(clone);
+        const t = getTranslate(el);
+        setTranslate(clone, t.x + offsetX, t.y + offsetY);
+        el.parentNode.appendChild(clone);
+        assignIds(clone);
+        if (clone.dataset.id) clones.push(clone.dataset.id);
+      });
+      return clones;
+    }
+
+    function beginDrag(start, options = {}) {
+      const elements = Array.isArray(options.elements) && options.elements.length
+        ? options.elements
+        : getTopSelectedElements();
       if (!elements.length) return;
       const original = new Map();
       elements.forEach((el) => original.set(el.dataset.id, getTranslate(el)));
@@ -4089,7 +5346,10 @@
         moved: false,
         pointerId: null,
         movingBounds,
-        snapTargets
+        snapTargets,
+        fromRightCopy: !!options.fromRightCopy,
+        sourceSelection: Array.isArray(options.sourceSelection) ? [...options.sourceSelection] : [],
+        clonedIds: Array.isArray(options.clonedIds) ? [...options.clonedIds] : []
       };
       clearSmartGuides();
     }
@@ -4107,9 +5367,12 @@
           .map((label) => {
             const attrSize = Number(label.getAttribute("font-size") || "");
             const computedSize = Number.parseFloat(window.getComputedStyle(label).fontSize || "");
-            const fontSize = Number.isFinite(attrSize) && attrSize > 0
-              ? attrSize
-              : (Number.isFinite(computedSize) && computedSize > 0 ? computedSize : 16);
+            const baseSize = Number(label.dataset.markBaseSize || "");
+            const fontSize = Number.isFinite(baseSize) && baseSize > 0
+              ? baseSize
+              : (Number.isFinite(attrSize) && attrSize > 0
+                ? attrSize
+                : (Number.isFinite(computedSize) && computedSize > 0 ? computedSize : 16));
             const prior = state.markLabelComp[label.dataset.id] || null;
             const baseRaw = prior && typeof prior.baseTransform === "string"
               ? prior.baseTransform
@@ -4457,7 +5720,10 @@
             baseTransform: String(info.baseTransform || "")
           };
           applyMarkLabelCompensation(label);
-          label.setAttribute("font-size", String(Number(info.fontSize || 16)));
+          const locked = Math.max(6, Math.round(Number(info.fontSize || 16)));
+          label.dataset.markBaseSize = String(locked);
+          label.setAttribute("font-size", String(locked));
+          label.style.setProperty("font-size", `${locked}px`);
         });
       }
       it.moved = true;
@@ -4512,7 +5778,20 @@
       const it = state.interaction;
       if (!it || it.type !== "drag") return;
       clearSmartGuides();
-      if (it.moved) pushHistory("drag-move", { coalesce: true, withinMs: 400 });
+      if (it.fromRightCopy) {
+        if (!it.moved) {
+          (it.clonedIds || []).forEach((id) => {
+            const el = getById(id);
+            if (el instanceof SVGElement) el.remove();
+          });
+          if (Array.isArray(it.sourceSelection)) setSelection(it.sourceSelection);
+        } else {
+          pushHistory("copy-drag");
+          state.suppressContextMenuOnce = true;
+        }
+      } else if (it.moved) {
+        pushHistory("drag-move", { coalesce: true, withinMs: 400 });
+      }
       state.interaction = null;
     }
 
@@ -4545,18 +5824,9 @@
         if (el) el.addEventListener("click", handler);
       };
 
-      document.getElementById("toolSelect").addEventListener("click", () => {
-        state.tool = "select";
-        document.getElementById("toolSelect").classList.add("active");
-        document.getElementById("toolDirect").classList.remove("active");
-        updateToolCursor();
-      });
-      document.getElementById("toolDirect").addEventListener("click", () => {
-        state.tool = "direct";
-        document.getElementById("toolDirect").classList.add("active");
-        document.getElementById("toolSelect").classList.remove("active");
-        updateToolCursor();
-      });
+      document.getElementById("toolSelect").addEventListener("click", () => setTool("select", { withStatus: true }));
+      document.getElementById("toolDirect").addEventListener("click", () => setTool("direct", { withStatus: true }));
+      document.getElementById("toolHand").addEventListener("click", () => setTool("hand", { withStatus: true }));
       document.getElementById("shortcutsBtn").addEventListener("click", showShortcutHelp);
       document.getElementById("shortcutCloseBtn").addEventListener("click", closeShortcutHelp);
       document.getElementById("markEditorUpBtn").addEventListener("click", () => {
@@ -4648,7 +5918,7 @@
       }
       if (figureEditorFontSizeEl) {
         figureEditorFontSizeEl.addEventListener("input", () => {
-          const next = normalizeFigureFontSize(Number(figureEditorFontSizeEl.value || 28));
+          const next = normalizeFigureFontSize(Number(figureEditorFontSizeEl.value || FIGURE_TITLE_DEFAULT_FONT_SIZE));
           figureEditorFontSizeEl.value = String(next);
         });
         figureEditorFontSizeEl.addEventListener("keydown", (e) => {
@@ -4713,18 +5983,30 @@
       document.getElementById("arrowSizeInput").addEventListener("change", () => {
         if (state.selectedIds.length !== 1) return;
         const selected = getById(state.selectedIds[0]);
-        if (!(selected instanceof SVGElement) || selected.tagName !== "line" || selected.dataset.arrow !== "1") return;
+        if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
         const { size, stroke } = getArrowControlValues();
-        applyArrowStyle(selected, size, stroke);
-        pushHistory("arrow-style");
-        setStatus("Arrow style updated.");
+        if (selected.dataset.arrow === "1") {
+          applyArrowStyle(selected, size, stroke);
+          pushHistory("arrow-length");
+          setStatus(`Arrow length: ${Math.round(getLineLength(selected))}`);
+        } else {
+          setLineLength(selected, size);
+          pushHistory("line-length");
+          requestSelectionVisualRefresh();
+          setStatus(`Line length: ${Math.round(getLineLength(selected))}`);
+        }
       });
       document.getElementById("arrowSizeInput").addEventListener("input", () => {
         if (state.selectedIds.length !== 1) return;
         const selected = getById(state.selectedIds[0]);
-        if (!(selected instanceof SVGElement) || selected.tagName !== "line" || selected.dataset.arrow !== "1") return;
+        if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
         const { size, stroke } = getArrowControlValues();
-        applyArrowStyle(selected, size, stroke);
+        if (selected.dataset.arrow === "1") {
+          applyArrowStyle(selected, size, stroke);
+        } else {
+          setLineLength(selected, size);
+          requestSelectionVisualRefresh();
+        }
       });
       document.getElementById("arrowStrokeInput").addEventListener("change", () => {
         applyStrokeControlToSelectedLines({ push: true, withStatus: true });
@@ -4738,11 +6020,81 @@
       document.getElementById("markFontSizeInput").addEventListener("input", () => {
         applyGlobalMarkFontSize({ push: false, withStatus: false });
       });
+      document.getElementById("textFontSizeInput").addEventListener("change", () => {
+        applyTextFontSizeToSelection({ push: true, withStatus: true });
+      });
+      document.getElementById("textFontSizeInput").addEventListener("input", () => {
+        applyTextFontSizeToSelection({ push: false, withStatus: false });
+      });
+      document.getElementById("textColorInput").addEventListener("change", () => {
+        applyTextColorToSelection({ push: true, withStatus: true });
+      });
+      document.getElementById("textColorInput").addEventListener("input", () => {
+        applyTextColorToSelection({ push: false, withStatus: false });
+      });
+      document.getElementById("textBoldBtn").addEventListener("click", toggleTextBold);
+      document.getElementById("textItalicBtn").addEventListener("click", toggleTextItalic);
+      ["textSuperBtn", "textSubBtn"].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.addEventListener("mousedown", (e) => {
+            if (state.textEdit) e.preventDefault();
+          });
+        }
+      });
+      document.getElementById("textSuperBtn").addEventListener("click", () => toggleTextScript("super"));
+      document.getElementById("textSubBtn").addEventListener("click", () => toggleTextScript("sub"));
+      document.getElementById("objectFillColorInput").addEventListener("change", () => {
+        applyObjectFillColor({ push: true, withStatus: true });
+      });
+      document.getElementById("objectFillColorInput").addEventListener("input", () => {
+        applyObjectFillColor({ push: false, withStatus: false });
+      });
+      document.getElementById("objectStrokeColorInput").addEventListener("change", () => {
+        applyObjectStrokeColor({ push: true, withStatus: true });
+      });
+      document.getElementById("objectStrokeColorInput").addEventListener("input", () => {
+        applyObjectStrokeColor({ push: false, withStatus: false });
+      });
+      document.getElementById("objectStrokeToggle").addEventListener("change", () => {
+        applyObjectStrokeToggle({ push: true, withStatus: true });
+      });
+      document.getElementById("cropImageBtn").addEventListener("click", () => {
+        cropSelectedImage();
+      });
+      document.getElementById("cropApplyBtn").addEventListener("click", () => {
+        applyCropFromMode();
+      });
+      document.getElementById("cropCancelBtn").addEventListener("click", () => {
+        cancelImageCropMode();
+      });
+      document.getElementById("zoomOutBtn").addEventListener("click", () => {
+        zoomByFactor(1 / 1.2);
+      });
+      document.getElementById("zoomInBtn").addEventListener("click", () => {
+        zoomByFactor(1.2);
+      });
+      document.getElementById("zoomResetBtn").addEventListener("click", () => {
+        setCanvasZoom(1);
+      });
+      document.getElementById("zoomSlider").addEventListener("input", (e) => {
+        const pct = Number(e.target?.value || 100);
+        setCanvasZoom(pct / 100, null, null, { silent: true });
+      });
+      document.getElementById("zoomPercentInput").addEventListener("change", (e) => {
+        const raw = Number(e.target?.value || 100);
+        const clamped = Math.max(Math.round(MIN_VIEW_SCALE * 100), Math.min(Math.round(MAX_VIEW_SCALE * 100), Math.round(raw)));
+        e.target.value = String(clamped);
+        setCanvasZoom(clamped / 100);
+      });
 
       const fileInput = document.getElementById("openFileInput");
       const importInput = document.getElementById("importFileInput");
       bindClick("openSvg", () => {
         if (fileInput) fileInput.click();
+      });
+      bindClick("importSvgBtn", () => {
+        if (importInput) importInput.click();
       });
       if (fileInput) fileInput.addEventListener("change", async (e) => {
         const file = e.target.files?.[0];
@@ -4768,6 +6120,51 @@
           captureError("import-file-read", err, { userMessage: "SVG import failed." });
         }
         importInput.value = "";
+      });
+
+      const hasDroppedImage = (dt) => {
+        if (!dt) return false;
+        const files = Array.from(dt.files || []);
+        if (files.some((f) => isImageFile(f))) return true;
+        const items = Array.from(dt.items || []);
+        return items.some((it) => String(it.type || "").toLowerCase().startsWith("image/"));
+      };
+      const clearDragOver = () => canvasWrapEl.classList.remove("drag-over");
+      canvasWrapEl.addEventListener("dragenter", (e) => {
+        if (!hasDroppedImage(e.dataTransfer)) return;
+        e.preventDefault();
+        canvasWrapEl.classList.add("drag-over");
+      });
+      canvasWrapEl.addEventListener("dragover", (e) => {
+        if (!hasDroppedImage(e.dataTransfer)) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+        canvasWrapEl.classList.add("drag-over");
+      });
+      canvasWrapEl.addEventListener("dragleave", (e) => {
+        if (!(e.target instanceof Node) || !canvasWrapEl.contains(e.relatedTarget)) clearDragOver();
+      });
+      canvasWrapEl.addEventListener("drop", async (e) => {
+        clearDragOver();
+        const files = Array.from(e.dataTransfer?.files || []).filter((f) => isImageFile(f));
+        if (!files.length) return;
+        e.preventDefault();
+        const ids = [];
+        for (const file of files.slice(0, 20)) {
+          try {
+            const id = await importImageFile(file, { select: false });
+            if (id) ids.push(id);
+          } catch (err) {
+            captureError("drop-image-import", err, { userMessage: "Dropped image import failed." });
+          }
+        }
+        if (!ids.length) {
+          setStatus("Drop import failed: no supported image files.");
+          return;
+        }
+        setSelection(ids);
+        pushHistory("drop-image-import");
+        setStatus(`Imported ${ids.length} image file(s) by drag & drop.`);
       });
 
       document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
@@ -4799,7 +6196,8 @@
         if (!state.pinch.active || e.touches.length < 2) return;
         const metrics = getTouchMetrics(e.touches);
         if (!metrics || metrics.distance < 4) return;
-        const factor = metrics.distance / Math.max(state.pinch.startDistance, 1);
+        const rawFactor = metrics.distance / Math.max(state.pinch.startDistance, 1);
+        const factor = Math.pow(Math.max(0.05, rawFactor), 1.45);
         setCanvasZoom((state.pinch.startScale || 1) * factor, metrics.centerX, metrics.centerY, { silent: true });
         e.preventDefault();
       }, { passive: false });
@@ -4819,6 +6217,11 @@
       }, { passive: true });
 
       canvas.addEventListener("contextmenu", (e) => {
+        if (state.suppressContextMenuOnce) {
+          state.suppressContextMenuOnce = false;
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
         const raw = closestEditableTarget(e.target);
         let target = null;
@@ -4869,11 +6272,61 @@
       });
 
       canvas.addEventListener("pointerdown", (e) => {
+        if (e.button === 2) {
+          if (state.pinch.active || state.cropMode) return;
+          closeContextMenu();
+          closeFigureEditor();
+          const pt = getSvgPoint(e.clientX, e.clientY);
+          const raw = closestEditableTarget(e.target);
+          const stack = getEditableTargetsAtPoint(e.clientX, e.clientY);
+          if (!raw && !stack.length) return;
+          const effectiveTool = getEffectiveTool();
+          let target = null;
+          if (effectiveTool === "direct") {
+            const directRaw = pickDirectTargetFromStack(stack) || raw || stack[0] || null;
+            target = resolveDirectTextLikeTarget(directRaw);
+          } else {
+            target = resolveTargetByTool(raw || stack[0] || null);
+          }
+          if (!(target instanceof SVGElement) || !target.dataset.id) return;
+          if (!state.selectedIds.includes(target.dataset.id)) setSelection([target.dataset.id]);
+          const sourceSelection = [...state.selectedIds];
+          const selected = getTopSelectedElements();
+          const clonedIds = cloneElements(selected, { offsetX: 0, offsetY: 0, stripGroupLabels: false });
+          if (!clonedIds.length) return;
+          const clonedEls = clonedIds.map((id) => getById(id)).filter((el) => el instanceof SVGElement);
+          if (!clonedEls.length) return;
+          setSelection(clonedIds);
+          beginDrag(pt, { elements: clonedEls, fromRightCopy: true, sourceSelection, clonedIds });
+          if (state.interaction) state.interaction.pointerId = e.pointerId;
+          if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+          return;
+        }
         if (e.button !== 0) return;
         if (state.pinch.active) return;
         if (e.pointerType !== "touch") focusPasteSink();
         closeContextMenu();
         closeFigureEditor();
+        if (state.cropMode) {
+          const pt = getSvgPoint(e.clientX, e.clientY);
+          if (!pointInRect(pt, state.cropMode.imageBox)) {
+            setStatus("Crop mode: drag inside the selected image.");
+            return;
+          }
+          startCropDraft(pt);
+          if (state.interaction) state.interaction.pointerId = e.pointerId;
+          if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+          e.preventDefault();
+          return;
+        }
+        const effectiveTool = getEffectiveTool();
+        if (effectiveTool === "hand") {
+          beginPan(e.clientX, e.clientY);
+          if (state.interaction) state.interaction.pointerId = e.pointerId;
+          if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+          e.preventDefault();
+          return;
+        }
         const handleEl = e.target instanceof SVGElement ? e.target.closest(".selection-handle") : null;
         if (handleEl instanceof SVGElement) {
           const pt = getSvgPoint(e.clientX, e.clientY);
@@ -4891,7 +6344,7 @@
         const hasCanvasHit = !!raw || stack.length > 0;
         if (hasCanvasHit) {
           let target = null;
-          if (state.tool === "direct") {
+          if (effectiveTool === "direct") {
             const directRaw = pickDirectTargetFromStack(stack) || raw || null;
             const directA = resolveDirectTextLikeTarget(directRaw);
             const labelNear = findNearestLabelLikeTargetByPoint(pt, 44);
@@ -4975,6 +6428,18 @@
         openInlineTextEditor(textEl);
       });
 
+      textEditorInput.addEventListener("input", () => {
+        if (!state.textEdit) return;
+        const nextText = String(textEditorInput.value || "");
+        if (nextText === state.textEdit.text) return;
+        state.textEdit.text = nextText;
+        if (nextText.length !== Number(state.textEdit.runs?.reduce((max, run) => Math.max(max, Number(run?.end || 0)), 0) || 0)) {
+          state.textEdit.runs = nextText.length ? [{ start: 0, end: nextText.length, mode: "normal" }] : [];
+        } else {
+          state.textEdit.runs = normalizeScriptRuns(nextText.length, state.textEdit.runs);
+        }
+      });
+
       textEditorInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -4996,6 +6461,8 @@
         if (it.pointerId !== null && e.pointerId !== it.pointerId) return;
         const pt = getSvgPoint(e.clientX, e.clientY);
         const disableSnap = !!(e.altKey || e.ctrlKey);
+        if (it.type === "pan") updatePan(e.clientX, e.clientY);
+        if (it.type === "crop-drag") updateCropDraft(pt);
         if (it.type === "drag") updateDrag(pt, { disableSnap });
         if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
         if (it.type === "marquee") updateMarquee(pt);
@@ -5007,6 +6474,8 @@
         if (it.pointerId !== null && e.pointerId !== it.pointerId) return;
         const capturedId = it.pointerId;
         const type = it.type;
+        if (type === "pan") finishPan();
+        if (type === "crop-drag") finishCropDraft();
         if (type === "drag") finishDrag();
         if (type === "resize") finishResize();
         if (type === "marquee") finishMarquee();
@@ -5019,6 +6488,22 @@
         if (!state.interaction) return;
         if (state.interaction.pointerId !== null && e.pointerId !== state.interaction.pointerId) return;
         const capturedId = state.interaction.pointerId;
+        if (state.interaction.type === "drag" && state.interaction.fromRightCopy) {
+          (state.interaction.clonedIds || []).forEach((id) => {
+            const el = getById(id);
+            if (el instanceof SVGElement) el.remove();
+          });
+          if (Array.isArray(state.interaction.sourceSelection)) setSelection(state.interaction.sourceSelection);
+        }
+        if (state.interaction.type === "crop-drag" && state.cropMode) {
+          state.cropMode.dragStart = null;
+          state.cropMode.dragCurrent = null;
+          updateCropUi();
+        }
+        if (state.interaction.type === "pan") {
+          canvasWrapEl.classList.remove("is-panning");
+          updateToolCursor();
+        }
         clearSmartGuides();
         state.interaction = null;
         if (capturedId !== null && canvas.releasePointerCapture) {
@@ -5063,6 +6548,16 @@
           closeAppMenus();
           return;
         }
+        if (e.key === "Escape" && state.cropMode) {
+          e.preventDefault();
+          cancelImageCropMode();
+          return;
+        }
+        if (e.key === "Enter" && state.cropMode) {
+          e.preventDefault();
+          applyCropFromMode();
+          return;
+        }
         if (e.key === "Escape") {
           closeInlineTextEditor(false);
           closeContextMenu();
@@ -5075,6 +6570,16 @@
           getTopSelectedElements().forEach((el) => el.remove());
           clearSelection();
           pushHistory("delete");
+          return;
+        }
+        if (e.code === "Space" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          if (!state.spacePanActive) {
+            state.spacePanActive = true;
+            syncToolButtons();
+            updateToolCursor();
+            setStatus("Tool: Hand (Space hold)");
+          }
           return;
         }
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
@@ -5138,20 +6643,17 @@
         }
         if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "v") {
           e.preventDefault();
-          state.tool = "select";
-          document.getElementById("toolSelect").classList.add("active");
-          document.getElementById("toolDirect").classList.remove("active");
-          updateToolCursor();
-          setStatus("Tool: Black Arrow");
+          setTool("select", { withStatus: true });
           return;
         }
         if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
           e.preventDefault();
-          state.tool = "direct";
-          document.getElementById("toolDirect").classList.add("active");
-          document.getElementById("toolSelect").classList.remove("active");
-          updateToolCursor();
-          setStatus("Tool: White Arrow");
+          setTool("direct", { withStatus: true });
+          return;
+        }
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "h") {
+          e.preventDefault();
+          setTool("hand", { withStatus: true });
           return;
         }
         if ((e.key === "Enter" || e.key === "F2") && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -5213,6 +6715,14 @@
         }
       });
 
+      window.addEventListener("keyup", (e) => {
+        if (e.code !== "Space") return;
+        if (!state.spacePanActive) return;
+        state.spacePanActive = false;
+        syncToolButtons();
+        updateToolCursor();
+      });
+
       window.addEventListener("paste", handlePaste);
       document.addEventListener("paste", handlePaste);
       canvasWrapEl.addEventListener("paste", handlePaste);
@@ -5233,8 +6743,12 @@
       assignIds();
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();
+      setupToolbarTabs();
       // focusPasteSink();
+      syncToolButtons();
       updateToolCursor();
+      syncZoomControls();
+      updateCropUi();
       try {
         const lastErr = JSON.parse(localStorage.getItem(LAST_ERROR_KEY) || "null");
         if (lastErr && typeof lastErr === "object" && lastErr.id) {
@@ -5255,6 +6769,10 @@
         if (Array.isArray(history)) {
           state.pasteReportHistory = history.filter((r) => r && typeof r === "object" && r.route).slice(-30);
         }
+      } catch (_) {}
+      try {
+        // Trim oversized legacy autosave payloads on startup.
+        setAutosaveRecords(getAutosaveRecords());
       } catch (_) {}
       const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
       document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";

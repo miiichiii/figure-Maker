@@ -44,3 +44,7 @@
 - リサイズはtransformベースを維持する。属性（`x/y/width/height`）直接更新へ戻すと、貼り付けSVG（親子transformあり）で位置ドリフトが再発する。
 - 貼り付け時は `data-id/data-tx/data-ty/data-base-transform` を必ず除去してから再採番する。
 - line/polylineは `vector-effect: non-scaling-stroke` を維持し、短縮時の見た目太りを防ぐ。
+- Rect/Ellipse/Circle/Path/Polygon も `vector-effect: non-scaling-stroke` を強制し、非等方スケール時の線幅崩れ（縦横差）を防ぐ。
+- Markラベルは `data-mark-base-size` を正本にして、グループリサイズ中に毎フレーム `font-size` と補正transformを再適用する。
+- Markラベルはリサイズ対象から除外する。Markサイズ変更は `Mark size` 入力のみに統一する。
+- 同種バグ再発時は「transform計算の修正」だけで済ませず、`03_REVIEW_CHECKLIST.md` の回帰チェックを同時に追加して再発防止を固定する。

@@ -32,6 +32,28 @@
 - [done][P1-Med] stroke入力のリアルタイム反映を強化（選択中Line/Arrowへinput時に即時適用）
 
 ## P1 (仕上げ)
+- [done][P1-High] 非等方リサイズ後の線幅崩れ修正（shape系に non-scaling-stroke を強制）
+- [done][P1-High] グループ拡大縮小時のMarkサイズ/字形固定を再強化（`data-mark-base-size`運用）
+- [done][P1-Med] Markラベルをリサイズ対象から除外（誤操作での変形を防止）
+- [done][P1-High] 上付き/下付きは選択文字のみ適用（部分文字スタイル化）
+- [done][P1-Med] BBoxハンドル形状を丸へ変更
+- [done][P1-Med] 四角/円系オブジェクトの線あり/なしトグルを追加
+- [done][P1-High] 画像ファイルのドラッグ&ドロップImportを追加
+- [done][P1-Med] Copy/Paste時の貼り付け位置を段階オフセット（増えたことを視認）
+- [done][P1-Med] 右クリックドラッグでコピー移動を実装
+- [done][P1-Med] ピンチズーム感度を向上
+- [done][P1-High] Arrowサイズ変更時に三角が暴れる不具合修正（長さのみ変更）
+- [done][P1-High] Group→Ungroupで位置が戻る不具合修正（見た目維持）
+- [done][P1-Med] Zoom上限拡張（一定以上拡大できない問題の修正）
+- [done][P1-High] Cropをドラッグ式に変更（選択画像に対しドラッグ範囲→Apply/Cancel）
+- [done][P1-High] ツールバーにTool/Object/Textタブを実装（機能を用途別に整理）
+- [done][P1-High] Toolタブへ選択/Hand/Zoom/Crop/Group/Ungroup/Duplicate/Undo/Redo/保存系を配置
+- [done][P1-High] ObjectタブへRect/Ellipse/Line/Arrow/Arrow設定/Fill/Stroke/Alignを配置
+- [done][P1-High] TextタブへText/Text style(Bold/Italic/Sup/Sub)/Font size/Colorを配置
+- [done][P1-High] 通常Text size変更が効かない回帰を修正（テキストサイズUIと選択同期を復元）
+- [done][P1-High] 画像トリミング機能を実装（選択画像の実トリム）
+- [done][P1-Med] キャンバスズームUIを実装（+/-、スライダー、Reset、ピンチ最大拡張）
+- [done][P1-High] 手のひらツールを実装（ボタン + Space一時パン）
 - [done][P1-High] 貼り付け直後の`sel:1`グループ選択で子要素が全点線になる視覚ノイズを修正（group子への選択クラス付与を廃止）
 - [done][P1-High] White Arrowで重なり図形下の文字を選びづらい問題を修正（クリック近傍text優先）
 - [done][P1-High] 選択枠座標のズレ修正（`getScreenCTM`→canvas逆変換でBBoxを同一座標系化）
