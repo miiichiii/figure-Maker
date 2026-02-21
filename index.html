@@ -561,82 +561,81 @@
 
     /* Tool Tab Active Theme (Panel only) */
     body[data-active-tab="tool"] .toolbar-content {
-      background: var(--tab-tool);
-      color: #ffffff;
+      background: #cfbc99;
+      color: var(--ink);
     }
     body[data-active-tab="tool"] .toolbar {
-      border-bottom-color: #6f5433;
+      border-bottom-color: #a78c62;
     }
     body[data-active-tab="tool"] .toolbar-tabs {
-      border-bottom-color: var(--tab-tool);
+      border-bottom-color: #cfbc99;
     }
     body[data-active-tab="tool"] .group {
-      border-right-color: rgba(255, 255, 255, 0.25);
+      border-right-color: rgba(78, 61, 35, 0.2);
     }
 
-    /* Tool tab persistent color + 3D feel */
+    /* Tool tab persistent color + soft 3D */
     .toolbar-tab-btn[data-toolbar-tab-btn="tool"] {
-      background: linear-gradient(to bottom, #b99666 0%, var(--tab-tool) 58%, #7c5a34 100%);
-      color: #fff7ea;
-      border-color: var(--tab-tool-border);
-      box-shadow:
-        inset 0 2px 0 rgba(255,255,255,0.26),
-        inset 1px 1px 0 rgba(255,255,255,0.18),
-        0 1px 0 rgba(0,0,0,0.08);
-      text-shadow: 0 1px 1px rgba(0,0,0,0.22);
+      background: #d8c5a2;
+      color: #2f2a22;
+      border-color: #a88d62;
+      box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.45);
     }
     .toolbar-tab-btn[data-toolbar-tab-btn="tool"]:hover {
-      filter: brightness(1.1) saturate(1.04);
-      color: #fff;
+      background: #cfbc98;
+      color: #2b2721;
+      filter: none;
     }
     .toolbar-tab-btn[data-toolbar-tab-btn="tool"].active {
-      background: linear-gradient(to bottom, #c8a876 0%, #9a7547 58%, #7a5732 100%);
-      color: #fff;
-      border-color: var(--tab-tool-border);
-      border-bottom-color: #9a7547;
+      background: #bea176;
+      color: #2c241a;
+      border-color: #977a4f;
+      border-bottom-color: #bea176;
       box-shadow:
-        inset 0 2px 0 rgba(255,255,255,0.34),
-        inset 1px 1px 0 rgba(255,255,255,0.18),
-        0 1px 0 rgba(0,0,0,0.1);
-      text-shadow: 0 1px 2px rgba(0,0,0,0.28);
+        inset 0 2px 0 rgba(255, 255, 255, 0.34),
+        inset 0 -1px 0 rgba(78, 61, 35, 0.18);
+      text-shadow: none;
       z-index: 20;
     }
 
-    /* Tool tab buttons: stronger contrast so button boundaries are clear */
+    /* Tool tab buttons: calm beige controls */
     body[data-active-tab="tool"] .group button {
-      border-color: #6f522f;
-      background: linear-gradient(to bottom, #ddc199 0%, #be9a6a 60%, #a17d4f 100%);
-      color: #ffffff;
+      border-color: #987b52;
+      background: linear-gradient(to bottom, #d3bd98 0%, #b89a6f 100%);
+      color: #2b2a27;
       box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.32),
-        0 1px 0 rgba(0,0,0,0.08);
+        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+        0 1px 0 rgba(0, 0, 0, 0.05);
     }
     body[data-active-tab="tool"] .group button:hover {
-      background: linear-gradient(to bottom, #e6ccaa 0%, #c6a173 60%, #aa8353 100%);
-      border-color: #5f4527;
+      background: linear-gradient(to bottom, #dcc8a6 0%, #c3a276 100%);
+      border-color: #876b45;
+      color: #2a241d;
     }
     body[data-active-tab="tool"] .group button.active {
-      background: #ffffff;
-      color: #6f5433;
-      border-color: #ffffff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      background: #a9895b;
+      color: #fff9ee;
+      border-color: #7c623f;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 1px 2px rgba(0, 0, 0, 0.12);
     }
     body[data-active-tab="tool"] .group label {
-      color: rgba(255, 255, 255, 0.92);
+      color: #3a3127;
       font-weight: 600;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      text-shadow: none;
     }
     body[data-active-tab="tool"] .group input,
     body[data-active-tab="tool"] .group select {
-      border-color: rgba(255, 255, 255, 0.45);
-      background: rgba(255, 255, 255, 0.96);
+      border-color: #9d8159;
+      background: #f7efe2;
       color: #2b2a27;
     }
     body[data-active-tab="tool"] .group input:focus,
     body[data-active-tab="tool"] .group select:focus {
-      background: #ffffff;
-      outline-color: #fff;
-      border-color: #fff;
+      background: #fff9ef;
+      outline-color: #c9b08a;
+      border-color: #8d724d;
     }
 
     /* Object Tab Active Theme (Panel only) */
