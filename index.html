@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.5.0/dist/svg2pdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvg@4.0.2/lib/umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
   <style>
     :root {
       --bg: #F3EFE6;
@@ -5746,12 +5747,46 @@
       if (!file) return false;
       const t = String(file.type || "").toLowerCase();
       if (t.startsWith("image/")) return true;
-      return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(String(file.name || ""));
+      return /\.(png|jpe?g|gif|webp|bmp|svg|tiff?)$/i.test(String(file.name || ""));
+    }
+
+    function isTiffFile(file) {
+      if (!file) return false;
+      const t = String(file.type || "").toLowerCase();
+      if (t === "image/tiff" || t === "image/tif") return true;
+      return /\.(tiff?)$/i.test(String(file.name || ""));
+    }
+
+    async function convertTiffToPngDataUrl(file) {
+      if (!window.UTIF) throw new Error("UTIF library missing.");
+      const buffer = await file.arrayBuffer();
+      const ifds = window.UTIF.decode(buffer);
+      if (!ifds || !ifds.length) throw new Error("Invalid TIFF structure.");
+      const first = ifds[0];
+      window.UTIF.decodeImage(buffer, first);
+      const rgba = window.UTIF.toRGBA8(first);
+      const canvas = document.createElement("canvas");
+      canvas.width = first.width;
+      canvas.height = first.height;
+      const ctx = canvas.getContext("2d");
+      const imgData = ctx.createImageData(canvas.width, canvas.height);
+      imgData.data.set(rgba);
+      ctx.putImageData(imgData, 0, 0);
+      return canvas.toDataURL("image/png");
     }
 
     async function importImageFile(file, options = {}) {
       if (!isImageFile(file)) return "";
-      const dataUrl = await fileToDataUrl(file);
+      let dataUrl = "";
+      if (isTiffFile(file)) {
+        setStatus("Converting TIFF to PNG...");
+        // Small delay to allow UI to render status
+        await new Promise(r => setTimeout(r, 50));
+        dataUrl = await convertTiffToPngDataUrl(file);
+        setStatus("TIFF converted.");
+      } else {
+        dataUrl = await fileToDataUrl(file);
+      }
       if (!dataUrl) return "";
       const nativeSize = await getImageSize(dataUrl);
       const dims = getCanvasDimensions();
