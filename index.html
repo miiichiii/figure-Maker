@@ -605,13 +605,7 @@
           </svg>
           <span class="sr-only">Line</span>
         </button>
-        <button id="addArrow" class="shape-icon-btn" title="Arrow (Q)" aria-label="Arrow (Q)">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M3 10 H13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
-            <path d="M11 6 L17 10 L11 14 Z" fill="currentColor"></path>
-          </svg>
-          <span class="sr-only">Arrow</span>
-        </button>
+        <!-- Arrow creation button removed: use Line + Match Arrow workflow -->
         <label for="arrowSizeInput">Arrow len</label>
         <input id="arrowSizeInput" type="number" min="20" max="2000" step="1" value="190" style="width:64px" />
         <label for="arrowHeadSizeInput">Head</label>
@@ -2043,8 +2037,27 @@
       return Math.max(8, Math.min(56, Math.round(len * 0.08 + stroke * 0.8)));
     }
 
+    function getSelectedLineElements() {
+      const out = [];
+      const seen = new Set();
+      const push = (el) => {
+        if (!(el instanceof SVGElement) || el.tagName !== "line") return;
+        ensureId(el);
+        const id = el.dataset.id || "";
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        out.push(el);
+      };
+      getTopSelectedElements().forEach((el) => {
+        if (!(el instanceof SVGElement)) return;
+        push(el);
+        if (el.tagName === "g") el.querySelectorAll("line").forEach((n) => push(n));
+      });
+      return out;
+    }
+
     function matchSelectedLinesToArrow() {
-      const selectedLines = getTopSelectedElements().filter((el) => el instanceof SVGElement && el.tagName === "line");
+      const selectedLines = getSelectedLineElements();
       if (!selectedLines.length) {
         setStatus("Select line object(s) first.");
         return;
@@ -4826,7 +4839,7 @@
         "Space (hold) : Temporary hand/pan",
         "R : Add Rect",
         "L : Add Line",
-        "Q : Add Arrow",
+        "Q : Match selected line(s) to Arrow",
         "E : Add Ellipse",
         "T : Add Text",
         "Ctrl/Cmd+Z : Undo",
@@ -5993,7 +6006,7 @@
       bindClick("newCanvas", newCanvas);
       document.getElementById("addRect").addEventListener("click", addRect);
       document.getElementById("addLine").addEventListener("click", addLine);
-      document.getElementById("addArrow").addEventListener("click", addArrow);
+      // addArrow button removed intentionally (Line + Match Arrow workflow)
       document.getElementById("addEllipse").addEventListener("click", addEllipse);
       document.getElementById("addText").addEventListener("click", addText);
       bindClick("undoBtn", undo);
@@ -6679,8 +6692,7 @@
         }
         if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "q") {
           e.preventDefault();
-          addArrow();
-          setStatus("Added Arrow.");
+          matchSelectedLinesToArrow();
           return;
         }
         if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "e") {
