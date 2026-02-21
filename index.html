@@ -9,14 +9,23 @@
   <script src="https://cdn.jsdelivr.net/npm/canvg@4.0.2/lib/umd.min.js"></script>
   <style>
     :root {
-      --bg: #f3f4f6;
-      --panel: #ffffff;
-      --ink: #111827;
-      --line: #d1d5db;
-      --accent: #2563eb;
-      --muted: #6b7280;
+      --bg: #F3EFE6;
+      --panel: #E7D7B8;
+      --card: #F6F0E3;
+      --border: #CBB489;
+      --ink: #2B2A27;
+      --muted: #4f4a41;
+      --accent: #7B5A2B;
+      --accent-hover: #B07D2B;
+      --focus: #5a8fc7;
+      --danger: #B84A3A;
+      --button-bg: var(--accent);
+      --button-text: #ffffff;
+      --input-bg: #F6F0E3;
+      --input-border: #CBB489;
+      --line: var(--border);
     }
-    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    * { box-sizing: border-box; font-family: "Zen Kaku Gothic New", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; color: var(--ink); background: var(--bg); }
     .app { height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; }
     .menu-bar {
@@ -24,8 +33,8 @@
       align-items: center;
       gap: 2px;
       padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: #f9fafb;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
       user-select: none;
       position: relative;
       z-index: 20;
@@ -35,13 +44,14 @@
       border: none;
       background: transparent;
       border-radius: 4px;
-      padding: 5px 10px;
+      padding: 6px 10px;
       font-size: 13px;
+      color: var(--ink);
     }
     .menu-root.open .menu-trigger,
     .menu-trigger:hover {
-      background: #e5e7eb;
-      color: #111827;
+      background: var(--card);
+      color: var(--ink);
     }
     .menu-panel {
       display: none;
@@ -50,10 +60,10 @@
       left: 0;
       z-index: 30;
       min-width: 220px;
-      background: #fff;
-      border: 1px solid var(--line);
+      background: var(--card);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
+      box-shadow: 0 10px 24px rgba(43, 42, 39, 0.16);
       padding: 6px;
     }
     .menu-root.open .menu-panel { display: block; }
@@ -64,13 +74,14 @@
       border: none;
       background: transparent;
       border-radius: 5px;
-      padding: 7px 9px;
+      padding: 7px 10px;
       font-size: 12px;
+      color: var(--ink);
     }
-    .menu-action:hover { background: #eef2ff; }
+    .menu-action:hover { background: var(--panel); color: var(--ink); }
     .menu-sep {
       height: 1px;
-      background: #e5e7eb;
+      background: var(--border);
       margin: 6px 0;
     }
     .toolbar {
@@ -78,7 +89,7 @@
       flex-wrap: wrap;
       gap: 8px;
       padding: 8px;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid var(--border);
       background: var(--panel);
       align-items: center;
     }
@@ -88,35 +99,43 @@
       gap: 6px;
       margin-bottom: 2px;
       padding-bottom: 6px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid var(--border);
     }
     .toolbar-tab-btn {
       min-width: 72px;
       font-weight: 700;
     }
     .toolbar-tab-btn.active {
-      background: #111827;
-      color: #fff;
-      border-color: #111827;
+      background: var(--button-bg);
+      color: var(--button-text);
+      border-color: var(--accent);
     }
-    .group { display: flex; gap: 6px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
+    .group { display: flex; gap: 6px; align-items: center; padding-right: 8px; border-right: 1px solid var(--border); }
     .group:last-child { border-right: none; }
     .group[hidden] { display: none !important; }
-    button, select {
-      border: 1px solid var(--line);
-      background: #fff;
+    button, select, input[type="number"], input[type="text"], input[type="color"] {
+      border: 1px solid var(--input-border);
+      background: var(--input-bg);
       color: var(--ink);
       border-radius: 6px;
-      padding: 5px 8px;
+      padding: 6px 10px;
       font-size: 12px;
+      line-height: 1.2;
+    }
+    button, select {
       cursor: pointer;
     }
-    button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.active { background: var(--button-bg); color: var(--button-text); border-color: var(--accent); }
+    button:hover { border-color: var(--accent-hover); }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 1px;
+    }
     .menu-bar .menu-trigger,
     .menu-bar .menu-action {
       border: none;
       background: transparent;
-      color: #111827;
+      color: var(--ink);
     }
     .tool-icon-btn {
       width: 34px;
@@ -168,26 +187,20 @@
       white-space: nowrap;
       border: 0;
     }
-    .toolbar input[type="number"] {
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--ink);
-      border-radius: 6px;
-      padding: 4px 6px;
-      font-size: 12px;
-    }
+    .toolbar input[type="number"] { text-align: right; }
     .zoom-group { gap: 4px; }
     #zoomSlider { width: 120px; }
     #zoomPercentInput { width: 62px; text-align: right; }
-    .canvas-wrap { padding: 10px; overflow: auto; position: relative; transition: background-color 0.12s ease, box-shadow 0.12s ease; }
-    .canvas-wrap.drag-over { background: #f0f7ff; box-shadow: inset 0 0 0 2px #60a5fa; }
+    .canvas-wrap { padding: 10px; overflow: auto; position: relative; background: var(--bg); transition: background-color 0.12s ease, box-shadow 0.12s ease; }
+    .canvas-wrap.drag-over { background: #efe8d8; box-shadow: inset 0 0 0 2px var(--focus); }
     .canvas-wrap.hand-mode { cursor: grab; }
     .canvas-wrap.is-panning { cursor: grabbing; }
     #canvas {
       width: 794px;
       height: 1123px;
       background: #fff;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 20px rgba(43, 42, 39, 0.18);
       user-select: none;
       touch-action: none;
     }
@@ -195,7 +208,7 @@
       padding: 6px 10px;
       font-size: 12px;
       color: var(--muted);
-      border-top: 1px solid var(--line);
+      border-top: 1px solid var(--border);
       background: var(--panel);
       min-height: 30px;
       display: flex;
@@ -204,44 +217,34 @@
     }
     #copyright {
       font-size: 11px;
-      color: #9ca3af;
+      color: var(--muted);
       margin-left: auto;
       padding-left: 8px;
     }
-    .fm-selected {
-      stroke: var(--accent) !important;
-      stroke-width: 2 !important;
-      stroke-dasharray: 4 2;
-    }
-    .fm-group-selected {
-      stroke: var(--accent) !important;
-      stroke-width: 2 !important;
-      stroke-dasharray: 4 2;
-    }
     .marquee {
-      fill: rgba(37, 99, 235, 0.12);
-      stroke: var(--accent);
+      fill: rgba(90, 143, 199, 0.14);
+      stroke: var(--focus);
       stroke-dasharray: 4 2;
       pointer-events: none;
     }
     .selection-outline {
       fill: none;
-      stroke: var(--accent);
+      stroke: var(--focus);
       stroke-width: 1.5;
       stroke-dasharray: 6 3;
       pointer-events: none;
       vector-effect: non-scaling-stroke;
     }
     .selection-handle {
-      fill: #ffffff;
-      stroke: var(--accent);
+      fill: var(--card);
+      stroke: var(--focus);
       stroke-width: 1.5;
       cursor: nwse-resize;
       vector-effect: non-scaling-stroke;
     }
     .smart-guide {
       fill: none;
-      stroke: #ef4444;
+      stroke: var(--danger);
       stroke-width: 1.2;
       stroke-dasharray: 5 3;
       opacity: 0.95;
@@ -249,16 +252,16 @@
       vector-effect: non-scaling-stroke;
     }
     .crop-boundary {
-      fill: rgba(16, 185, 129, 0.08);
-      stroke: #10b981;
+      fill: rgba(90, 143, 199, 0.08);
+      stroke: var(--focus);
       stroke-width: 1.2;
       stroke-dasharray: 6 4;
       pointer-events: none;
       vector-effect: non-scaling-stroke;
     }
     .crop-draft {
-      fill: rgba(16, 185, 129, 0.2);
-      stroke: #047857;
+      fill: rgba(90, 143, 199, 0.2);
+      stroke: var(--focus);
       stroke-width: 1.4;
       stroke-dasharray: 5 3;
       pointer-events: none;
@@ -266,10 +269,10 @@
     }
     .context-menu {
       position: fixed;
-      background: #fff;
-      border: 1px solid var(--line);
+      background: var(--card);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 8px 24px rgba(43, 42, 39, 0.18);
       display: none;
       z-index: 10;
       padding: 4px;
@@ -284,10 +287,10 @@
       border-radius: 4px;
       padding: 6px 8px;
     }
-    .context-menu button:hover { background: #eef2ff; }
+    .context-menu button:hover { background: var(--panel); }
     .context-menu button.disabled,
     .context-menu button:disabled {
-      color: #9ca3af;
+      color: var(--muted);
       background: transparent;
       cursor: default;
       pointer-events: none;
@@ -299,10 +302,10 @@
       align-items: center;
       gap: 6px;
       padding: 6px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      background: #fff;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+      background: var(--card);
+      box-shadow: 0 8px 24px rgba(43, 42, 39, 0.18);
     }
     .mark-editor input {
       width: 42px;
@@ -352,15 +355,15 @@
       display: block;
     }
     .fm-group-label {
-      font-family: Arial, sans-serif;
+      font-family: "Zen Kaku Gothic New", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-weight: bold;
-      fill: #111827;
+      fill: var(--ink);
       pointer-events: visiblePainted;
     }
     .fm-figure-title {
-      font-family: Arial, sans-serif;
+      font-family: "Zen Kaku Gothic New", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-weight: 700;
-      fill: #111827;
+      fill: var(--ink);
       pointer-events: visiblePainted;
     }
     #toggleAdvanced { display: none; }
@@ -380,10 +383,10 @@
       z-index: 30;
       min-width: 120px;
       padding: 4px 6px;
-      border: 1px solid var(--accent);
+      border: 1px solid var(--focus);
       border-radius: 4px;
       font-size: 16px;
-      background: #fff;
+      background: var(--card);
       color: var(--ink);
     }
     #pasteSink {
@@ -401,24 +404,24 @@
       bottom: 12px;
       z-index: 60;
       width: min(540px, calc(100vw - 24px));
-      background: #fff7ed;
-      border: 1px solid #fdba74;
+      background: var(--card);
+      border: 1px solid var(--danger);
       border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 8px 24px rgba(43, 42, 39, 0.2);
       padding: 10px 12px;
       display: none;
       gap: 8px;
       align-items: flex-start;
     }
     #errorNotice.show { display: flex; }
-    #errorNotice strong { color: #9a3412; font-size: 14px; }
-    #errorNoticeMeta { font-size: 12px; color: #7c2d12; margin-top: 3px; }
+    #errorNotice strong { color: var(--danger); font-size: 14px; }
+    #errorNoticeMeta { font-size: 12px; color: var(--muted); margin-top: 3px; }
     #errorNoticeActions { margin-left: auto; display: flex; gap: 6px; }
     #shortcutModal {
       position: fixed;
       inset: 0;
       z-index: 70;
-      background: rgba(17, 24, 39, 0.35);
+      background: rgba(43, 42, 39, 0.35);
       display: none;
       align-items: center;
       justify-content: center;
@@ -428,10 +431,10 @@
     #shortcutCard {
       width: min(760px, 100%);
       max-height: min(82vh, 920px);
-      background: #ffffff;
-      border: 1px solid #d1d5db;
+      background: var(--card);
+      border: 1px solid var(--border);
       border-radius: 12px;
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 16px 36px rgba(43, 42, 39, 0.22);
       display: grid;
       grid-template-rows: auto 1fr;
       overflow: hidden;
@@ -442,8 +445,8 @@
       justify-content: space-between;
       gap: 8px;
       padding: 10px 12px;
-      border-bottom: 1px solid #e5e7eb;
-      background: #f9fafb;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
     }
     #shortcutHead strong { font-size: 14px; }
     #shortcutHelpText {
@@ -454,8 +457,8 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       font-size: 12px;
       line-height: 1.5;
-      background: #ffffff;
-      color: #111827;
+      background: var(--card);
+      color: var(--ink);
     }
   </style>
 </head>
@@ -605,7 +608,15 @@
           </svg>
           <span class="sr-only">Line</span>
         </button>
+        <button id="addTriangle" class="shape-icon-btn" title="Triangle" aria-label="Triangle">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <polygon points="10,3 17,16 3,16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></polygon>
+          </svg>
+          <span class="sr-only">Triangle</span>
+        </button>
         <button id="matchArrowBtn" title="Apply arrowhead to selected line(s)">Apply Arrow</button>
+        <label for="lineStrokeWidthInput">Stroke width</label>
+        <input id="lineStrokeWidthInput" type="number" min="0.5" max="20" step="0.5" value="3" style="width:70px" />
         <label for="objectFillColorInput">Fill</label>
         <input id="objectFillColorInput" type="color" value="#dbeafe" />
         <label for="objectStrokeColorInput">Stroke</label>
@@ -772,6 +783,7 @@
     const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
     const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
     const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ffffff' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
+    const CURSOR_ROTATE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cg fill='none' stroke='%232B2A27' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.8 7.8A8 8 0 1 0 18.5 13'/%3E%3Cpath d='M17.6 3.8v5h-5'/%3E%3C/g%3E%3C/svg%3E\") 11 11, alias";
 
     const canvas = document.getElementById("canvas");
     const canvasWrapEl = document.querySelector(".canvas-wrap");
@@ -947,6 +959,7 @@
       liveAutosaveQuotaWarned: false,
       pasteNudgeCounter: 0,
       suppressContextMenuOnce: false,
+      hoverRotateReady: false,
       statusMessage: "Ready."
     };
 
@@ -1326,17 +1339,11 @@
     function applySelectionStyles() {
       canvas.querySelectorAll(".fm-selected").forEach((el) => el.classList.remove("fm-selected"));
       canvas.querySelectorAll(".fm-group-selected").forEach((el) => el.classList.remove("fm-group-selected"));
-      for (const id of state.selectedIds) {
-        const el = getById(id);
-        if (!el) continue;
-        if (el.tagName === "g") continue;
-        el.classList.add("fm-selected");
-      }
       renderSelectionOutlines();
     }
 
     function requestSelectionVisualRefresh() {
-      if (state.interaction && (state.interaction.type === "drag" || state.interaction.type === "resize")) {
+      if (state.interaction && (state.interaction.type === "drag" || state.interaction.type === "resize" || state.interaction.type === "rotate")) {
         renderSelectionOutlines();
         return;
       }
@@ -1353,6 +1360,7 @@
       const displayScale = getCanvasDisplayScale();
       const outlineStroke = Math.max(0.7, 1.5 / Math.max(displayScale, 1e-6));
       elements.forEach((el) => {
+        if (el.tagName === "line") return;
         const b = getSelectionRenderBox(el) || safeBBox(el);
         if (!b || b.width <= 0 || b.height <= 0) return;
         const rect = document.createElementNS(SVG_NS, "rect");
@@ -1408,6 +1416,67 @@
       return ["rect", "ellipse", "circle", "image", "line", "text", "polygon", "polyline", "path", "g"].includes(el.tagName);
     }
 
+    function parseSvgPoints(pointsRaw) {
+      const nums = String(pointsRaw || "").match(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?/ig) || [];
+      const out = [];
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        const x = Number(nums[i]);
+        const y = Number(nums[i + 1]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        out.push({ x, y });
+      }
+      return out;
+    }
+
+    function formatSvgPoints(points) {
+      return (Array.isArray(points) ? points : [])
+        .map((p) => `${Number((Number(p.x) || 0).toFixed(4))},${Number((Number(p.y) || 0).toFixed(4))}`)
+        .join(" ");
+    }
+
+    function elementPointToCanvas(el, x, y) {
+      if (!(el instanceof SVGElement)) return { x, y };
+      const elCTM = el.getScreenCTM ? el.getScreenCTM() : null;
+      const canvasCTM = canvas.getScreenCTM ? canvas.getScreenCTM() : null;
+      if (!elCTM || !canvasCTM) return { x, y };
+      try {
+        const p = canvas.createSVGPoint();
+        p.x = Number(x || 0);
+        p.y = Number(y || 0);
+        const toScreen = p.matrixTransform(elCTM);
+        const toCanvas = toScreen.matrixTransform(canvasCTM.inverse());
+        return { x: toCanvas.x, y: toCanvas.y };
+      } catch (_) {
+        return { x, y };
+      }
+    }
+
+    function getCustomResizeHandles(target) {
+      if (!(target instanceof SVGElement)) return [];
+      if (target.tagName === "line") {
+        const x1 = Number(target.getAttribute("x1") || 0);
+        const y1 = Number(target.getAttribute("y1") || 0);
+        const x2 = Number(target.getAttribute("x2") || 0);
+        const y2 = Number(target.getAttribute("y2") || 0);
+        const p1 = elementPointToCanvas(target, x1, y1);
+        const p2 = elementPointToCanvas(target, x2, y2);
+        return [
+          { name: "line-start", x: p1.x, y: p1.y },
+          { name: "line-end", x: p2.x, y: p2.y }
+        ];
+      }
+      if (target.tagName === "polygon") {
+        const pts = parseSvgPoints(target.getAttribute("points"));
+        if (pts.length === 3) {
+          return pts.map((p, idx) => {
+            const cp = elementPointToCanvas(target, p.x, p.y);
+            return { name: `vertex-${idx}`, x: cp.x, y: cp.y };
+          });
+        }
+      }
+      return [];
+    }
+
     function renderResizeHandles(elements, precomputedScale = null) {
       if (elements.length !== 1) return;
       const target = elements[0];
@@ -1418,6 +1487,21 @@
       const size = 10 / Math.max(displayScale, 1e-6);
       const stroke = Math.max(0.7, 1.5 / Math.max(displayScale, 1e-6));
       const r = size / 2;
+      const customHandles = getCustomResizeHandles(target);
+      if (customHandles.length) {
+        customHandles.forEach((c) => {
+          const h = document.createElementNS(SVG_NS, "circle");
+          h.setAttribute("class", "selection-handle");
+          h.setAttribute("cx", String(c.x));
+          h.setAttribute("cy", String(c.y));
+          h.setAttribute("r", String(r));
+          h.setAttribute("stroke-width", String(stroke));
+          h.dataset.handle = c.name;
+          h.dataset.targetId = target.dataset.id;
+          canvas.appendChild(h);
+        });
+        return;
+      }
       const corners = [
         { name: "nw", x: b.x, y: b.y },
         { name: "ne", x: b.x + b.width, y: b.y },
@@ -1442,14 +1526,17 @@
         const el = getById(id);
         return !!el && isEditableElement(el);
       });
+      state.hoverRotateReady = false;
       applySelectionStyles();
       syncArrowControlsFromSelection();
+      syncLineStrokeWidthControlFromSelection();
       syncMarkControlsFromSelection();
       syncTextControlsFromSelection();
       syncObjectColorControlsFromSelection();
       if (state.cropMode && !state.selectedIds.includes(state.cropMode.targetId)) {
         cancelImageCropMode({ silent: true });
       }
+      updateToolCursor();
       setStatus(state.selectedIds.length ? `Selected: ${state.selectedIds.length}` : "Ready.");
     }
 
@@ -1886,7 +1973,7 @@
 
     function applyLineStyle(lineEl, stroke) {
       if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return;
-      const nextStroke = Math.max(1, Math.min(20, Number(stroke || 3) || 3));
+      const nextStroke = Math.max(0.5, Math.min(20, Number(stroke || 3) || 3));
       lineEl.setAttribute("stroke-width", String(nextStroke));
       lineEl.setAttribute("stroke-linecap", "butt");
       // Do not force non-scaling-stroke on content lines:
@@ -1901,6 +1988,66 @@
       applyLineStyle(el, stroke);
       setSelection([el.dataset.id]);
       pushHistory("add-line");
+    }
+
+    function addTriangle() {
+      const el = createShape("polygon", {
+        points: "260,150 340,300 180,300",
+        fill: "#dbeafe",
+        stroke: "#1e3a8a",
+        "stroke-width": 2
+      });
+      setSelection([el.dataset.id]);
+      pushHistory("add-triangle");
+    }
+
+    function getLineStrokeWidthValue() {
+      const input = document.getElementById("lineStrokeWidthInput");
+      const raw = Number(input?.value || 3);
+      const stroke = Math.max(0.5, Math.min(20, Number.isFinite(raw) ? raw : 3));
+      if (input) input.value = String(Number(stroke.toFixed(2)));
+      return stroke;
+    }
+
+    function syncLineStrokeWidthControlFromSelection() {
+      const input = document.getElementById("lineStrokeWidthInput");
+      if (!(input instanceof HTMLInputElement)) return;
+      const targets = collectSelectedShapeElements().filter((el) =>
+        ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)
+      );
+      if (!targets.length) return;
+      const first = targets[0];
+      const fallback = first.tagName === "line" ? 3 : 2;
+      const stroke = Math.max(0.5, Math.min(20, Number(first.getAttribute("stroke-width") || fallback) || fallback));
+      input.value = String(Number(stroke.toFixed(2)));
+    }
+
+    function applyLineStrokeWidthToSelection(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const stroke = getLineStrokeWidthValue();
+      const targets = collectSelectedShapeElements().filter((el) =>
+        ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)
+      );
+      if (!targets.length) {
+        if (withStatus) setStatus("Select stroked object(s) first.");
+        return false;
+      }
+      targets.forEach((el) => {
+        if (!el.getAttribute("stroke-width")) {
+          el.setAttribute("stroke-width", el.tagName === "line" ? "3" : "2");
+        }
+        if (el.tagName === "line") {
+          applyLineStyle(el, stroke);
+          if (el.dataset.arrow === "1") applyArrowStyle(el);
+        } else {
+          el.setAttribute("stroke-width", String(Number(stroke.toFixed(4))));
+        }
+      });
+      requestSelectionVisualRefresh();
+      if (push) pushHistory("stroke-width");
+      if (withStatus) setStatus(`Stroke width: ${Number(stroke.toFixed(2))}`);
+      return true;
     }
 
     function ensureCanvasDefs() {
@@ -1928,7 +2075,7 @@
         defs.appendChild(marker);
       }
       marker.setAttribute("markerUnits", "strokeWidth");
-      const stroke = Math.max(1, Math.min(20, Number(lineEl.getAttribute("stroke-width") || 3) || 3));
+      const stroke = Math.max(0.5, Math.min(20, Number(lineEl.getAttribute("stroke-width") || 3) || 3));
       lineEl.setAttribute("stroke-width", String(stroke));
       // Arrow rule:
       // - marker height in rendered space = stroke * 3
@@ -2868,10 +3015,12 @@
 
     function updateToolCursor() {
       const effective = getEffectiveTool();
-      if (effective === "direct") {
-        canvas.style.cursor = CURSOR_WHITE;
-      } else if (effective === "hand") {
+      if (effective === "hand") {
         canvas.style.cursor = state.interaction && state.interaction.type === "pan" ? "grabbing" : "grab";
+      } else if (state.hoverRotateReady && !state.interaction) {
+        canvas.style.cursor = CURSOR_ROTATE;
+      } else if (effective === "direct") {
+        canvas.style.cursor = CURSOR_WHITE;
       } else {
         canvas.style.cursor = CURSOR_BLACK;
       }
@@ -4723,6 +4872,7 @@
         "Space (hold) : Temporary hand/pan",
         "R : Add Rect",
         "L : Add Line",
+        "Y : Add Triangle",
         "Q : Match selected line(s) to Arrow",
         "E : Add Ellipse",
         "T : Add Text",
@@ -4732,6 +4882,7 @@
         "Delete/Backspace : Delete selection",
         "Arrow keys : Nudge (Shift=10px)",
         "Ctrl/Cmd+Wheel or Pinch : Zoom",
+        "Drag just outside selected BBox : Rotate (Shift=15deg snap)",
         "Alt/Ctrl (during drag/resize) : Temporarily disable snapping",
         "Enter (in crop mode) : Apply crop",
         "Esc (in crop mode) : Cancel crop",
@@ -5299,6 +5450,62 @@
       clearSmartGuides();
     }
 
+    function isRotateHotzoneHit(pt, targetEl) {
+      if (!(targetEl instanceof SVGElement) || !isResizableElement(targetEl)) return false;
+      const b = safeBBox(targetEl);
+      if (!b || b.width <= 0 || b.height <= 0) return false;
+      const scale = Math.max(getCanvasDisplayScale(), 1e-6);
+      const innerPad = 4 / scale;
+      const outerPad = 26 / scale;
+      const inner = { x: b.x - innerPad, y: b.y - innerPad, width: b.width + innerPad * 2, height: b.height + innerPad * 2 };
+      const outer = { x: b.x - outerPad, y: b.y - outerPad, width: b.width + outerPad * 2, height: b.height + outerPad * 2 };
+      return pointInRect(pt, outer) && !pointInRect(pt, inner);
+    }
+
+    function computeRotateHoverReady(clientX, clientY, hoverTarget = null) {
+      if (state.interaction) return false;
+      if (state.cropMode) return false;
+      const effectiveTool = getEffectiveTool();
+      if (effectiveTool === "hand") return false;
+      if (state.selectedIds.length !== 1) return false;
+      const selected = getById(state.selectedIds[0]);
+      if (!(selected instanceof SVGElement)) return false;
+      const pt = getSvgPoint(clientX, clientY);
+      if (!isRotateHotzoneHit(pt, selected)) return false;
+      const raw = hoverTarget ? closestEditableTarget(hoverTarget) : null;
+      const stack = getEditableTargetsAtPoint(clientX, clientY);
+      const hasCanvasHit = !!raw || stack.length > 0;
+      return !hasCanvasHit;
+    }
+
+    function beginRotate(start, targetEl) {
+      if (!(targetEl instanceof SVGElement) || !isResizableElement(targetEl)) return false;
+      const b = safeBBox(targetEl);
+      if (!b) return false;
+      ensureTransformState(targetEl);
+      const parent = targetEl.parentNode instanceof SVGElement ? targetEl.parentNode : canvas;
+      const centerCanvas = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+      const centerLocal = canvasPointToParentLocal(parent, centerCanvas.x, centerCanvas.y);
+      const startLocal = canvasPointToParentLocal(parent, start.x, start.y);
+      const dx = startLocal.x - centerLocal.x;
+      const dy = startLocal.y - centerLocal.y;
+      const startAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+      if (!Number.isFinite(startAngle)) return false;
+      state.interaction = {
+        type: "rotate",
+        start,
+        targetId: targetEl.dataset.id,
+        centerLocal,
+        startAngle,
+        baseTransformRaw: String(targetEl.dataset.baseTransform || "").trim(),
+        originalTranslate: getTranslate(targetEl),
+        moved: false,
+        pointerId: null
+      };
+      clearSmartGuides();
+      return true;
+    }
+
     function beginResize(start, targetEl, handle) {
       if (!targetEl || !isResizableElement(targetEl)) return;
       const b = safeBBox(targetEl);
@@ -5349,6 +5556,31 @@
         pointerId: null
       };
       clearSmartGuides();
+    }
+
+    function updateRotate(pt, options = {}) {
+      const it = state.interaction;
+      if (!it || it.type !== "rotate") return;
+      const target = getById(it.targetId);
+      if (!(target instanceof SVGElement)) return;
+      const parent = target.parentNode instanceof SVGElement ? target.parentNode : canvas;
+      const local = canvasPointToParentLocal(parent, pt.x, pt.y);
+      const angle = Math.atan2(local.y - it.centerLocal.y, local.x - it.centerLocal.x) * 180 / Math.PI;
+      if (!Number.isFinite(angle)) return;
+      let delta = angle - it.startAngle;
+      if (options.snapAngle) delta = Math.round(delta / 15) * 15;
+      if (Math.abs(delta) > 0.2) it.moved = true;
+      const rotation = `rotate(${Number(delta.toFixed(4))} ${Number(it.centerLocal.x.toFixed(4))} ${Number(it.centerLocal.y.toFixed(4))})`;
+      target.dataset.baseTransform = `${rotation}${it.baseTransformRaw ? ` ${it.baseTransformRaw}` : ""}`.trim();
+      setTranslate(target, it.originalTranslate.x, it.originalTranslate.y);
+      requestSelectionVisualRefresh();
+    }
+
+    function finishRotate() {
+      const it = state.interaction;
+      if (!it || it.type !== "rotate") return;
+      if (it.moved) pushHistory("rotate");
+      state.interaction = null;
     }
 
     function mapX(x, oldBox, newBox) {
@@ -5571,6 +5803,37 @@
       if (!it || it.type !== "resize") return;
       const el = getById(it.targetId);
       if (!el) return;
+      if (it.handle === "line-start" || it.handle === "line-end") {
+        if (el.tagName !== "line") return;
+        const local = canvasPointToElementLocal(el, pt.x, pt.y);
+        if (it.handle === "line-start") {
+          el.setAttribute("x1", String(Number(local.x.toFixed(4))));
+          el.setAttribute("y1", String(Number(local.y.toFixed(4))));
+        } else {
+          el.setAttribute("x2", String(Number(local.x.toFixed(4))));
+          el.setAttribute("y2", String(Number(local.y.toFixed(4))));
+        }
+        it.liveBox = safeBBox(el) || it.baseBox;
+        it.moved = true;
+        requestSelectionVisualRefresh();
+        return;
+      }
+      if (it.handle.startsWith("vertex-")) {
+        if (el.tagName !== "polygon" && el.tagName !== "polyline") return;
+        const idx = Number(it.handle.slice("vertex-".length));
+        const points = parseSvgPoints(el.getAttribute("points"));
+        if (!Number.isInteger(idx) || idx < 0 || idx >= points.length) return;
+        const local = canvasPointToElementLocal(el, pt.x, pt.y);
+        points[idx] = {
+          x: Number(local.x.toFixed(4)),
+          y: Number(local.y.toFixed(4))
+        };
+        el.setAttribute("points", formatSvgPoints(points));
+        it.liveBox = safeBBox(el) || it.baseBox;
+        it.moved = true;
+        requestSelectionVisualRefresh();
+        return;
+      }
       const ob = it.baseBox;
       let left = ob.x;
       let right = ob.x + ob.width;
@@ -5890,7 +6153,7 @@
       bindClick("newCanvas", newCanvas);
       document.getElementById("addRect").addEventListener("click", addRect);
       document.getElementById("addLine").addEventListener("click", addLine);
-      // addArrow button removed intentionally (Line + Match Arrow workflow)
+      document.getElementById("addTriangle").addEventListener("click", addTriangle);
       document.getElementById("addEllipse").addEventListener("click", addEllipse);
       document.getElementById("addText").addEventListener("click", addText);
       bindClick("undoBtn", undo);
@@ -5927,6 +6190,12 @@
       });
       document.getElementById("matchArrowBtn").addEventListener("click", () => {
         matchSelectedLinesToArrow();
+      });
+      document.getElementById("lineStrokeWidthInput").addEventListener("change", () => {
+        applyLineStrokeWidthToSelection({ push: true, withStatus: true });
+      });
+      document.getElementById("lineStrokeWidthInput").addEventListener("input", () => {
+        applyLineStrokeWidthToSelection({ push: false, withStatus: false });
       });
       document.getElementById("markFontSizeInput").addEventListener("change", () => {
         applyGlobalMarkFontSize({ push: true, withStatus: true });
@@ -6185,7 +6454,24 @@
         if (figureEditorEl && !figureEditorEl.contains(e.target)) closeFigureEditor();
       });
 
+      canvas.addEventListener("pointermove", (e) => {
+        if (state.interaction) return;
+        const ready = computeRotateHoverReady(e.clientX, e.clientY, e.target);
+        if (state.hoverRotateReady !== ready) {
+          state.hoverRotateReady = ready;
+          updateToolCursor();
+        }
+      });
+
+      canvas.addEventListener("pointerleave", () => {
+        if (!state.hoverRotateReady) return;
+        state.hoverRotateReady = false;
+        updateToolCursor();
+      });
+
       canvas.addEventListener("pointerdown", (e) => {
+        state.hoverRotateReady = false;
+        updateToolCursor();
         if (e.button === 2) {
           if (state.pinch.active || state.cropMode) return;
           closeContextMenu();
@@ -6256,6 +6542,16 @@
         const raw = closestEditableTarget(e.target);
         const stack = getEditableTargetsAtPoint(e.clientX, e.clientY);
         const hasCanvasHit = !!raw || stack.length > 0;
+        if (!hasCanvasHit && !e.shiftKey && computeRotateHoverReady(e.clientX, e.clientY, e.target)) {
+          const selected = getById(state.selectedIds[0]);
+          if (selected instanceof SVGElement && beginRotate(pt, selected)) {
+            if (state.interaction) state.interaction.pointerId = e.pointerId;
+            if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+            setStatus("Rotate: drag around selection (Shift to snap 15deg).");
+            e.preventDefault();
+            return;
+          }
+        }
         if (hasCanvasHit) {
           let target = null;
           if (effectiveTool === "direct") {
@@ -6364,6 +6660,7 @@
         if (it.type === "crop-drag") updateCropDraft(pt);
         if (it.type === "drag") updateDrag(pt, { disableSnap });
         if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
+        if (it.type === "rotate") updateRotate(pt, { snapAngle: e.shiftKey });
         if (it.type === "marquee") updateMarquee(pt);
       });
 
@@ -6377,10 +6674,12 @@
         if (type === "crop-drag") finishCropDraft();
         if (type === "drag") finishDrag();
         if (type === "resize") finishResize();
+        if (type === "rotate") finishRotate();
         if (type === "marquee") finishMarquee();
         if (capturedId !== null && canvas.releasePointerCapture) {
           try { canvas.releasePointerCapture(capturedId); } catch (_) {}
         }
+        updateToolCursor();
       });
 
       window.addEventListener("pointercancel", (e) => {
@@ -6408,6 +6707,8 @@
         if (capturedId !== null && canvas.releasePointerCapture) {
           try { canvas.releasePointerCapture(capturedId); } catch (_) {}
         }
+        state.hoverRotateReady = false;
+        updateToolCursor();
       });
 
       window.addEventListener("keydown", (e) => {
@@ -6520,6 +6821,12 @@
           e.preventDefault();
           addLine();
           setStatus("Added Line.");
+          return;
+        }
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "y") {
+          e.preventDefault();
+          addTriangle();
+          setStatus("Added Triangle.");
           return;
         }
         if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "q") {

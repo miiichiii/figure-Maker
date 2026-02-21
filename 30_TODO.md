@@ -13,6 +13,14 @@
 - [done][P0-High] 自動保存 Off/10/30 + Restore latest/list
 - [done][P0-High] Paste(PNG/SVG text)
 - [doing][P0-Med] 手動テストとバグ修正
+- [done][P1-High] Line選択時のリサイズハンドルを2点（両端）化し、4点BBoxハンドルを廃止
+- [done][P1-High] Line専用のstroke幅数値入力を追加（選択Lineへ即時反映、Arrowにも整合）
+- [done][P1-Med] Triangle追加ボタンを実装（任意矢印作成向け、頂点ハンドルで編集）
+- [done][P1-High] BBox外周ドラッグで回転操作を実装（近傍リング判定、既存Drag/Resizeと非競合）
+- [done][P1-Med] 回転・Line2ハンドル・Triangle編集の回帰レビュー（構文/参照/既存ショートカット競合なしを確認）
+- [done][P1-Med] 回転可能ゾーン（BBox外周）で回転カーソルを表示
+- [done][P1-High] Line stroke入力を線以外の図形ストローク幅にも適用
+- [done][P1-Med] ストローク幅入力中のリアルタイム描画を再確認（回帰防止）
 - [done][P1-Med] 上部メニューバー（File/Edit/View/Window）追加
 - [done][P1-Med] ViewメニューからCanvasサイズ変更（A4 Portrait/A4 Landscape/カスタム）
 - [done][P1-Med] New/Open SVG/Save SVG/Export PDF をツールバーからFileメニューへ集約
