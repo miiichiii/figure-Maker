@@ -605,14 +605,7 @@
           </svg>
           <span class="sr-only">Line</span>
         </button>
-        <!-- Arrow creation button removed: use Line + Match Arrow workflow -->
-        <label for="arrowSizeInput">Arrow len</label>
-        <input id="arrowSizeInput" type="number" min="20" max="2000" step="1" value="190" style="width:64px" />
-        <label for="arrowHeadSizeInput">Head</label>
-        <input id="arrowHeadSizeInput" type="number" min="5" max="100" step="1" value="15" style="width:64px" />
-        <label for="arrowStrokeInput">Line/Arrow stroke</label>
-        <input id="arrowStrokeInput" type="number" min="1" max="20" step="1" value="3" style="width:64px" />
-        <button id="matchArrowBtn" title="Match selected line(s) to arrow">Match Arrow</button>
+        <button id="matchArrowBtn" title="Apply arrowhead to selected line(s)">Apply Arrow</button>
         <label for="objectFillColorInput">Fill</label>
         <input id="objectFillColorInput" type="color" value="#dbeafe" />
         <label for="objectStrokeColorInput">Stroke</label>
@@ -1903,47 +1896,11 @@
     }
 
     function addLine() {
-      const { stroke } = getArrowControlValues();
+      const stroke = 3;
       const el = createShape("line", { x1: 150, y1: 300, x2: 340, y2: 300, stroke: "#0f172a", "stroke-width": stroke });
       applyLineStyle(el, stroke);
       setSelection([el.dataset.id]);
       pushHistory("add-line");
-    }
-
-    function getArrowControlValues() {
-      const sizeEl = document.getElementById("arrowSizeInput");
-      const strokeEl = document.getElementById("arrowStrokeInput");
-      const size = Math.max(20, Math.min(2000, Number(sizeEl?.value || 190) || 190));
-      const stroke = Math.max(1, Math.min(20, Number(strokeEl?.value || 3) || 3));
-      return { size, stroke };
-    }
-
-    function getLineLength(lineEl) {
-      if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return 0;
-      const x1 = Number(lineEl.getAttribute("x1") || 0);
-      const y1 = Number(lineEl.getAttribute("y1") || 0);
-      const x2 = Number(lineEl.getAttribute("x2") || 0);
-      const y2 = Number(lineEl.getAttribute("y2") || 0);
-      return Math.hypot(x2 - x1, y2 - y1);
-    }
-
-    function setLineLength(lineEl, length) {
-      if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return;
-      const x1 = Number(lineEl.getAttribute("x1") || 0);
-      const y1 = Number(lineEl.getAttribute("y1") || 0);
-      const x2 = Number(lineEl.getAttribute("x2") || 0);
-      const y2 = Number(lineEl.getAttribute("y2") || 0);
-      const current = Math.hypot(x2 - x1, y2 - y1);
-      const target = Math.max(20, Math.min(2000, Number(length || current || 190)));
-      let ux = 1;
-      let uy = 0;
-      if (current > 1e-6) {
-        ux = (x2 - x1) / current;
-        uy = (y2 - y1) / current;
-      }
-      lineEl.setAttribute("x2", String(x1 + ux * target));
-      lineEl.setAttribute("y2", String(y1 + uy * target));
-      lineEl.dataset.arrowLength = String(Math.round(target));
     }
 
     function ensureCanvasDefs() {
@@ -1955,18 +1912,14 @@
       return defs;
     }
 
-    function applyArrowStyle(lineEl, size, stroke, headSize) {
+    function applyArrowStyle(lineEl) {
       if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return;
       ensureId(lineEl);
       const defs = ensureCanvasDefs();
       const markerId = lineEl.dataset.arrowMarkerId || `arrow-m-${lineEl.dataset.id || createId()}`;
       lineEl.dataset.arrowMarkerId = markerId;
       lineEl.dataset.arrow = "1";
-      lineEl.dataset.arrowLength = String(Math.round(Math.max(20, Number(size || getLineLength(lineEl) || 190))));
-      
-      const hw = Math.max(5, Number(headSize || lineEl.dataset.arrowHeadSize || 15));
-      lineEl.dataset.arrowHeadSize = String(hw);
-      
+
       let marker = defs.querySelector(`#${CSS.escape(markerId)}`);
       if (!(marker instanceof SVGElement)) {
         marker = document.createElementNS(SVG_NS, "marker");
@@ -1974,67 +1927,32 @@
         marker.setAttribute("orient", "auto");
         defs.appendChild(marker);
       }
-      // Use strokeWidth marker space to keep arrowhead proportions stable
-      // even when object transforms are non-uniform.
       marker.setAttribute("markerUnits", "strokeWidth");
-      const nextStroke = Math.max(1, Math.min(20, Number(stroke || lineEl.getAttribute("stroke-width") || 3) || 3));
-
-      // Canonical triangle geometry (ratio fixed); only overall scale changes.
-      const baseW = 10;
-      const baseH = 8;
-      const scale = Math.max(0.4, hw / Math.max(nextStroke, 0.1));
-      marker.setAttribute("markerWidth", String(baseW * scale));
-      marker.setAttribute("markerHeight", String(baseH * scale));
-      // Slightly behind tip so line end is hidden inside head.
-      marker.setAttribute("refX", String(baseW - 0.8));
-      marker.setAttribute("refY", String(baseH / 2));
-      marker.setAttribute("viewBox", `0 0 ${baseW} ${baseH}`);
-      marker.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      const stroke = Math.max(1, Math.min(20, Number(lineEl.getAttribute("stroke-width") || 3) || 3));
+      lineEl.setAttribute("stroke-width", String(stroke));
+      // Arrow rule:
+      // - marker height in rendered space = stroke * 3
+      // - line endpoint is aligned to arrowhead center (base center)
+      const headH = 3;
+      const headW = 4;
+      marker.setAttribute("markerWidth", String(headW));
+      marker.setAttribute("markerHeight", String(headH));
+      marker.setAttribute("refX", "0");
+      marker.setAttribute("refY", String(headH / 2));
+      marker.setAttribute("viewBox", `0 0 ${headW} ${headH}`);
+      marker.setAttribute("preserveAspectRatio", "none");
       marker.setAttribute("overflow", "visible");
       marker.innerHTML = "";
       const p = document.createElementNS(SVG_NS, "path");
-      p.setAttribute("d", `M 0 0 L ${baseW} ${baseH / 2} L 0 ${baseH} z`);
+      p.setAttribute("d", `M 0 0 L ${headW} ${headH / 2} L 0 ${headH} z`);
       p.setAttribute("fill", String(lineEl.getAttribute("stroke") || "#0f172a"));
       marker.appendChild(p);
       lineEl.setAttribute("marker-end", `url(#${markerId})`);
-      setLineLength(lineEl, size);
       applyLineStyle(lineEl, stroke);
     }
 
-    function addArrow() {
-      const { size, stroke } = getArrowControlValues();
-      const headEl = document.getElementById("arrowHeadSizeInput");
-      const hw = Number(headEl?.value || 15);
-      const el = createShape("line", { x1: 170, y1: 320, x2: 360, y2: 320, stroke: "#0f172a", "stroke-width": stroke });
-      applyArrowStyle(el, size, stroke, hw);
-      setSelection([el.dataset.id]);
-      pushHistory("add-arrow");
-    }
-
     function syncArrowControlsFromSelection() {
-      const sizeEl = document.getElementById("arrowSizeInput");
-      const headEl = document.getElementById("arrowHeadSizeInput");
-      const strokeEl = document.getElementById("arrowStrokeInput");
-      if (state.selectedIds.length !== 1) return;
-      const selected = getById(state.selectedIds[0]);
-      if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
-      if (strokeEl) strokeEl.value = String(Number(selected.getAttribute("stroke-width") || 3) || 3);
-
-      const len = Math.round(getLineLength(selected));
-      if (sizeEl && (selected.dataset.arrow === "1" || len > 0)) {
-        sizeEl.value = String(Math.max(20, Math.min(2000, len || 190)));
-      }
-
-      if (headEl && selected.dataset.arrow === "1") {
-        headEl.value = selected.dataset.arrowHeadSize || "15";
-      }
-    }
-
-    function computeMatchedArrowHeadSize(lineEl) {
-      const len = Math.max(20, getLineLength(lineEl));
-      const stroke = Math.max(1, Number(lineEl.getAttribute("stroke-width") || 3) || 3);
-      // Illustrator-like auto proportion: mostly length-based, lightly stroke-aware.
-      return Math.max(8, Math.min(56, Math.round(len * 0.08 + stroke * 0.8)));
+      // No arrow numeric controls in current workflow.
     }
 
     function getSelectedLineElements() {
@@ -2063,15 +1981,11 @@
         return;
       }
       selectedLines.forEach((line) => {
-        const len = Math.max(20, getLineLength(line));
-        const stroke = Math.max(1, Number(line.getAttribute("stroke-width") || 3) || 3);
-        const autoHead = computeMatchedArrowHeadSize(line);
-        applyArrowStyle(line, len, stroke, autoHead);
+        applyArrowStyle(line);
       });
-      syncArrowControlsFromSelection();
       requestSelectionVisualRefresh();
-      pushHistory("match-arrow");
-      setStatus(`Matched ${selectedLines.length} line(s) to arrow.`);
+      pushHistory("apply-arrow");
+      setStatus(`Applied arrow to ${selectedLines.length} line(s).`);
     }
 
     function syncMarkControlsFromSelection() {
@@ -2603,36 +2517,6 @@
       syncTextControlsFromSelection();
       pushHistory(`text-${nextMode}`);
       setStatus(nextMode === "normal" ? "Text script cleared." : `Text ${nextMode}script on.`);
-    }
-
-    function applyStrokeControlToSelectedLines(options = {}) {
-      const push = options.push !== false;
-      const withStatus = options.withStatus !== false;
-      const selectedLines = getTopSelectedElements().filter((el) => el instanceof SVGElement && el.tagName === "line");
-      if (!selectedLines.length) return false;
-      const { stroke } = getArrowControlValues();
-      let lineCount = 0;
-      let arrowCount = 0;
-      selectedLines.forEach((line) => {
-        if (line.dataset.arrow === "1") {
-          applyArrowStyle(line, getLineLength(line), stroke);
-          arrowCount += 1;
-        } else {
-          applyLineStyle(line, stroke);
-          lineCount += 1;
-        }
-      });
-      if (push) {
-        if (arrowCount && lineCount) pushHistory("line-arrow-style");
-        else if (arrowCount) pushHistory("arrow-style");
-        else pushHistory("line-style");
-      }
-      if (withStatus) {
-        if (arrowCount && lineCount) setStatus("Line/Arrow style updated.");
-        else if (arrowCount) setStatus("Arrow style updated.");
-        else setStatus("Line style updated.");
-      }
-      return true;
     }
 
     function addEllipse() {
@@ -6041,60 +5925,8 @@
         localStorage.setItem(ALIGN_BASIS_KEY, value);
         setStatus(`Align base: ${value === "first" ? "first selected" : "selection box"}`);
       });
-      document.getElementById("arrowSizeInput").addEventListener("change", () => {
-        if (state.selectedIds.length !== 1) return;
-        const selected = getById(state.selectedIds[0]);
-        if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
-        const { size, stroke } = getArrowControlValues();
-        if (selected.dataset.arrow === "1") {
-          applyArrowStyle(selected, size, stroke);
-          pushHistory("arrow-length");
-          setStatus(`Arrow length: ${Math.round(getLineLength(selected))}`);
-        } else {
-          setLineLength(selected, size);
-          pushHistory("line-length");
-          requestSelectionVisualRefresh();
-          setStatus(`Line length: ${Math.round(getLineLength(selected))}`);
-        }
-      });
-      document.getElementById("arrowSizeInput").addEventListener("input", () => {
-        if (state.selectedIds.length !== 1) return;
-        const selected = getById(state.selectedIds[0]);
-        if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
-        const { size, stroke } = getArrowControlValues();
-        if (selected.dataset.arrow === "1") {
-          applyArrowStyle(selected, size, stroke);
-        } else {
-          setLineLength(selected, size);
-          requestSelectionVisualRefresh();
-        }
-      });
-      document.getElementById("arrowHeadSizeInput").addEventListener("change", () => {
-        if (state.selectedIds.length !== 1) return;
-        const selected = getById(state.selectedIds[0]);
-        if (!(selected instanceof SVGElement) || selected.tagName !== "line" || selected.dataset.arrow !== "1") return;
-        const { size, stroke } = getArrowControlValues();
-        const headSize = Number(document.getElementById("arrowHeadSizeInput").value || 15);
-        applyArrowStyle(selected, size, stroke, headSize);
-        pushHistory("arrow-head-size");
-        setStatus(`Arrow head size: ${headSize}`);
-      });
-      document.getElementById("arrowHeadSizeInput").addEventListener("input", () => {
-        if (state.selectedIds.length !== 1) return;
-        const selected = getById(state.selectedIds[0]);
-        if (!(selected instanceof SVGElement) || selected.tagName !== "line" || selected.dataset.arrow !== "1") return;
-        const { size, stroke } = getArrowControlValues();
-        const headSize = Number(document.getElementById("arrowHeadSizeInput").value || 15);
-        applyArrowStyle(selected, size, stroke, headSize);
-      });
-      document.getElementById("arrowStrokeInput").addEventListener("change", () => {
-        applyStrokeControlToSelectedLines({ push: true, withStatus: true });
-      });
       document.getElementById("matchArrowBtn").addEventListener("click", () => {
         matchSelectedLinesToArrow();
-      });
-      document.getElementById("arrowStrokeInput").addEventListener("input", () => {
-        applyStrokeControlToSelectedLines({ push: false, withStatus: false });
       });
       document.getElementById("markFontSizeInput").addEventListener("change", () => {
         applyGlobalMarkFontSize({ push: true, withStatus: true });
