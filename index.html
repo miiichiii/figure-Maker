@@ -2083,6 +2083,7 @@
       if (elements.length === 0) return;
       // If overrideBox is present, we are in multi-selection mode (or dragged group)
       const isMulti = !!overrideBox;
+      // Use logical check: if not multi, must be 1. If multi, must be valid.
       if (!isMulti && elements.length !== 1) return;
 
       const target = isMulti ? null : elements[0];
