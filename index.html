@@ -4653,12 +4653,10 @@
       const ownMatrix = ownRaw ? matrixFromTransformString(ownRaw) : identityTransformMatrix();
       const combined = multiplyTransformMatrices(parentMatrix, ownMatrix);
       if (el.tagName === "g") {
-        Array.from(el.children).forEach((child) => {
-          if (!(child instanceof SVGElement)) return;
-          bakeElementTransformTree(child, combined);
-        });
-        clearElementTransformState(el);
-        return true;
+        // Shallow bake for groups:
+        // keep internal structure untouched and freeze only the group-level matrix.
+        setElementMatrixTransform(el, combined);
+        return false;
       }
       const baked = bakeGeometryByMatrix(el, combined);
       if (baked) {
