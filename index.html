@@ -819,7 +819,7 @@
         </button>
         <button id="toolDirect" class="tool-icon-btn" title="Direct select tool" aria-label="Direct select tool">
           <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ffffff" stroke="#111827" stroke-width="1.3"></path>
+            <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ff1493" stroke="#111827" stroke-width="1.3"></path>
           </svg>
           <span class="sr-only">White Arrow</span>
         </button>
@@ -1107,7 +1107,7 @@
     const PASTE_LOCK_TIMEOUT_MS = 900;
     const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
     const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
-    const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ffffff' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
+    const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ff1493' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
     const CURSOR_ROTATE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cg fill='none' stroke='%232B2A27' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.8 7.8A8 8 0 1 0 18.5 13'/%3E%3Cpath d='M17.6 3.8v5h-5'/%3E%3C/g%3E%3C/svg%3E\") 11 11, alias";
 
     const canvas = document.getElementById("canvas");
@@ -2079,37 +2079,54 @@
       return [];
     }
 
-    function renderResizeHandles(elements, precomputedScale = null) {
-      if (elements.length !== 1) return;
-      const target = elements[0];
-      if (!isResizableElement(target)) return;
-      const b = getSelectionRenderBox(target) || safeBBox(target);
+    function renderResizeHandles(elements, precomputedScale = null, overrideBox = null) {
+      if (elements.length === 0) return;
+      // If overrideBox is present, we are in multi-selection mode (or dragged group)
+      const isMulti = !!overrideBox;
+      if (!isMulti && elements.length !== 1) return;
+
+      const target = isMulti ? null : elements[0];
+      if (target && !isResizableElement(target)) return;
+
+      const b = overrideBox || (getSelectionRenderBox(target) || safeBBox(target));
       if (!b) return;
+
       const displayScale = precomputedScale || getCanvasDisplayScale();
       const size = 10 / Math.max(displayScale, 1e-6);
       const stroke = Math.max(0.7, 1.5 / Math.max(displayScale, 1e-6));
       const r = size / 2;
-      const customHandles = getCustomResizeHandles(target);
-      if (customHandles.length) {
-        customHandles.forEach((c) => {
-          const h = document.createElementNS(SVG_NS, "circle");
-          h.setAttribute("class", "selection-handle");
-          h.setAttribute("cx", String(c.x));
-          h.setAttribute("cy", String(c.y));
-          h.setAttribute("r", String(r));
-          h.setAttribute("stroke-width", String(stroke));
-          h.dataset.handle = c.name;
-          h.dataset.targetId = target.dataset.id;
-          canvas.appendChild(h);
-        });
-        return;
+
+      // Custom handles only for single selection
+      if (!isMulti && target) {
+        const customHandles = getCustomResizeHandles(target);
+        if (customHandles.length) {
+          customHandles.forEach((c) => {
+            const h = document.createElementNS(SVG_NS, "circle");
+            h.setAttribute("class", "selection-handle");
+            h.setAttribute("cx", String(c.x));
+            h.setAttribute("cy", String(c.y));
+            h.setAttribute("r", String(r));
+            h.setAttribute("stroke-width", String(stroke));
+            h.dataset.handle = c.name;
+            h.dataset.targetId = target.dataset.id;
+            canvas.appendChild(h);
+          });
+          return;
+        }
       }
+
       const corners = [
         { name: "nw", x: b.x, y: b.y },
         { name: "ne", x: b.x + b.width, y: b.y },
         { name: "sw", x: b.x, y: b.y + b.height },
-        { name: "se", x: b.x + b.width, y: b.y + b.height }
+        { name: "se", x: b.x + b.width, y: b.y + b.height },
+        // Add side handles for bounds
+        { name: "n", x: b.x + b.width/2, y: b.y },
+        { name: "s", x: b.x + b.width/2, y: b.y + b.height },
+        { name: "w", x: b.x, y: b.y + b.height/2 },
+        { name: "e", x: b.x + b.width, y: b.y + b.height/2 }
       ];
+
       corners.forEach((c) => {
         const h = document.createElementNS(SVG_NS, "circle");
         h.setAttribute("class", "selection-handle");
@@ -2118,7 +2135,11 @@
         h.setAttribute("r", String(r));
         h.setAttribute("stroke-width", String(stroke));
         h.dataset.handle = c.name;
-        h.dataset.targetId = target.dataset.id;
+        if (isMulti) {
+          h.dataset.targetId = "multi";
+        } else {
+          h.dataset.targetId = target.dataset.id;
+        }
         canvas.appendChild(h);
       });
     }
