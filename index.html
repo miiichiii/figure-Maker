@@ -846,17 +846,27 @@
         </button>
         <button id="shortcutsBtn">Shortcuts</button>
       </div>
-      <div class="group zoom-group" data-toolbar-tab="tool">
-        <label for="zoomSlider">Zoom</label>
-        <button id="zoomOutBtn" title="Zoom out">-</button>
-        <input id="zoomSlider" type="range" min="5" max="12800" step="1" value="100" />
-        <input id="zoomPercentInput" type="number" min="5" max="12800" step="1" value="100" />
-        <span>%</span>
-        <button id="zoomInBtn" title="Zoom in">+</button>
-        <button id="zoomResetBtn" title="Reset zoom">Reset</button>
-        <button id="cropImageBtn" title="Crop selected image">Crop</button>
-        <button id="cropApplyBtn" title="Apply crop" hidden>Apply Crop</button>
-        <button id="cropCancelBtn" title="Cancel crop" hidden>Cancel Crop</button>
+      <div class="group" data-toolbar-tab="tool">
+        <button id="cropImageBtn" class="tool-icon-btn" title="Crop selected image" aria-label="Crop">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.13 1L6 16a2 2 0 0 0 2 2h15" fill="none" stroke="currentColor" stroke-width="2"></path>
+            <path d="M1 6.13L16 6a2 2 0 0 1 2 2v15" fill="none" stroke="currentColor" stroke-width="2"></path>
+          </svg>
+          <span class="sr-only">Crop</span>
+        </button>
+        <button id="cropApplyBtn" class="tool-icon-btn" title="Apply crop (Enter)" aria-label="Apply crop" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          </svg>
+          <span class="sr-only">Apply</span>
+        </button>
+        <button id="cropCancelBtn" class="tool-icon-btn" title="Cancel crop (Esc)" aria-label="Cancel crop" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+          </svg>
+          <span class="sr-only">Cancel</span>
+        </button>
       </div>
       <div class="group" data-toolbar-tab="tool">
         <button id="newCanvas">New</button>
@@ -998,6 +1008,7 @@
             <button id="zoomInBtn" title="Zoom in">+</button>
             <input id="zoomPercentInput" type="number" min="5" max="1000" step="1" value="100" />
             <span>%</span>
+            <button id="zoomResetBtn" title="Reset zoom" style="margin-left:4px; font-size:16px;">⟲</button>
         </div>
         <span id="copyright">© 2026 Michito Hamada (Beta)</span>
       </div>
