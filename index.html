@@ -3029,19 +3029,29 @@
         const parentLinear = getElementLinearMatrix(parent);
         const invParent = invertLinearMatrix(parentLinear);
         if (!invParent) return;
+        const worldLinear = getElementLinearMatrix(textEl);
         const x = Number(textEl.getAttribute("x") || 0);
         const y = Number(textEl.getAttribute("y") || 0);
         const anchorCanvas = elementPointToCanvas(textEl, x, y);
-        const computedSize = Number.parseFloat(window.getComputedStyle(textEl).fontSize || "");
+        // Use SVG-unit based size (not CSS pixels) so zoom level does not inflate font size.
         const attrSize = Number(textEl.getAttribute("font-size") || "");
-        const effectiveSize = Math.max(6, Number.isFinite(computedSize) && computedSize > 0
-          ? computedSize
-          : (Number.isFinite(attrSize) && attrSize > 0 ? attrSize : 16));
+        const baseScriptSize = Number(textEl.getAttribute("data-fm-script-base-size") || "");
+        const rawSize = Number.isFinite(attrSize) && attrSize > 0
+          ? attrSize
+          : (Number.isFinite(baseScriptSize) && baseScriptSize > 0 ? baseScriptSize : 16);
+        const sy = Math.max(1e-6, transformScaleY(worldLinear));
+        const effectiveSize = Math.max(6, rawSize * sy);
+        // Preserve current text orientation (rotation) while removing non-uniform scale/shear.
+        const theta = Math.atan2(Number(worldLinear.b || 0), Number(worldLinear.a || 1));
+        const cos = Math.cos(theta);
+        const sin = Math.sin(theta);
+        const worldRotation = { a: cos, b: sin, c: -sin, d: cos };
+        const localLinear = multiplyLinearMatrix(invParent, worldRotation);
         setElementMatrixTransform(textEl, {
-          a: invParent.a,
-          b: invParent.b,
-          c: invParent.c,
-          d: invParent.d,
+          a: localLinear.a,
+          b: localLinear.b,
+          c: localLinear.c,
+          d: localLinear.d,
           e: 0,
           f: 0
         });
