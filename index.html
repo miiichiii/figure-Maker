@@ -7395,11 +7395,15 @@
       const height = Number(it.rect.getAttribute("height"));
       it.rect.remove();
       const hit = [];
+      const effectiveTool = getEffectiveTool();
+
       if (width > 2 && height > 2) {
         const area = { x, y, width, height };
         canvas.querySelectorAll("[data-id]").forEach((el) => {
           if (!(el instanceof SVGElement) || !isEditableElement(el)) return;
           if (isGroupLabel(el)) return;
+          // In Direct Select mode, ignore group containers during marquee to select contents directly
+          if (effectiveTool === "direct" && el.tagName === "g") return;
           const b = safeBBox(el);
           if (b && intersects(area, b)) hit.push(el.dataset.id);
         });
