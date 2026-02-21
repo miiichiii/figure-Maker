@@ -614,6 +614,8 @@
         </button>
         <label for="arrowSizeInput">Arrow len</label>
         <input id="arrowSizeInput" type="number" min="20" max="2000" step="1" value="190" style="width:64px" />
+        <label for="arrowHeadSizeInput">Head</label>
+        <input id="arrowHeadSizeInput" type="number" min="5" max="100" step="1" value="15" style="width:64px" />
         <label for="arrowStrokeInput">Line/Arrow stroke</label>
         <input id="arrowStrokeInput" type="number" min="1" max="20" step="1" value="3" style="width:64px" />
         <label for="objectFillColorInput">Fill</label>
@@ -1960,7 +1962,7 @@
       return defs;
     }
 
-    function applyArrowStyle(lineEl, size, stroke) {
+    function applyArrowStyle(lineEl, size, stroke, headSize) {
       if (!(lineEl instanceof SVGElement) || lineEl.tagName !== "line") return;
       ensureId(lineEl);
       const defs = ensureCanvasDefs();
@@ -1968,6 +1970,10 @@
       lineEl.dataset.arrowMarkerId = markerId;
       lineEl.dataset.arrow = "1";
       lineEl.dataset.arrowLength = String(Math.round(Math.max(20, Number(size || getLineLength(lineEl) || 190))));
+      
+      const hw = Math.max(5, Number(headSize || lineEl.dataset.arrowHeadSize || 15));
+      lineEl.dataset.arrowHeadSize = String(hw);
+      
       let marker = defs.querySelector(`#${CSS.escape(markerId)}`);
       if (!(marker instanceof SVGElement)) {
         marker = document.createElementNS(SVG_NS, "marker");
@@ -1976,13 +1982,11 @@
         marker.setAttribute("markerUnits", "userSpaceOnUse");
         defs.appendChild(marker);
       }
-      // Fixed arrow head dimensions to maintain perfect shape
-      const headW = 15;
-      const headH = 12;
+      
+      const headW = hw;
+      const headH = hw * 0.8; // Maintain aspect ratio
       marker.setAttribute("markerWidth", String(headW));
       marker.setAttribute("markerHeight", String(headH));
-      // refX is set slightly behind the tip (headW) to make the triangle "reach out" 
-      // and cover the end of the line, preventing it from poking through the tip.
       marker.setAttribute("refX", String(headW - 2.5));
       marker.setAttribute("refY", String(headH / 2));
       marker.setAttribute("viewBox", `0 0 ${headW} ${headH}`);
@@ -1999,22 +2003,31 @@
 
     function addArrow() {
       const { size, stroke } = getArrowControlValues();
+      const headEl = document.getElementById("arrowHeadSizeInput");
+      const hw = Number(headEl?.value || 15);
       const el = createShape("line", { x1: 170, y1: 320, x2: 360, y2: 320, stroke: "#0f172a", "stroke-width": stroke });
-      applyArrowStyle(el, size, stroke);
+      applyArrowStyle(el, size, stroke, hw);
       setSelection([el.dataset.id]);
       pushHistory("add-arrow");
     }
 
     function syncArrowControlsFromSelection() {
       const sizeEl = document.getElementById("arrowSizeInput");
+      const headEl = document.getElementById("arrowHeadSizeInput");
       const strokeEl = document.getElementById("arrowStrokeInput");
       if (state.selectedIds.length !== 1) return;
       const selected = getById(state.selectedIds[0]);
       if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
       if (strokeEl) strokeEl.value = String(Number(selected.getAttribute("stroke-width") || 3) || 3);
-      if (!sizeEl) return;
+      
       const len = Math.round(getLineLength(selected));
-      if (selected.dataset.arrow === "1" || len > 0) sizeEl.value = String(Math.max(20, Math.min(2000, len || 190)));
+      if (sizeEl && (selected.dataset.arrow === "1" || len > 0)) {
+        sizeEl.value = String(Math.max(20, Math.min(2000, len || 190)));
+      }
+      
+      if (headEl && selected.dataset.arrow === "1") {
+        headEl.value = selected.dataset.arrowHeadSize || "15";
+      }
     }
 
     function syncMarkControlsFromSelection() {
@@ -6011,6 +6024,24 @@
           setLineLength(selected, size);
           requestSelectionVisualRefresh();
         }
+      });
+      document.getElementById("arrowHeadSizeInput").addEventListener("change", () => {
+        if (state.selectedIds.length !== 1) return;
+        const selected = getById(state.selectedIds[0]);
+        if (!(selected instanceof SVGElement) || selected.tagName !== "line" || selected.dataset.arrow !== "1") return;
+        const { size, stroke } = getArrowControlValues();
+        const headSize = Number(document.getElementById("arrowHeadSizeInput").value || 15);
+        applyArrowStyle(selected, size, stroke, headSize);
+        pushHistory("arrow-head-size");
+        setStatus(`Arrow head size: ${headSize}`);
+      });
+      document.getElementById("arrowHeadSizeInput").addEventListener("input", () => {
+        if (state.selectedIds.length !== 1) return;
+        const selected = getById(state.selectedIds[0]);
+        if (!(selected instanceof SVGElement) || selected.tagName !== "line" || selected.dataset.arrow !== "1") return;
+        const { size, stroke } = getArrowControlValues();
+        const headSize = Number(document.getElementById("arrowHeadSizeInput").value || 15);
+        applyArrowStyle(selected, size, stroke, headSize);
       });
       document.getElementById("arrowStrokeInput").addEventListener("change", () => {
         applyStrokeControlToSelectedLines({ push: true, withStatus: true });
