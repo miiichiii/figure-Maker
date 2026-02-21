@@ -808,13 +808,15 @@
     const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
     const LAST_ERROR_KEY = "figureMaker_last_error";
     const LIVE_AUTOSAVE_KEY = "figureMaker_live_snapshot";
+    const AUTOSAVE_DB_NAME = "figureMakerAutosaveDB";
+    const AUTOSAVE_DB_VERSION = 1;
+    const AUTOSAVE_RECORDS_STORE = "autosaveRecords";
+    const AUTOSAVE_META_STORE = "autosaveMeta";
+    const AUTOSAVE_META_LIVE_KEY = "liveSnapshot";
     const AUTOSAVE_MAX_RECORDS = 8;
     const MAX_HISTORY_ENTRIES_DEFAULT = 30;
     const MAX_HISTORY_SNAPSHOT_BYTES = 2 * 1024 * 1024;
     const MAX_HISTORY_TOTAL_BYTES = 24 * 1024 * 1024;
-    const MAX_AUTOSAVE_RECORD_BYTES = 2 * 1024 * 1024;
-    const MAX_AUTOSAVE_REFS_BYTES = 1200 * 1024;
-    const MAX_AUTOSAVE_TOTAL_BYTES = 4500 * 1024;
     const DEFAULT_VIEWBOX = "0 0 794 1123";
     const WORKSPACE_SIZE = 8000;
     const WORKSPACE_VIEWBOX = `0 0 ${WORKSPACE_SIZE} ${WORKSPACE_SIZE}`;
@@ -852,6 +854,7 @@
     const imagePool = new Map(); // dataUrl -> id
     const imagePoolRev = new Map(); // id -> dataUrl
     let imagePoolCounter = 0;
+    let autosaveDbPromise = null;
 
     function registerImage(dataUrl) {
       if (!dataUrl || !dataUrl.startsWith("data:image/")) return dataUrl;
@@ -951,6 +954,95 @@
       return msg.includes("exceeded the quota") || msg.includes("QuotaExceededError");
     }
 
+    function isIndexedDbAvailable() {
+      return typeof indexedDB !== "undefined" && indexedDB != null;
+    }
+
+    function idbRequestToPromise(request) {
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("IndexedDB request failed."));
+      });
+    }
+
+    function idbTransactionToPromise(tx) {
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error("IndexedDB transaction failed."));
+        tx.onabort = () => reject(tx.error || new Error("IndexedDB transaction aborted."));
+      });
+    }
+
+    function openAutosaveDb() {
+      if (!isIndexedDbAvailable()) return Promise.reject(new Error("IndexedDB unavailable"));
+      if (!autosaveDbPromise) {
+        autosaveDbPromise = new Promise((resolve, reject) => {
+          const req = indexedDB.open(AUTOSAVE_DB_NAME, AUTOSAVE_DB_VERSION);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(AUTOSAVE_RECORDS_STORE)) {
+              const store = db.createObjectStore(AUTOSAVE_RECORDS_STORE, { keyPath: "id" });
+              store.createIndex("at", "at", { unique: false });
+            } else {
+              const store = req.transaction?.objectStore(AUTOSAVE_RECORDS_STORE);
+              if (store && !store.indexNames.contains("at")) store.createIndex("at", "at", { unique: false });
+            }
+            if (!db.objectStoreNames.contains(AUTOSAVE_META_STORE)) {
+              db.createObjectStore(AUTOSAVE_META_STORE, { keyPath: "key" });
+            }
+          };
+          req.onsuccess = () => {
+            const db = req.result;
+            db.onversionchange = () => db.close();
+            resolve(db);
+          };
+          req.onerror = () => {
+            autosaveDbPromise = null;
+            reject(req.error || new Error("Failed to open autosave IndexedDB."));
+          };
+          req.onblocked = () => {
+            setStatus("Autosave DB upgrade blocked. Close other Figure Maker tabs.");
+          };
+        });
+      }
+      return autosaveDbPromise;
+    }
+
+    function cloneAutosaveRecord(record) {
+      if (!record || typeof record !== "object") return null;
+      const cloned = {
+        id: String(record.id || `as-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        at: Number(record.at || Date.now()),
+        markup: String(record.markup || ""),
+        selectedIds: Array.isArray(record.selectedIds) ? record.selectedIds.map((id) => String(id || "")) : [],
+        canvasMeta: record.canvasMeta && typeof record.canvasMeta === "object" ? { ...record.canvasMeta } : null
+      };
+      if (!cloned.canvasMeta) return null;
+      if (record.imageRefs && typeof record.imageRefs === "object") {
+        const refs = {};
+        Object.entries(record.imageRefs).forEach(([key, value]) => {
+          if (!key || typeof key !== "string") return;
+          if (!value || typeof value !== "string" || !value.startsWith("data:image/")) return;
+          refs[key] = value;
+        });
+        if (Object.keys(refs).length) cloned.imageRefs = refs;
+      }
+      const snapBytes = Number(record.snapBytes);
+      cloned.snapBytes = Number.isFinite(snapBytes) ? snapBytes : 0;
+      const sizeBytes = Number(record.sizeBytes);
+      cloned.sizeBytes = Number.isFinite(sizeBytes) ? sizeBytes : 0;
+      if (!cloned.sizeBytes) cloned.sizeBytes = estimateAutosaveRecordBytes(cloned);
+      return cloned;
+    }
+
+    function normalizeAutosaveRecords(records) {
+      if (!Array.isArray(records)) return [];
+      return records
+        .map((record) => cloneAutosaveRecord(record))
+        .filter((record) => !!record)
+        .sort((a, b) => Number(a.at || 0) - Number(b.at || 0));
+    }
+
     function estimateBytes(value) {
       if (value == null) return 0;
       if (typeof value !== "string") {
@@ -1001,7 +1093,7 @@
 
     function makeAutosaveRecord(prefix, reason) {
       const snap = getSnapshot(`${prefix}:${reason}`, { useRefs: true });
-      if (Number(snap.sizeBytes || 0) > MAX_AUTOSAVE_RECORD_BYTES) return null;
+      if (!snap || typeof snap.markup !== "string") return null;
       const rec = {
         id: `${prefix}-${Date.now()}`,
         at: Number(snap.at || Date.now()),
@@ -1011,13 +1103,8 @@
         snapBytes: Number(snap.sizeBytes || 0)
       };
       const refs = collectImageRefsForMarkup(snap.markup);
-      if (refs) {
-        const refsBytes = estimateBytes(refs);
-        if (refsBytes > MAX_AUTOSAVE_REFS_BYTES) return null;
-        rec.imageRefs = refs;
-      }
+      if (refs) rec.imageRefs = refs;
       rec.sizeBytes = estimateAutosaveRecordBytes(rec);
-      if (rec.sizeBytes > MAX_AUTOSAVE_RECORD_BYTES) return null;
       return rec;
     }
     /* ---------------------------------------- */
@@ -4967,71 +5054,174 @@
       setStatus("New canvas created.");
     }
 
-    function getAutosaveRecords() {
+    function readAutosaveRecordsFromLocalStorage() {
       try {
         const parsed = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "[]");
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (err) {
-        if (!state.autosaveParseWarned) {
-          state.autosaveParseWarned = true;
-          setStatus("Autosave data is invalid and was reset.");
-          captureError("autosave-parse", err, { userMessage: "Autosave data could not be read." });
-        }
+        return normalizeAutosaveRecords(parsed);
+      } catch (_) {
         return [];
       }
     }
 
-    function setAutosaveRecords(records) {
-      const capped = Array.isArray(records) ? records.slice(-AUTOSAVE_MAX_RECORDS) : [];
+    function setAutosaveRecordsLocalFallback(records, droppedByCap = 0) {
+      const capped = normalizeAutosaveRecords(records).slice(-AUTOSAVE_MAX_RECORDS);
       let working = capped.slice();
-      let totalBytes = working.reduce((sum, rec) => sum + estimateAutosaveRecordBytes(rec), 0);
-      while (working.length > 1 && totalBytes > MAX_AUTOSAVE_TOTAL_BYTES) {
-        const removed = working.shift();
-        totalBytes -= estimateAutosaveRecordBytes(removed);
-      }
       while (true) {
         try {
           if (!working.length) {
             localStorage.removeItem(AUTOSAVE_KEY);
-            return { stored: 0, dropped: capped.length };
+            return { stored: 0, dropped: droppedByCap + capped.length };
           }
           localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(working));
-          return { stored: working.length, dropped: capped.length - working.length };
+          return { stored: working.length, dropped: droppedByCap + (capped.length - working.length) };
         } catch (err) {
           if (!isQuotaExceededError(err)) throw err;
           if (!working.length) {
             localStorage.removeItem(AUTOSAVE_KEY);
-            return { stored: 0, dropped: capped.length };
+            return { stored: 0, dropped: droppedByCap + capped.length };
           }
           working = working.slice(1);
         }
       }
     }
 
-    function getLiveAutosaveRecord() {
+    function readLiveAutosaveRecordFromLocalStorage() {
       try {
         const raw = localStorage.getItem(LIVE_AUTOSAVE_KEY);
         if (!raw) return null;
-        const rec = JSON.parse(raw);
-        if (!rec || typeof rec !== "object") return null;
-        if (!rec.markup || !rec.canvasMeta) return null;
-        return rec;
+        return cloneAutosaveRecord(JSON.parse(raw));
       } catch (_) {
         return null;
       }
     }
 
-    function writeLiveAutosave(reason = "live") {
+    function writeLiveAutosaveRecordToLocalStorage(record) {
+      if (!record) {
+        localStorage.removeItem(LIVE_AUTOSAVE_KEY);
+        return;
+      }
+      localStorage.setItem(LIVE_AUTOSAVE_KEY, JSON.stringify(record));
+    }
+
+    async function readAutosaveRecordsFromIndexedDb() {
+      const db = await openAutosaveDb();
+      const tx = db.transaction(AUTOSAVE_RECORDS_STORE, "readonly");
+      const store = tx.objectStore(AUTOSAVE_RECORDS_STORE);
+      const result = await idbRequestToPromise(store.getAll());
+      await idbTransactionToPromise(tx);
+      return normalizeAutosaveRecords(result);
+    }
+
+    async function writeAutosaveRecordsToIndexedDb(records) {
+      const normalized = normalizeAutosaveRecords(records).slice(-AUTOSAVE_MAX_RECORDS);
+      const db = await openAutosaveDb();
+      const tx = db.transaction(AUTOSAVE_RECORDS_STORE, "readwrite");
+      const store = tx.objectStore(AUTOSAVE_RECORDS_STORE);
+      store.clear();
+      normalized.forEach((record) => store.put(record));
+      await idbTransactionToPromise(tx);
+      return normalized;
+    }
+
+    async function readLiveAutosaveRecordFromIndexedDb() {
+      const db = await openAutosaveDb();
+      const tx = db.transaction(AUTOSAVE_META_STORE, "readonly");
+      const store = tx.objectStore(AUTOSAVE_META_STORE);
+      const entry = await idbRequestToPromise(store.get(AUTOSAVE_META_LIVE_KEY));
+      await idbTransactionToPromise(tx);
+      return cloneAutosaveRecord(entry?.value || null);
+    }
+
+    async function writeLiveAutosaveRecordToIndexedDb(record) {
+      const normalized = cloneAutosaveRecord(record);
+      if (!normalized) return null;
+      const db = await openAutosaveDb();
+      const tx = db.transaction(AUTOSAVE_META_STORE, "readwrite");
+      const store = tx.objectStore(AUTOSAVE_META_STORE);
+      store.put({ key: AUTOSAVE_META_LIVE_KEY, value: normalized, at: Date.now() });
+      await idbTransactionToPromise(tx);
+      return normalized;
+    }
+
+    async function migrateLegacyAutosaveStorage() {
+      if (!isIndexedDbAvailable()) return;
+      const legacyRecords = readAutosaveRecordsFromLocalStorage();
+      const legacyLive = readLiveAutosaveRecordFromLocalStorage();
+      if (!legacyRecords.length && !legacyLive) return;
+      try {
+        const indexedRecords = await readAutosaveRecordsFromIndexedDb();
+        const mergedMap = new Map();
+        indexedRecords.forEach((record) => mergedMap.set(record.id, record));
+        legacyRecords.forEach((record) => mergedMap.set(record.id, record));
+        const merged = normalizeAutosaveRecords(Array.from(mergedMap.values())).slice(-AUTOSAVE_MAX_RECORDS);
+        await writeAutosaveRecordsToIndexedDb(merged);
+        if (legacyLive) {
+          const currentLive = await readLiveAutosaveRecordFromIndexedDb();
+          if (!currentLive || Number(legacyLive.at || 0) >= Number(currentLive.at || 0)) {
+            await writeLiveAutosaveRecordToIndexedDb(legacyLive);
+          }
+        }
+        localStorage.removeItem(AUTOSAVE_KEY);
+        localStorage.removeItem(LIVE_AUTOSAVE_KEY);
+      } catch (err) {
+        captureError("autosave-migrate", err, { userMessage: "Autosave migration failed." });
+      }
+    }
+
+    async function getAutosaveRecords() {
+      try {
+        if (!isIndexedDbAvailable()) return readAutosaveRecordsFromLocalStorage();
+        return await readAutosaveRecordsFromIndexedDb();
+      } catch (err) {
+        if (!state.autosaveParseWarned) {
+          state.autosaveParseWarned = true;
+          setStatus("Autosave storage read failed. Fallback storage was used.");
+          captureError("autosave-read", err, { userMessage: "Autosave data could not be read." });
+        }
+        return readAutosaveRecordsFromLocalStorage();
+      }
+    }
+
+    async function setAutosaveRecords(records) {
+      const normalized = normalizeAutosaveRecords(records);
+      const capped = normalized.slice(-AUTOSAVE_MAX_RECORDS);
+      const droppedByCap = Math.max(0, normalized.length - capped.length);
+      if (!isIndexedDbAvailable()) {
+        return setAutosaveRecordsLocalFallback(capped, droppedByCap);
+      }
+      try {
+        const stored = await writeAutosaveRecordsToIndexedDb(capped);
+        return { stored: stored.length, dropped: droppedByCap };
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    async function getLiveAutosaveRecord() {
+      try {
+        if (!isIndexedDbAvailable()) return readLiveAutosaveRecordFromLocalStorage();
+        return await readLiveAutosaveRecordFromIndexedDb();
+      } catch (err) {
+        captureError("live-autosave-read", err, { userMessage: "Live autosave data could not be read." });
+        return readLiveAutosaveRecordFromLocalStorage();
+      }
+    }
+
+    async function setLiveAutosaveRecord(record) {
+      const normalized = cloneAutosaveRecord(record);
+      if (!normalized) return;
+      if (!isIndexedDbAvailable()) {
+        writeLiveAutosaveRecordToLocalStorage(normalized);
+        return;
+      }
+      await writeLiveAutosaveRecordToIndexedDb(normalized);
+    }
+
+    async function writeLiveAutosave(reason = "live") {
       try {
         const rec = makeAutosaveRecord("live", reason);
-        if (!rec) {
-          if (!state.liveAutosaveSizeWarned) {
-            state.liveAutosaveSizeWarned = true;
-            setStatus("Live autosave skipped: snapshot too large. Use Save SVG.");
-          }
-          return;
-        }
-        localStorage.setItem(LIVE_AUTOSAVE_KEY, JSON.stringify(rec));
+        if (!rec) return;
+        await setLiveAutosaveRecord(rec);
         state.liveAutosaveQuotaWarned = false;
         state.liveAutosaveSizeWarned = false;
       } catch (err) {
@@ -5051,31 +5241,24 @@
       if (state.liveAutosaveTimer) clearTimeout(state.liveAutosaveTimer);
       state.liveAutosaveTimer = window.setTimeout(() => {
         state.liveAutosaveTimer = 0;
-        writeLiveAutosave(reason);
+        void writeLiveAutosave(reason);
       }, 450);
     }
 
-    function saveAutosave() {
-      const records = getAutosaveRecords();
+    async function saveAutosave() {
       const rec = makeAutosaveRecord("as", "timed");
-      if (!rec) {
-        if (!state.autosaveSizeWarned) {
-          state.autosaveSizeWarned = true;
-          setStatus("Autosave skipped: snapshot too large. Use Save SVG.");
-        }
-        return;
-      }
-      state.autosaveSizeWarned = false;
+      if (!rec) return;
+      const records = await getAutosaveRecords();
       records.push(rec);
       let result = { stored: 0, dropped: 0 };
       try {
-        result = setAutosaveRecords(records);
+        result = await setAutosaveRecords(records);
       } catch (err) {
         captureError("autosave-write", err, { userMessage: "Autosave write failed." });
         return;
       }
-      writeLiveAutosave("timed");
-      refreshRestoreList();
+      await writeLiveAutosave("timed");
+      await refreshRestoreList();
       if (!result.stored) {
         if (!state.autosaveQuotaWarned) {
           state.autosaveQuotaWarned = true;
@@ -5088,8 +5271,8 @@
       setStatus(`Autosave snapshot written.${dropped}`);
     }
 
-    function refreshRestoreList() {
-      const records = getAutosaveRecords();
+    async function refreshRestoreList() {
+      const records = await getAutosaveRecords();
       restoreListEl.innerHTML = "";
       records.slice().reverse().forEach((r) => {
         const option = document.createElement("option");
@@ -5099,43 +5282,53 @@
       });
     }
 
-    function restoreLatest() {
+    async function restoreLatest() {
       cancelImageCropMode({ silent: true });
-      const records = getAutosaveRecords();
-      const timed = records[records.length - 1] || null;
-      const live = getLiveAutosaveRecord();
-      const r = live && (!timed || Number(live.at || 0) >= Number(timed.at || 0)) ? live : timed;
-      if (!r || !r.markup) {
-        setStatus("No autosave records.");
-        return;
+      try {
+        const records = await getAutosaveRecords();
+        const timed = records[records.length - 1] || null;
+        const live = await getLiveAutosaveRecord();
+        const r = live && (!timed || Number(live.at || 0) >= Number(timed.at || 0)) ? live : timed;
+        if (!r || !r.markup) {
+          setStatus("No autosave records.");
+          return;
+        }
+        applyCanvasMeta(r.canvasMeta);
+        applySnapshotMarkup(r.markup, r.imageRefs || null);
+        assignIds();
+        ensureFigureTitle();
+        setSelection(r.selectedIds || []);
+        resetHistory("restore-latest");
+        const source = r.id && String(r.id).startsWith("live-") ? "live" : "timed";
+        const stamp = r.at ? new Date(r.at).toLocaleString() : "";
+        setStatus(`Latest autosave restored (${source}${stamp ? `: ${stamp}` : ""}).`);
+      } catch (err) {
+        captureError("autosave-restore-latest", err, { userMessage: "Restore latest failed." });
+        setStatus("Restore latest failed.");
       }
-      applyCanvasMeta(r.canvasMeta);
-      applySnapshotMarkup(r.markup, r.imageRefs || null);
-      assignIds();
-      ensureFigureTitle();
-      setSelection(r.selectedIds || []);
-      resetHistory("restore-latest");
-      const source = r.id && String(r.id).startsWith("live-") ? "live" : "timed";
-      const stamp = r.at ? new Date(r.at).toLocaleString() : "";
-      setStatus(`Latest autosave restored (${source}${stamp ? `: ${stamp}` : ""}).`);
     }
 
-    function restoreFromList() {
+    async function restoreFromList() {
       cancelImageCropMode({ silent: true });
-      const records = getAutosaveRecords();
-      const id = restoreListEl.value;
-      const r = records.find((x) => x.id === id);
-      if (!r) {
-        setStatus("Selected autosave not found.");
-        return;
+      try {
+        const records = await getAutosaveRecords();
+        const id = restoreListEl.value;
+        const r = records.find((x) => x.id === id);
+        if (!r) {
+          setStatus("Selected autosave not found.");
+          return;
+        }
+        applyCanvasMeta(r.canvasMeta);
+        applySnapshotMarkup(r.markup, r.imageRefs || null);
+        assignIds();
+        ensureFigureTitle();
+        setSelection(r.selectedIds || []);
+        resetHistory("restore-from-list");
+        setStatus("Autosave restored.");
+      } catch (err) {
+        captureError("autosave-restore-selected", err, { userMessage: "Restore selected failed." });
+        setStatus("Restore selected failed.");
       }
-      applyCanvasMeta(r.canvasMeta);
-      applySnapshotMarkup(r.markup, r.imageRefs || null);
-      assignIds();
-      ensureFigureTitle();
-      setSelection(r.selectedIds || []);
-      resetHistory("restore-from-list");
-      setStatus("Autosave restored.");
     }
 
     function updateAutosaveTimer() {
@@ -5146,7 +5339,7 @@
       const val = document.getElementById("autosaveSelect").value;
       localStorage.setItem(AUTOSAVE_INTERVAL_KEY, val);
       if (val !== "off") {
-        state.autosaveTimer = setInterval(saveAutosave, Number(val) * 60 * 1000);
+        state.autosaveTimer = setInterval(() => { void saveAutosave(); }, Number(val) * 60 * 1000);
       }
       if (val === "off") setStatus("Autosave off. Live restore snapshot remains available.");
       else setStatus(`Autosave set: ${val} min (timed) + live snapshot on edit.`);
@@ -5378,34 +5571,39 @@
       const sy = Math.max(0, Math.min(naturalH - 1, Number(crop.top || 0) * scaleY));
       const sw = Math.max(1, Math.min(naturalW - sx, Number(crop.width || renderW) * scaleX));
       const sh = Math.max(1, Math.min(naturalH - sy, Number(crop.height || renderH) * scaleY));
-      const outW = Math.max(1, Math.round(Number(crop.width || renderW)));
-      const outH = Math.max(1, Math.round(Number(crop.height || renderH)));
+      let outW = Math.max(1, Math.round(sw));
+      let outH = Math.max(1, Math.round(sh));
+      const maxCanvasDim = 16384;
+      const dimScale = Math.min(1, maxCanvasDim / Math.max(outW, outH));
+      if (dimScale < 0.9999) {
+        outW = Math.max(1, Math.round(outW * dimScale));
+        outH = Math.max(1, Math.round(outH * dimScale));
+      }
       const tmp = document.createElement("canvas");
       tmp.width = outW;
       tmp.height = outH;
       const ctx = tmp.getContext("2d");
       if (!ctx) throw new Error("Crop canvas context unavailable.");
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-      return tmp.toDataURL("image/png");
-    }
-
-    function clampToRect(pt, rect) {
-      const x = Math.max(rect.x, Math.min(rect.x + rect.width, Number(pt?.x || rect.x)));
-      const y = Math.max(rect.y, Math.min(rect.y + rect.height, Number(pt?.y || rect.y)));
-      return { x, y };
+      const beforePpuX = naturalW / renderW;
+      const beforePpuY = naturalH / renderH;
+      const afterPpuX = outW / Math.max(1, Number(crop.width || renderW));
+      const afterPpuY = outH / Math.max(1, Number(crop.height || renderH));
+      return {
+        dataUrl: tmp.toDataURL("image/png"),
+        outputWidth: outW,
+        outputHeight: outH,
+        beforePpuX,
+        beforePpuY,
+        afterPpuX,
+        afterPpuY,
+        limitedByCanvas: dimScale < 0.9999
+      };
     }
 
     function pointInRect(pt, rect) {
       if (!pt || !rect) return false;
       return pt.x >= rect.x && pt.x <= rect.x + rect.width && pt.y >= rect.y && pt.y <= rect.y + rect.height;
-    }
-
-    function computeRectFromPoints(a, b) {
-      const x = Math.min(Number(a?.x || 0), Number(b?.x || 0));
-      const y = Math.min(Number(a?.y || 0), Number(b?.y || 0));
-      const width = Math.abs(Number(a?.x || 0) - Number(b?.x || 0));
-      const height = Math.abs(Number(a?.y || 0) - Number(b?.y || 0));
-      return { x, y, width, height };
     }
 
     function renderCropOverlay() {
@@ -5447,35 +5645,59 @@
       cm.draftEl = null;
     }
 
-    function startCropDraft(pt) {
-      const cm = state.cropMode;
-      if (!cm) return;
-      const start = clampToRect(pt, cm.imageBox);
-      cm.dragStart = start;
-      cm.dragCurrent = start;
-      cm.draftRect = null;
-      renderCropOverlay();
-      state.interaction = { type: "crop-drag", pointerId: null };
+    function createDefaultCropRect(imageBox) {
+      const w = Math.max(24, Math.min(imageBox.width, imageBox.width * 0.72));
+      const h = Math.max(24, Math.min(imageBox.height, imageBox.height * 0.72));
+      return {
+        x: imageBox.x + (imageBox.width - w) / 2,
+        y: imageBox.y + (imageBox.height - h) / 2,
+        width: w,
+        height: h
+      };
     }
 
-    function updateCropDraft(pt) {
+    function clampCropRectToImage(rect, imageBox) {
+      const width = Math.max(2, Math.min(Number(rect?.width || 0), imageBox.width));
+      const height = Math.max(2, Math.min(Number(rect?.height || 0), imageBox.height));
+      const minX = imageBox.x;
+      const minY = imageBox.y;
+      const maxX = imageBox.x + imageBox.width - width;
+      const maxY = imageBox.y + imageBox.height - height;
+      const x = Math.max(minX, Math.min(maxX, Number(rect?.x || minX)));
+      const y = Math.max(minY, Math.min(maxY, Number(rect?.y || minY)));
+      return { x, y, width, height };
+    }
+
+    function startCropMove(pt) {
       const cm = state.cropMode;
-      if (!cm || !cm.dragStart) return;
-      cm.dragCurrent = clampToRect(pt, cm.imageBox);
-      const rect = computeRectFromPoints(cm.dragStart, cm.dragCurrent);
-      cm.draftRect = (rect.width > 1 && rect.height > 1) ? rect : null;
+      if (!cm || !cm.draftRect) return;
+      cm.moveOffset = {
+        x: Number(pt?.x || cm.draftRect.x) - cm.draftRect.x,
+        y: Number(pt?.y || cm.draftRect.y) - cm.draftRect.y
+      };
+      state.interaction = { type: "crop-move", pointerId: null };
+    }
+
+    function updateCropMove(pt) {
+      const cm = state.cropMode;
+      if (!cm || !cm.draftRect || !cm.moveOffset) return;
+      const nx = Number(pt?.x || 0) - Number(cm.moveOffset.x || 0);
+      const ny = Number(pt?.y || 0) - Number(cm.moveOffset.y || 0);
+      cm.draftRect = clampCropRectToImage({
+        x: nx,
+        y: ny,
+        width: cm.draftRect.width,
+        height: cm.draftRect.height
+      }, cm.imageBox);
       renderCropOverlay();
     }
 
-    function finishCropDraft() {
+    function finishCropMove() {
       const cm = state.cropMode;
       if (!cm) return;
-      cm.dragStart = null;
-      cm.dragCurrent = null;
+      cm.moveOffset = null;
       if (cm.draftRect) {
-        setStatus("Crop area selected. Press Apply Crop or Enter.");
-      } else {
-        setStatus("Crop mode: drag inside image to select crop area.");
+        setStatus("Crop box moved. Press Enter (or Apply Crop) to confirm.");
       }
       updateCropUi();
       state.interaction = null;
@@ -5484,7 +5706,7 @@
     function cancelImageCropMode(options = {}) {
       const cm = state.cropMode;
       if (!cm) return false;
-      if (state.interaction && state.interaction.type === "crop-drag") state.interaction = null;
+      if (state.interaction && state.interaction.type === "crop-move") state.interaction = null;
       clearCropOverlay(cm);
       state.cropMode = null;
       updateCropUi();
@@ -5495,7 +5717,7 @@
     async function applyCropFromMode() {
       const cm = state.cropMode;
       if (!cm || !cm.draftRect) {
-        setStatus("Drag crop area first.");
+        setStatus("Move crop box first.");
         return;
       }
       const imgEl = getById(cm.targetId);
@@ -5543,12 +5765,24 @@
         imgEl.setAttribute("y", String(topLocal));
         imgEl.setAttribute("width", String(cropW));
         imgEl.setAttribute("height", String(cropH));
-        imgEl.setAttribute("href", cropped);
-        imgEl.setAttributeNS(XLINK_NS, "href", cropped);
+        imgEl.setAttribute("href", cropped.dataUrl);
+        imgEl.setAttributeNS(XLINK_NS, "href", cropped.dataUrl);
         requestSelectionVisualRefresh();
         pushHistory("crop-image");
         cancelImageCropMode({ silent: true });
-        setStatus(`Image cropped: ${Math.round(cropW)}x${Math.round(cropH)}`);
+        const ratioX = Number(cropped.afterPpuX || 0) / Math.max(1e-9, Number(cropped.beforePpuX || 0));
+        const ratioY = Number(cropped.afterPpuY || 0) / Math.max(1e-9, Number(cropped.beforePpuY || 0));
+        const ratio = Math.min(ratioX, ratioY);
+        let densityNote = "";
+        if (ratio >= 0.98 && ratio <= 1.02) {
+          densityNote = "resolution preserved";
+        } else if (ratio < 0.98) {
+          densityNote = `resolution reduced to ${Math.max(1, Math.round(ratio * 100))}%`;
+        } else {
+          densityNote = `resolution increased to ${Math.max(1, Math.round(ratio * 100))}%`;
+        }
+        if (cropped.limitedByCanvas) densityNote += " (canvas limit applied)";
+        setStatus(`Image cropped: ${Math.round(cropW)}x${Math.round(cropH)} | data ${cropped.outputWidth}x${cropped.outputHeight} | ${densityNote}`);
       } catch (err) {
         setStatus("Image crop failed.");
         captureError("image-crop", err, { userMessage: "Image crop failed." });
@@ -5576,18 +5810,18 @@
         setStatus("Image bounding box is invalid for crop.");
         return;
       }
+      const draftRect = clampCropRectToImage(createDefaultCropRect(box), box);
       cancelImageCropMode({ silent: true });
       state.cropMode = {
         targetId: imgEl.dataset.id,
         imageBox: { x: box.x, y: box.y, width: box.width, height: box.height },
         boundaryEl: null,
         draftEl: null,
-        dragStart: null,
-        dragCurrent: null,
-        draftRect: null
+        moveOffset: null,
+        draftRect
       };
       renderCropOverlay();
-      setStatus("Crop mode: drag inside image to select crop area.");
+      setStatus("Crop mode: drag crop box to choose area. Press Enter to confirm.");
     }
 
     function pasteRasterImageQuick(source, options = {}) {
@@ -7498,13 +7732,13 @@
       });
 
       document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
-      document.getElementById("restoreLatest").addEventListener("click", restoreLatest);
+      document.getElementById("restoreLatest").addEventListener("click", () => { void restoreLatest(); });
       document.getElementById("toggleAdvanced").addEventListener("click", () => {
         if (!document.body.classList.contains("compact")) return;
         document.body.classList.toggle("show-advanced");
         setStatus(document.body.classList.contains("show-advanced") ? "Advanced restore options shown." : "Advanced restore options hidden.");
       });
-      document.getElementById("restoreFromList").addEventListener("click", restoreFromList);
+      document.getElementById("restoreFromList").addEventListener("click", () => { void restoreFromList(); });
       canvasWrapEl.addEventListener("wheel", (e) => {
         if (!(e.ctrlKey || e.metaKey)) return;
         e.preventDefault();
@@ -7657,11 +7891,21 @@
         closeFigureEditor();
         if (state.cropMode) {
           const pt = getSvgPoint(e.clientX, e.clientY);
-          if (!pointInRect(pt, state.cropMode.imageBox)) {
-            setStatus("Crop mode: drag inside the selected image.");
+          const cm = state.cropMode;
+          if (!pointInRect(pt, cm.imageBox)) {
+            setStatus("Crop mode: drag crop box inside the selected image.");
             return;
           }
-          startCropDraft(pt);
+          if (cm.draftRect && !pointInRect(pt, cm.draftRect)) {
+            cm.draftRect = clampCropRectToImage({
+              x: pt.x - cm.draftRect.width / 2,
+              y: pt.y - cm.draftRect.height / 2,
+              width: cm.draftRect.width,
+              height: cm.draftRect.height
+            }, cm.imageBox);
+            renderCropOverlay();
+          }
+          startCropMove(pt);
           if (state.interaction) state.interaction.pointerId = e.pointerId;
           if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
           e.preventDefault();
@@ -7805,7 +8049,7 @@
         const pt = getSvgPoint(e.clientX, e.clientY);
         const disableSnap = !!(e.altKey || e.ctrlKey);
         if (it.type === "pan") updatePan(e.clientX, e.clientY);
-        if (it.type === "crop-drag") updateCropDraft(pt);
+        if (it.type === "crop-move") updateCropMove(pt);
         if (it.type === "drag") updateDrag(pt, { disableSnap });
         if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
         if (it.type === "rotate") updateRotate(pt, { snapAngle: e.shiftKey });
@@ -7819,7 +8063,7 @@
         const capturedId = it.pointerId;
         const type = it.type;
         if (type === "pan") finishPan();
-        if (type === "crop-drag") finishCropDraft();
+        if (type === "crop-move") finishCropMove();
         if (type === "drag") finishDrag();
         if (type === "resize") finishResize();
         if (type === "rotate") finishRotate();
@@ -7841,9 +8085,8 @@
           });
           if (Array.isArray(state.interaction.sourceSelection)) setSelection(state.interaction.sourceSelection);
         }
-        if (state.interaction.type === "crop-drag" && state.cropMode) {
-          state.cropMode.dragStart = null;
-          state.cropMode.dragCurrent = null;
+        if (state.interaction.type === "crop-move" && state.cropMode) {
+          state.cropMode.moveOffset = null;
           updateCropUi();
         }
         if (state.interaction.type === "pan") {
@@ -8036,7 +8279,7 @@
         }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "r") {
           e.preventDefault();
-          restoreLatest();
+          void restoreLatest();
         }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "i") {
           e.preventDefault();
@@ -8083,12 +8326,12 @@
       // window.addEventListener("focus", focusPasteSink);
       window.addEventListener("resize", renderStatus);
       window.addEventListener("beforeunload", () => {
-        writeLiveAutosave("beforeunload");
-        if (document.getElementById("autosaveSelect").value !== "off") saveAutosave();
+        void writeLiveAutosave("beforeunload");
+        if (document.getElementById("autosaveSelect").value !== "off") void saveAutosave();
       });
     }
 
-    function initialize() {
+    async function initialize() {
       setupGlobalErrorHandlers();
       setupEventRingHooks();
       state.viewScale = 1;
@@ -8126,23 +8369,23 @@
           state.pasteReportHistory = history.filter((r) => r && typeof r === "object" && r.route).slice(-30);
         }
       } catch (_) {}
-      try {
-        // Trim oversized legacy autosave payloads on startup.
-        setAutosaveRecords(getAutosaveRecords());
-      } catch (_) {}
+      await migrateLegacyAutosaveStorage();
       const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
       document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";
       const alignBasis = localStorage.getItem(ALIGN_BASIS_KEY);
       state.alignBasis = alignBasis === "first" ? "first" : "bbox";
       document.getElementById("alignBasisSelect").value = state.alignBasis;
-      refreshRestoreList();
+      await refreshRestoreList();
       updateAutosaveTimer();
       ensureFigureTitle();
       pushHistory("init");
       setStatus("Figure Maker ready.");
     }
 
-    initialize();
+    initialize().catch((err) => {
+      captureError("initialize", err, { userMessage: "Initialization failed." });
+      setStatus("Initialization failed. Reload and try again.");
+    });
   </script>
 </body>
 </html>
