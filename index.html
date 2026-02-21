@@ -772,7 +772,6 @@
           <button class="menu-action" data-menu-action="edit.redo">Redo</button>
           <div class="menu-sep"></div>
           <button class="menu-action" data-menu-action="edit.copy">Copy (SVG)</button>
-          <button class="menu-action" data-menu-action="edit.copyImage">Copy as Image (for Excel)</button>
           <button class="menu-action" data-menu-action="edit.cut">Cut</button>
           <button class="menu-action" data-menu-action="edit.paste">Paste (Internal)</button>
           <div class="menu-sep"></div>
@@ -3889,7 +3888,6 @@
       if (action === "edit.undo") return undo();
       if (action === "edit.redo") return redo();
       if (action === "edit.copy") return copySelected();
-      if (action === "edit.copyImage") return copySelectedAsImage();
       if (action === "edit.cut") return cutSelected();
       if (action === "edit.paste") return pasteInternalClipboard();
       if (action === "edit.group") return groupSelected();
@@ -4231,85 +4229,6 @@
       const { minX, minY, width, height } = getCanvasDimensions();
       const body = items.map((it) => String(it.markup || "")).join("");
       return `<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${body}</svg>`;
-    }
-
-    async function copySelectedAsImage() {
-      const elements = getTopSelectedElements();
-      if (!elements.length) {
-        setStatus("Select object(s) to copy for Excel.");
-        return;
-      }
-      
-      // Calculate bounds of selection
-      const boxes = elements.map(safeBBox).filter(Boolean);
-      const bounds = combineBoxes(boxes);
-      if (!bounds || bounds.width <= 0 || bounds.height <= 0) return;
-
-      setStatus("Rendering for Excel/PPT...");
-
-      // Create a temporary SVG string of just the selected items
-      // We need to bake styles and ensure it's standalone
-      const cloneContainer = document.createElement("div");
-      const tempSvg = document.createElementNS(SVG_NS, "svg");
-      // Add generous padding to avoid clipping strokes
-      const padding = 10;
-      tempSvg.setAttribute("viewBox", `${bounds.x - padding} ${bounds.y - padding} ${bounds.width + padding * 2} ${bounds.height + padding * 2}`);
-      tempSvg.setAttribute("width", String(bounds.width + padding * 2));
-      tempSvg.setAttribute("height", String(bounds.height + padding * 2));
-      tempSvg.setAttribute("xmlns", SVG_NS);
-      
-      // Clone elements into temp SVG
-      // Need to handle defs (markers) if arrows are selected
-      const defs = ensureCanvasDefs().cloneNode(true);
-      tempSvg.appendChild(defs);
-      
-      elements.forEach(el => {
-        const clone = el.cloneNode(true);
-        // Clean up UI-specific classes if any
-        clone.classList.remove("fm-selected", "fm-group-selected");
-        tempSvg.appendChild(clone);
-      });
-      
-      const svgString = new XMLSerializer().serializeToString(tempSvg);
-      
-      // Render to Canvas at High DPI (3x = ~300dpi visual feel)
-      const scale = 3;
-      const canvasTmp = document.createElement("canvas");
-      canvasTmp.width = (bounds.width + padding * 2) * scale;
-      canvasTmp.height = (bounds.height + padding * 2) * scale;
-      const ctx = canvasTmp.getContext("2d");
-      
-      if (!window.canvg || !window.canvg.Canvg) {
-        setStatus("Error: canvg library missing.");
-        return;
-      }
-
-      try {
-        const v = await window.canvg.Canvg.fromString(ctx, svgString, {
-          ignoreMouse: true,
-          ignoreAnimation: true,
-          scaleWidth: canvasTmp.width,
-          scaleHeight: canvasTmp.height
-        });
-        await v.render();
-        
-        canvasTmp.toBlob(async (blob) => {
-          if (!blob) {
-            setStatus("Failed to create image blob.");
-            return;
-          }
-          try {
-            const item = new ClipboardItem({ "image/png": blob });
-            await navigator.clipboard.write([item]);
-            setStatus("Copied as Image (Excel/PPT safe).");
-          } catch (err) {
-            setStatus("Clipboard write failed: " + err.message);
-          }
-        }, "image/png");
-      } catch (e) {
-        console.error(e);
-        setStatus("Rendering failed.");
-      }
     }
 
     async function copySelectedToSystemClipboard(items) {
