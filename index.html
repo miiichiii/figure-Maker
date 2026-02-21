@@ -529,13 +529,13 @@
         <button class="toolbar-tab-btn" data-toolbar-tab-btn="text">Text</button>
       </div>
       <div class="group" data-toolbar-tab="all">
-        <button id="toolSelect" class="active tool-icon-btn" title="Black Arrow (V)" aria-label="Black Arrow (V)">
+        <button id="toolSelect" class="active tool-icon-btn" title="Select tool" aria-label="Select tool">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
           </svg>
           <span class="sr-only">Black Arrow</span>
         </button>
-        <button id="toolDirect" class="tool-icon-btn" title="White Arrow (A)" aria-label="White Arrow (A)">
+        <button id="toolDirect" class="tool-icon-btn" title="Direct select tool" aria-label="Direct select tool">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ffffff" stroke="#111827" stroke-width="1.3"></path>
           </svg>
@@ -626,7 +626,7 @@
           </svg>
           <span class="sr-only">Triangle</span>
         </button>
-        <button id="matchArrowBtn" title="Apply arrowhead to selected line(s)">Apply Arrow</button>
+        <button id="matchArrowBtn" title="Apply Arrow: selected line(s) get an arrowhead. Arrowhead height follows stroke width x3.">Apply Arrow</button>
         <label for="lineStrokeWidthInput">Stroke width</label>
         <input id="lineStrokeWidthInput" type="number" min="0.5" max="20" step="0.5" value="3" style="width:70px" />
         <label for="objectFillColorInput">Fill</label>
@@ -1474,17 +1474,20 @@
     function applySelectionStyles() {
       canvas.querySelectorAll(".fm-selected").forEach((el) => el.classList.remove("fm-selected"));
       canvas.querySelectorAll(".fm-group-selected").forEach((el) => el.classList.remove("fm-group-selected"));
+      refreshAllGroupLabels();
       renderSelectionOutlines();
     }
 
     function requestSelectionVisualRefresh() {
       if (state.interaction && (state.interaction.type === "drag" || state.interaction.type === "resize" || state.interaction.type === "rotate")) {
+        refreshAllGroupLabels();
         renderSelectionOutlines();
         return;
       }
       if (state.selectionRefreshRaf) return;
       state.selectionRefreshRaf = requestAnimationFrame(() => {
         state.selectionRefreshRaf = 0;
+        refreshAllGroupLabels();
         renderSelectionOutlines();
       });
     }
@@ -2061,27 +2064,56 @@
       };
     }
 
-    function refreshGroupLabelPosition(groupEl) {
-      if (!(groupEl instanceof SVGElement) || groupEl.tagName !== "g") return;
-      const label = groupEl.querySelector(':scope > [data-fm-group-label="1"]');
-      if (!(label instanceof SVGElement)) return;
-      const b = getGroupContentBBox(groupEl);
-      if (!b) return;
-      const local = canvasPointToElementLocal(groupEl, b.x, b.y - 6);
-      label.setAttribute("x", String(Number(local.x.toFixed(4))));
-      label.setAttribute("y", String(Number(local.y.toFixed(4))));
-      const baseSize = Number(label.dataset.markBaseSize || label.getAttribute("font-size") || "");
+    function getMarkTargetBox(targetEl) {
+      if (!(targetEl instanceof SVGElement)) return null;
+      if (targetEl.tagName === "g") return getGroupContentBBox(targetEl) || safeBBox(targetEl);
+      return safeBBox(targetEl);
+    }
+
+    function positionMarkLabelForTarget(targetEl, labelEl) {
+      if (!(targetEl instanceof SVGElement) || !(labelEl instanceof SVGElement)) return false;
+      const b = getMarkTargetBox(targetEl);
+      if (!b) return false;
+      const x = Number((b.x - 5).toFixed(4));
+      const y = Number((b.y - 5).toFixed(4));
+      labelEl.setAttribute("x", String(x));
+      labelEl.setAttribute("y", String(y));
+      labelEl.dataset.baseTransform = "";
+      labelEl.dataset.tx = "0";
+      labelEl.dataset.ty = "0";
+      labelEl.removeAttribute("transform");
+      const baseSize = Number(labelEl.dataset.markBaseSize || labelEl.getAttribute("font-size") || "");
       if (Number.isFinite(baseSize) && baseSize > 0) {
         const locked = Math.max(6, Math.round(baseSize));
-        label.dataset.markBaseSize = String(locked);
-        label.setAttribute("font-size", String(locked));
-        label.style.setProperty("font-size", `${locked}px`);
+        labelEl.dataset.markBaseSize = String(locked);
+        labelEl.setAttribute("font-size", String(locked));
+        labelEl.style.setProperty("font-size", `${locked}px`);
       }
-      applyMarkLabelCompensation(label);
+      return true;
     }
 
     function refreshAllGroupLabels() {
-      canvas.querySelectorAll("g").forEach((g) => refreshGroupLabelPosition(g));
+      const labels = Array.from(canvas.querySelectorAll('[data-fm-group-label="1"], .fm-group-label'))
+        .filter((n) => n instanceof SVGElement);
+      labels.forEach((label) => {
+        const linkedIdRaw = String(label.getAttribute("data-fm-mark-target-id") || "").trim();
+        let target = linkedIdRaw ? getById(linkedIdRaw) : null;
+        if (!(target instanceof SVGElement) || !isEditableElement(target) || target === label) {
+          const parent = label.parentNode instanceof SVGElement ? label.parentNode : null;
+          if (parent && parent.tagName === "g" && parent !== canvas && parent.dataset?.id) {
+            target = parent;
+            label.setAttribute("data-fm-mark-target-id", parent.dataset.id);
+          }
+        }
+        if (!(target instanceof SVGElement) || !target.dataset?.id) {
+          if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
+          label.remove();
+          return;
+        }
+        if (label.parentNode !== canvas) canvas.appendChild(label);
+        positionMarkLabelForTarget(target, label);
+        if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
+      });
     }
 
     function getTopSelectedElements() {
@@ -3321,6 +3353,29 @@
       document.querySelectorAll(".menu-root.open").forEach((el) => el.classList.remove("open"));
     }
 
+    function setupButtonTooltips() {
+      const explicit = {
+        toolSelect: "Select tool",
+        toolDirect: "Direct select tool",
+        matchArrowBtn: "Apply Arrow: selected line(s) get an arrowhead. Arrowhead height follows stroke width x3."
+      };
+      Object.entries(explicit).forEach(([id, text]) => {
+        const el = document.getElementById(id);
+        if (!(el instanceof HTMLButtonElement)) return;
+        el.setAttribute("title", text);
+        if (!el.getAttribute("aria-label")) el.setAttribute("aria-label", text);
+      });
+
+      document.querySelectorAll("button").forEach((btn) => {
+        if (!(btn instanceof HTMLButtonElement)) return;
+        const cur = String(btn.getAttribute("title") || "").trim();
+        if (cur) return;
+        const aria = String(btn.getAttribute("aria-label") || "").trim();
+        const label = aria || String(btn.textContent || "").replace(/\s+/g, " ").trim();
+        if (label) btn.setAttribute("title", label);
+      });
+    }
+
     function openAppMenu(name) {
       closeAppMenus();
       const root = document.querySelector(`.menu-root[data-menu-root="${CSS.escape(name)}"]`);
@@ -4478,49 +4533,56 @@
       requestSelectionVisualRefresh();
     }
 
-    function addOrReplaceGroupLabel(groupEl, letter) {
-      if (!groupEl || groupEl.tagName !== "g") return;
-      const existing = groupEl.querySelector(':scope > [data-fm-group-label="1"]');
-      if (existing) {
-        if (existing.dataset?.id) delete state.markLabelComp[existing.dataset.id];
-        existing.remove();
+    function getExistingMarkLabelForTarget(targetEl) {
+      if (!(targetEl instanceof SVGElement) || !targetEl.dataset?.id) return null;
+      const id = targetEl.dataset.id;
+      const byLinked = canvas.querySelector(`:scope > [data-fm-group-label="1"][data-fm-mark-target-id="${CSS.escape(id)}"]`);
+      if (byLinked instanceof SVGElement) return byLinked;
+      if (targetEl.tagName === "g") {
+        const legacy = targetEl.querySelector(':scope > [data-fm-group-label="1"]');
+        if (legacy instanceof SVGElement) return legacy;
       }
-      const b = getGroupContentBBox(groupEl) || safeBBox(groupEl);
-      if (!b) return;
-      const local = canvasPointToElementLocal(groupEl, b.x, b.y - 6);
-      const label = document.createElementNS(SVG_NS, "text");
+      return null;
+    }
+
+    function addOrReplaceMarkLabel(targetEl, letter) {
+      if (!(targetEl instanceof SVGElement) || !targetEl.dataset?.id) return false;
+      let label = getExistingMarkLabelForTarget(targetEl);
+      if (!(label instanceof SVGElement)) {
+        label = document.createElementNS(SVG_NS, "text");
+      }
       label.setAttribute("class", "fm-group-label");
       label.setAttribute("data-fm-group-label", "1");
+      label.setAttribute("data-fm-mark-target-id", targetEl.dataset.id);
       const markSize = getMarkFontSizeValue();
       label.setAttribute("font-size", String(markSize));
       label.style.setProperty("font-size", `${markSize}px`);
       label.dataset.markBaseSize = String(markSize);
-      label.setAttribute("x", String(Number(local.x.toFixed(4))));
-      label.setAttribute("y", String(Number(local.y.toFixed(4))));
       label.textContent = letter;
       ensureId(label);
       applyPointerEventPolicy(label);
-      groupEl.appendChild(label);
+      if (label.parentNode !== canvas) canvas.appendChild(label);
+      positionMarkLabelForTarget(targetEl, label);
       if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
       pushHistory(`label-${letter}`);
+      return true;
     }
 
-    function resolveContextGroupTarget() {
-      const byContext = getById(state.contextGroupId || "");
-      if (byContext && byContext.tagName === "g") return byContext;
+    function resolveContextMarkTarget() {
       const byTarget = getById(state.contextTargetId || "");
-      if (byTarget) {
-        if (byTarget.tagName === "g") return byTarget;
-        const outer = resolveOuterGroup(byTarget);
-        if (outer && outer.tagName === "g") return outer;
+      if (byTarget instanceof SVGElement) {
+        if (isGroupLabel(byTarget)) {
+          const linkedId = String(byTarget.getAttribute("data-fm-mark-target-id") || "").trim();
+          const linked = linkedId ? getById(linkedId) : null;
+          if (linked instanceof SVGElement && isEditableElement(linked)) return linked;
+        }
+        if (isEditableElement(byTarget) && !isGroupLabel(byTarget)) return byTarget;
       }
+      const byGroup = getById(state.contextGroupId || "");
+      if (byGroup instanceof SVGElement && isEditableElement(byGroup) && !isGroupLabel(byGroup)) return byGroup;
       if (state.selectedIds.length === 1) {
         const selected = getById(state.selectedIds[0]);
-        if (selected) {
-          if (selected.tagName === "g") return selected;
-          const outer = resolveOuterGroup(selected);
-          if (outer && outer.tagName === "g") return outer;
-        }
+        if (selected instanceof SVGElement && isEditableElement(selected) && !isGroupLabel(selected)) return selected;
       }
       return null;
     }
@@ -4528,7 +4590,7 @@
     function closeMarkEditor() {
       if (!markEditorEl || markEditorEl.style.display === "none") return false;
       markEditorEl.style.display = "none";
-      markEditorEl.dataset.groupId = "";
+      markEditorEl.dataset.targetId = "";
       return true;
     }
 
@@ -4547,10 +4609,10 @@
     }
 
     function applyMarkFromEditor() {
-      const groupId = String(markEditorEl?.dataset.groupId || "");
-      const group = groupId ? getById(groupId) : null;
-      if (!(group instanceof SVGElement) || group.tagName !== "g") {
-        setStatus("Mark needs a group target.");
+      const targetId = String(markEditorEl?.dataset.targetId || "");
+      const target = targetId ? getById(targetId) : null;
+      if (!(target instanceof SVGElement) || !isEditableElement(target) || isGroupLabel(target)) {
+        setStatus("Mark needs a target.");
         closeMarkEditor();
         return;
       }
@@ -4563,24 +4625,24 @@
         }
         return;
       }
-      addOrReplaceGroupLabel(group, letter);
+      addOrReplaceMarkLabel(target, letter);
       closeMarkEditor();
       setStatus(`Label ${letter} set.`);
     }
 
     function promptGroupMark() {
-      const group = resolveContextGroupTarget();
-      if (!group || !group.dataset?.id) {
-        setStatus("Mark needs a group target.");
+      const target = resolveContextMarkTarget();
+      if (!(target instanceof SVGElement) || !target.dataset?.id) {
+        setStatus("Mark needs a target.");
         return;
       }
-      const existing = group.querySelector(':scope > [data-fm-group-label="1"]');
+      const existing = getExistingMarkLabelForTarget(target);
       const current = existing instanceof SVGElement ? String(existing.textContent || "").trim().toUpperCase() : "";
       const menuRect = ctxMenu?.getBoundingClientRect?.() || { left: 24, top: 24, right: 24, width: 0 };
       const x = Math.max(8, Math.min(menuRect.right + 6, window.innerWidth - 180));
       const y = Math.max(8, Math.min(menuRect.top, window.innerHeight - 56));
       if (markEditorEl) {
-        markEditorEl.dataset.groupId = group.dataset.id;
+        markEditorEl.dataset.targetId = target.dataset.id;
         markEditorEl.style.left = `${x}px`;
         markEditorEl.style.top = `${y}px`;
         markEditorEl.style.display = "inline-flex";
@@ -4593,12 +4655,12 @@
     }
 
     function clearGroupMark() {
-      const group = resolveContextGroupTarget();
-      if (!group) {
-        setStatus("Clear Mark needs a group target.");
+      const target = resolveContextMarkTarget();
+      if (!(target instanceof SVGElement) || !target.dataset?.id) {
+        setStatus("Clear Mark needs a target.");
         return;
       }
-      const existing = group.querySelector(':scope > [data-fm-group-label="1"]');
+      const existing = getExistingMarkLabelForTarget(target);
       if (!(existing instanceof SVGElement)) {
         setStatus("No mark to clear.");
         return;
@@ -4617,9 +4679,9 @@
       const hasGroupSelection = getTopSelectedElements().some((el) => el && el.tagName === "g");
       const singleSelectedImage = getSingleSelectedImageElement();
       const canRasterizeImage = !!singleSelectedImage;
-      const markGroup = resolveContextGroupTarget();
-      const canMark = !!markGroup;
-      const canMarkClear = !!markGroup?.querySelector(':scope > [data-fm-group-label="1"]');
+      const markTarget = resolveContextMarkTarget();
+      const canMark = !!markTarget;
+      const canMarkClear = !!(markTarget && getExistingMarkLabelForTarget(markTarget));
       const canPaste = Array.isArray(state.clipboardItems) && state.clipboardItems.length > 0;
       ctxMenu.querySelectorAll("button[data-ctx-action]").forEach((btn) => {
         const action = btn.dataset.ctxAction || "";
@@ -7922,6 +7984,7 @@
       assignIds();
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();
+      setupButtonTooltips();
       setupToolbarTabs();
       // focusPasteSink();
       syncToolButtons();
