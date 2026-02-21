@@ -3707,7 +3707,8 @@
       const applyBtn = document.getElementById("cropApplyBtn");
       const cancelBtn = document.getElementById("cropCancelBtn");
       const active = !!state.cropMode;
-      if (cropBtn) cropBtn.textContent = active ? "Crop (Active)" : "Crop";
+      // if (cropBtn) cropBtn.textContent = active ? "Crop (Active)" : "Crop";
+      if (cropBtn) cropBtn.classList.toggle("active", active);
       if (applyBtn) {
         applyBtn.hidden = !active;
         applyBtn.disabled = !active || !state.cropMode?.draftRect;
