@@ -2120,6 +2120,7 @@
 
     function isTypingContextElement(el) {
       if (!el) return false;
+      if (el.id === "pasteSink") return false;
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
       if (el instanceof HTMLElement && el.isContentEditable) return true;
       return false;
@@ -6188,22 +6189,59 @@
       if (handle.includes("n")) top = Math.min(py, bottom - minSize);
       if (handle.includes("s")) bottom = Math.max(py, top + minSize);
 
+      // Snap logic
+      const displayScale = Math.max(getCanvasDisplayScale(), 1e-6);
+      const snapThreshold = 7 / displayScale;
+      const xTargets = cm.snapTargets?.xTargets || [];
+      const yTargets = cm.snapTargets?.yTargets || [];
+      let guides = null;
+
+      // X Snap
+      const movingX = handle.includes("w") || handle.includes("e");
+      if (movingX && xTargets.length) {
+        const xValues = [];
+        if (handle.includes("w")) xValues.push(left);
+        if (handle.includes("e")) xValues.push(right);
+        // xValues.push((left + right) / 2); // Center snap optional for crop
+        const bestX = pickBestSnapDelta(0, xValues, xTargets, snapThreshold);
+        if (bestX) {
+          const ddx = bestX.delta;
+          if (handle.includes("w")) left += ddx;
+          if (handle.includes("e")) right += ddx;
+          guides = { ...(guides || {}), x: bestX.guide };
+        }
+      }
+
+      // Y Snap
+      const movingY = handle.includes("n") || handle.includes("s");
+      if (movingY && yTargets.length) {
+        const yValues = [];
+        if (handle.includes("n")) yValues.push(top);
+        if (handle.includes("s")) yValues.push(bottom);
+        // yValues.push((top + bottom) / 2); // Center snap optional for crop
+        const bestY = pickBestSnapDelta(0, yValues, yTargets, snapThreshold);
+        if (bestY) {
+          const ddy = bestY.delta;
+          if (handle.includes("n")) top += ddy;
+          if (handle.includes("s")) bottom += ddy;
+          guides = { ...(guides || {}), y: bestY.guide };
+        }
+      }
+
+      drawSmartGuides(guides);
+
       let width = Math.max(minSize, right - left);
       let height = Math.max(minSize, bottom - top);
 
       if (keepAspect) {
         const aspect = cm.resize.aspect || 1;
-        // Adjust width/height to match aspect, pivoting on the opposite corner
         if (width / Math.max(height, 1e-6) > aspect) {
           width = height * aspect;
         } else {
           height = width / aspect;
         }
-        
-        // Re-calculate edges based on pivoting corner
         if (handle.includes("w")) left = right - width;
         else if (handle.includes("e")) right = left + width;
-        
         if (handle.includes("n")) top = bottom - height;
         else if (handle.includes("s")) bottom = top + height;
       }
@@ -6229,6 +6267,7 @@
       cm.resize = null;
       if (cm.draftRect) setStatus("Crop handles updated. Press Enter (or Apply Crop) to confirm.");
       updateCropUi();
+      clearSmartGuides();
       state.interaction = null;
     }
 
@@ -6245,8 +6284,39 @@
     function updateCropMove(pt) {
       const cm = state.cropMode;
       if (!cm || !cm.draftRect || !cm.moveOffset) return;
-      const nx = Number(pt?.x || 0) - Number(cm.moveOffset.x || 0);
-      const ny = Number(pt?.y || 0) - Number(cm.moveOffset.y || 0);
+      let nx = Number(pt?.x || 0) - Number(cm.moveOffset.x || 0);
+      let ny = Number(pt?.y || 0) - Number(cm.moveOffset.y || 0);
+
+      // Snap logic
+      const displayScale = Math.max(getCanvasDisplayScale(), 1e-6);
+      const snapThreshold = 7 / displayScale;
+      const xTargets = cm.snapTargets?.xTargets || [];
+      const yTargets = cm.snapTargets?.yTargets || [];
+      let guides = null;
+
+      if (xTargets.length || yTargets.length) {
+        const movedLeft = nx;
+        const movedCx = nx + cm.draftRect.width / 2;
+        const movedRight = nx + cm.draftRect.width;
+        const movedTop = ny;
+        const movedCy = ny + cm.draftRect.height / 2;
+        const movedBottom = ny + cm.draftRect.height;
+
+        const bestX = pickBestSnapDelta(0, [movedLeft, movedCx, movedRight], xTargets, snapThreshold); // rawDelta is 0 since we modify nx directly
+        const bestY = pickBestSnapDelta(0, [movedTop, movedCy, movedBottom], yTargets, snapThreshold);
+
+        if (bestX) {
+          nx += bestX.delta;
+          guides = { ...(guides || {}), x: bestX.guide };
+        }
+        if (bestY) {
+          ny += bestY.delta;
+          guides = { ...(guides || {}), y: bestY.guide };
+        }
+      }
+      
+      drawSmartGuides(guides);
+
       cm.draftRect = clampCropRectToImage({
         x: nx,
         y: ny,
@@ -6264,6 +6334,7 @@
         setStatus("Crop box moved. Press Enter (or Apply Crop) to confirm.");
       }
       updateCropUi();
+      clearSmartGuides();
       state.interaction = null;
     }
 
@@ -6274,6 +6345,7 @@
       cm.moveOffset = null;
       cm.resize = null;
       clearCropOverlay(cm);
+      clearSmartGuides();
       state.cropMode = null;
       updateCropUi();
       if (!options.silent) setStatus("Crop canceled.");
@@ -6378,6 +6450,7 @@
       }
       const draftRect = clampCropRectToImage(createDefaultCropRect(box), box);
       cancelImageCropMode({ silent: true });
+      const snapTargets = buildDragSnapTargets([imgEl]);
       state.cropMode = {
         targetId: imgEl.dataset.id,
         imageBox: { x: box.x, y: box.y, width: box.width, height: box.height },
@@ -6387,7 +6460,8 @@
         handleEls: {},
         moveOffset: null,
         resize: null,
-        draftRect
+        draftRect,
+        snapTargets
       };
       renderCropOverlay();
       setStatus("Crop mode: drag handles to trim (PowerPoint style). Press Enter to confirm.");
