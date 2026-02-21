@@ -8062,7 +8062,7 @@
       let width = Math.max(MIN_RESIZE_SIZE, right - left);
       let height = Math.max(MIN_RESIZE_SIZE, bottom - top);
       if (keepAspect) {
-        const aspect = cm.resize.aspect || it.aspect || 1;
+        const aspect = it.aspect || 1;
         if (width / Math.max(height, 1e-6) > aspect) {
           width = height * aspect;
         } else {
