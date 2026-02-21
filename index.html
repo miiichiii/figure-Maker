@@ -7834,8 +7834,11 @@
         const snapThreshold = 7 / displayScale;
         const xTargets = it.snapTargets?.xTargets || [];
         const yTargets = it.snapTargets?.yTargets || [];
-        if (xTargets.length && (it.handle.includes("w") || it.handle.includes("e"))) {
-          const xValues = [];
+        
+        // X Axis: Check moving edges for snap, OR static edges for guides
+        const movingX = it.handle.includes("w") || it.handle.includes("e");
+        const xValues = [];
+        if (movingX) {
           if (it.handle.includes("w")) xValues.push(left);
           if (it.handle.includes("e")) xValues.push(right);
           xValues.push((left + right) / 2);
@@ -7846,9 +7849,17 @@
             if (it.handle.includes("e")) right += ddx;
             guides = { ...(guides || {}), x: bestX.guide };
           }
+        } else {
+          // Static X Check (Show guides if static sides align)
+          const staticX = [left, right, (left + right) / 2];
+          const bestX = pickBestSnapDelta(0, staticX, xTargets, snapThreshold);
+          if (bestX) guides = { ...(guides || {}), x: bestX.guide };
         }
-        if (yTargets.length && (it.handle.includes("n") || it.handle.includes("s"))) {
-          const yValues = [];
+
+        // Y Axis: Check moving edges for snap, OR static edges for guides
+        const movingY = it.handle.includes("n") || it.handle.includes("s");
+        const yValues = [];
+        if (movingY) {
           if (it.handle.includes("n")) yValues.push(top);
           if (it.handle.includes("s")) yValues.push(bottom);
           yValues.push((top + bottom) / 2);
@@ -7859,6 +7870,11 @@
             if (it.handle.includes("s")) bottom += ddy;
             guides = { ...(guides || {}), y: bestY.guide };
           }
+        } else {
+          // Static Y Check (Show guides if static sides align)
+          const staticY = [top, bottom, (top + bottom) / 2];
+          const bestY = pickBestSnapDelta(0, staticY, yTargets, snapThreshold);
+          if (bestY) guides = { ...(guides || {}), y: bestY.guide };
         }
       }
       if (right - left < MIN_RESIZE_SIZE) {
