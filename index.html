@@ -8821,7 +8821,7 @@
           const pt = getSvgPoint(e.clientX, e.clientY);
           const targetId = handleEl.dataset.targetId;
           const handle = handleEl.dataset.handle || "se";
-          const target = targetId ? getById(targetId) : null;
+          const target = targetId === "multi" ? "multi" : (targetId ? getById(targetId) : null);
           beginResize(pt, target, handle);
           if (state.interaction) state.interaction.pointerId = e.pointerId;
           if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
