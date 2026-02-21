@@ -3773,6 +3773,18 @@
       }
     }
 
+    async function copySelectedToSystemClipboard(items) {
+      if (!navigator.clipboard?.writeText) return false;
+      const text = buildSelectedSvgClipboardText(items);
+      if (!text) return false;
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
     function copySelected() {
       const items = collectSelectedClipboardItems();
       if (!items.length) {
