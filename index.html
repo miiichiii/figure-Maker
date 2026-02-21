@@ -618,6 +618,7 @@
         <input id="arrowHeadSizeInput" type="number" min="5" max="100" step="1" value="15" style="width:64px" />
         <label for="arrowStrokeInput">Line/Arrow stroke</label>
         <input id="arrowStrokeInput" type="number" min="1" max="20" step="1" value="3" style="width:64px" />
+        <button id="matchArrowBtn" title="Match selected line(s) to arrow">Match Arrow</button>
         <label for="objectFillColorInput">Fill</label>
         <input id="objectFillColorInput" type="color" value="#dbeafe" />
         <label for="objectStrokeColorInput">Stroke</label>
@@ -2024,15 +2025,40 @@
       const selected = getById(state.selectedIds[0]);
       if (!(selected instanceof SVGElement) || selected.tagName !== "line") return;
       if (strokeEl) strokeEl.value = String(Number(selected.getAttribute("stroke-width") || 3) || 3);
-      
+
       const len = Math.round(getLineLength(selected));
       if (sizeEl && (selected.dataset.arrow === "1" || len > 0)) {
         sizeEl.value = String(Math.max(20, Math.min(2000, len || 190)));
       }
-      
+
       if (headEl && selected.dataset.arrow === "1") {
         headEl.value = selected.dataset.arrowHeadSize || "15";
       }
+    }
+
+    function computeMatchedArrowHeadSize(lineEl) {
+      const len = Math.max(20, getLineLength(lineEl));
+      const stroke = Math.max(1, Number(lineEl.getAttribute("stroke-width") || 3) || 3);
+      // Illustrator-like auto proportion: mostly length-based, lightly stroke-aware.
+      return Math.max(8, Math.min(56, Math.round(len * 0.08 + stroke * 0.8)));
+    }
+
+    function matchSelectedLinesToArrow() {
+      const selectedLines = getTopSelectedElements().filter((el) => el instanceof SVGElement && el.tagName === "line");
+      if (!selectedLines.length) {
+        setStatus("Select line object(s) first.");
+        return;
+      }
+      selectedLines.forEach((line) => {
+        const len = Math.max(20, getLineLength(line));
+        const stroke = Math.max(1, Number(line.getAttribute("stroke-width") || 3) || 3);
+        const autoHead = computeMatchedArrowHeadSize(line);
+        applyArrowStyle(line, len, stroke, autoHead);
+      });
+      syncArrowControlsFromSelection();
+      requestSelectionVisualRefresh();
+      pushHistory("match-arrow");
+      setStatus(`Matched ${selectedLines.length} line(s) to arrow.`);
     }
 
     function syncMarkControlsFromSelection() {
@@ -6050,6 +6076,9 @@
       });
       document.getElementById("arrowStrokeInput").addEventListener("change", () => {
         applyStrokeControlToSelectedLines({ push: true, withStatus: true });
+      });
+      document.getElementById("matchArrowBtn").addEventListener("click", () => {
+        matchSelectedLinesToArrow();
       });
       document.getElementById("arrowStrokeInput").addEventListener("input", () => {
         applyStrokeControlToSelectedLines({ push: false, withStatus: false });
