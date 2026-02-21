@@ -1973,19 +1973,21 @@
         marker = document.createElementNS(SVG_NS, "marker");
         marker.setAttribute("id", markerId);
         marker.setAttribute("orient", "auto");
-        marker.setAttribute("markerUnits", "strokeWidth");
+        marker.setAttribute("markerUnits", "userSpaceOnUse"); // Fixed units to maintain head size
         defs.appendChild(marker);
       }
-      const head = 6.5;
-      marker.setAttribute("markerWidth", String(head));
-      marker.setAttribute("markerHeight", String(head));
-      marker.setAttribute("refX", String(head));
-      marker.setAttribute("refY", String(head / 2));
-      marker.setAttribute("viewBox", `0 0 ${head} ${head}`);
+      // Arrow head geometry: fixed relative to stroke-width or absolute?
+      // User wants to maintain shape. Let's use absolute units based on a base scale.
+      const headBase = 12 + (stroke * 0.5); // Adjust scale based on stroke but not linear
+      marker.setAttribute("markerWidth", String(headBase));
+      marker.setAttribute("markerHeight", String(headBase));
+      marker.setAttribute("refX", String(headBase));
+      marker.setAttribute("refY", String(headBase / 2));
+      marker.setAttribute("viewBox", `0 0 ${headBase} ${headBase}`);
       marker.setAttribute("overflow", "visible");
       marker.innerHTML = "";
       const p = document.createElementNS(SVG_NS, "path");
-      p.setAttribute("d", `M 0 0 L ${head} ${head / 2} L 0 ${head} z`);
+      p.setAttribute("d", `M 0 0 L ${headBase} ${headBase / 2} L 0 ${headBase} z`);
       p.setAttribute("fill", String(lineEl.getAttribute("stroke") || "#0f172a"));
       marker.appendChild(p);
       lineEl.setAttribute("marker-end", `url(#${markerId})`);
