@@ -1904,6 +1904,14 @@
       if (state.interaction && state.interaction.type === "resize" && state.interaction.isMulti) {
          const b = state.interaction.liveBox;
          if (b) {
+            // Draw individual outlines for context (faint)
+            elements.forEach(el => {
+               // We can't easily get live box for individual elements during multi-resize without expensive recalculation here.
+               // But we can approximate or just skip individual during interaction if performance matters.
+               // Let's skip during resize interaction for smoothness, or use static baseBox?
+               // Better: just draw the big box during resize.
+            });
+
             const rect = document.createElementNS(SVG_NS, "rect");
             rect.setAttribute("class", "selection-outline");
             rect.setAttribute("stroke-width", String(outlineStroke));
@@ -1933,12 +1941,29 @@
         });
         renderResizeHandles(elements, displayScale);
       } else {
-        // Multi-selection
+        // Multi-selection: Draw individual faint outlines first
+        elements.forEach((el) => {
+          const b = getSelectionRenderBox(el) || safeBBox(el);
+          if (!b || b.width <= 0 || b.height <= 0) return;
+          // Skip drawing box for line, just draw handles? No handles for multi-child.
+          if (el.tagName === "line") return; 
+          
+          const rect = document.createElementNS(SVG_NS, "rect");
+          rect.setAttribute("class", "selection-outline");
+          rect.setAttribute("stroke-width", String(outlineStroke * 0.8));
+          rect.setAttribute("stroke-opacity", "0.4");
+          rect.setAttribute("stroke-dasharray", "2 2"); // Dashed for individual items
+          rect.setAttribute("x", String(b.x));
+          rect.setAttribute("y", String(b.y));
+          rect.setAttribute("width", String(b.width));
+          rect.setAttribute("height", String(b.height));
+          canvas.appendChild(rect);
+        });
+
+        // Draw combined box
         const boxes = elements.map((el) => getSelectionRenderBox(el) || safeBBox(el)).filter(Boolean);
         const combined = combineBoxes(boxes);
         if (combined) {
-          // Draw individual faint outlines? Optional.
-          // Draw combined box
           const rect = document.createElementNS(SVG_NS, "rect");
           rect.setAttribute("class", "selection-outline");
           rect.setAttribute("stroke-width", String(outlineStroke));
@@ -8864,7 +8889,9 @@
             toggleSelection(id);
             return;
           }
-          if (state.selectedIds.length !== 1 || state.selectedIds[0] !== id) setSelection([id]);
+          if (!state.selectedIds.includes(id)) {
+            setSelection([id]);
+          }
           beginDrag(pt);
           if (state.interaction) state.interaction.pointerId = e.pointerId;
           if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
