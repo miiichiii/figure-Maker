@@ -5141,8 +5141,10 @@
 
         const sourceMime = readDataUrlMime(source);
         let outputMime = "image/jpeg";
+        const preferPngSource = sourceMime === "image/png" || sourceMime === "image/svg+xml";
+        if (preferPngSource) outputMime = "image/png";
         const alphaCandidate = sourceMime === "image/png" || sourceMime === "image/webp" || sourceMime === "image/gif" || sourceMime === "image/svg+xml";
-        if (alphaCandidate) {
+        if (alphaCandidate && outputMime !== "image/png") {
           try {
             if (canvasHasTransparency(ctx, targetW, targetH)) outputMime = "image/png";
           } catch (_) {
@@ -5151,7 +5153,7 @@
         }
         const nextSrc = outputMime === "image/png"
           ? canvasTmp.toDataURL("image/png")
-          : canvasTmp.toDataURL("image/jpeg", 0.85);
+          : canvasTmp.toDataURL("image/jpeg", 0.92);
         if (!nextSrc || nextSrc === source) {
           setStatus(`Image already near target (${targetW}x${targetH}).`);
           return false;
@@ -5160,7 +5162,7 @@
         imgEl.setAttributeNS(XLINK_NS, "href", nextSrc);
         requestSelectionVisualRefresh();
         pushHistory("rasterize-image");
-        setStatus(`Image rasterized to ${targetW}x${targetH}.`);
+        setStatus(`Image rasterized to ${targetW}x${targetH} (${outputMime === "image/png" ? "PNG" : "JPEG q0.92"}).`);
         return true;
       } catch (err) {
         setStatus("Image rasterize failed.");
@@ -5176,13 +5178,14 @@
         return;
       }
       const box = getSelectionRenderBox(imgEl) || safeBBox(imgEl);
-      const hintW = Math.max(1, Math.round(((box?.width || 0) / 96) * 150));
-      const hintH = Math.max(1, Math.round(((box?.height || 0) / 96) * 150));
-      const input = window.prompt(`Rasterize target DPI (72 / 150 / 300)\nCurrent draft target: ${hintW} x ${hintH}px`, "150");
+      const defaultDpi = 220;
+      const hintW = Math.max(1, Math.round(((box?.width || 0) / 96) * defaultDpi));
+      const hintH = Math.max(1, Math.round(((box?.height || 0) / 96) * defaultDpi));
+      const input = window.prompt("Rasterize target DPI (72 / 150 / 220 / 300)\n220 is recommended for balanced quality and size.\nCurrent draft target: " + `${hintW} x ${hintH}px`, String(defaultDpi));
       if (input == null) return;
       const dpi = Number(String(input).trim());
       if (!Number.isFinite(dpi) || dpi < 30 || dpi > 1200) {
-        setStatus("Invalid DPI. Enter 72, 150, or 300.");
+        setStatus("Invalid DPI. Enter 72, 150, 220, or 300.");
         return;
       }
       rasterizeSelectedImage(dpi);
