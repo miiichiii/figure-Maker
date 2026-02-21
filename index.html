@@ -2825,6 +2825,19 @@
       return "normal";
     }
 
+    function getElementEffectiveScale(el) {
+      if (!(el instanceof SVGElement)) return 1;
+      try {
+        const ctm = el.getCTM ? el.getCTM() : null;
+        if (!ctm) return 1;
+        // Use Y-axis scale (matrix c, d) as font-size maps to height
+        const scale = Math.hypot(ctm.c, ctm.d);
+        return Number.isFinite(scale) && scale > 0 ? scale : 1;
+      } catch (_) {
+        return 1;
+      }
+    }
+
     function syncTextControlsFromSelection() {
       const textSizeEl = document.getElementById("textFontSizeInput");
       if (!(textSizeEl instanceof HTMLInputElement)) return;
@@ -2834,11 +2847,15 @@
       const baseScript = Number(first.getAttribute("data-fm-script-base-size") || "");
       const attr = Number(first.getAttribute("font-size") || "");
       const computed = Number.parseFloat(window.getComputedStyle(first).fontSize || "");
-      const size = Number.isFinite(baseScript) && baseScript > 0
+      const rawSize = Number.isFinite(baseScript) && baseScript > 0
         ? baseScript
         : (Number.isFinite(attr) && attr > 0 ? attr : (Number.isFinite(computed) && computed > 0 ? computed : 28));
-      if (!Number.isFinite(size)) return;
-      textSizeEl.value = String(Math.max(6, Math.min(240, Math.round(size))));
+      
+      const effectiveScale = getElementEffectiveScale(first);
+      const effectiveSize = rawSize * effectiveScale;
+
+      if (!Number.isFinite(effectiveSize)) return;
+      textSizeEl.value = String(Math.max(6, Math.min(240, Math.round(effectiveSize))));
       const colorInput = document.getElementById("textColorInput");
       if (colorInput instanceof HTMLInputElement) {
         colorInput.value = normalizeCssColorToHex(first.getAttribute("fill"), "#111827");
@@ -2848,13 +2865,18 @@
     function applyTextFontSizeToSelection(options = {}) {
       const push = options.push !== false;
       const withStatus = options.withStatus !== false;
-      const size = getTextFontSizeValue();
+      const targetEffectiveSize = getTextFontSizeValue();
       const targets = getNormalSelectedTextElements();
       if (!targets.length) {
         if (withStatus) setStatus("Select text object(s) to change Text size.");
         return false;
       }
       targets.forEach((el) => {
+        const scale = getElementEffectiveScale(el);
+        const rawSize = targetEffectiveSize / scale;
+        // Limit precision to avoid messy floats
+        const size = Number(rawSize.toFixed(4));
+
         const directTspans = Array.from(el.children).filter((n) => n instanceof SVGElement && n.tagName === "tspan");
         if (directTspans.length) {
           el.setAttribute("font-size", String(size));
@@ -2865,7 +2887,7 @@
           directTspans.forEach((span) => {
             const mode = normalizeTextScriptMode(span.getAttribute("baseline-shift") || span.getAttribute("data-fm-script"));
             if (mode === "super" || mode === "sub") {
-              const scaled = Math.max(6, Math.round(size * 0.75));
+              const scaled = Math.max(0.1, Number((size * 0.75).toFixed(4)));
               span.setAttribute("baseline-shift", mode);
               span.setAttribute("data-fm-script", mode);
               span.setAttribute("font-size", String(scaled));
@@ -2882,7 +2904,7 @@
         const scriptMode = String(el.getAttribute("data-fm-script") || "");
         if (scriptMode === "super" || scriptMode === "sub") {
           el.setAttribute("data-fm-script-base-size", String(size));
-          const scaled = Math.max(6, Math.round(size * 0.75));
+          const scaled = Math.max(0.1, Number((size * 0.75).toFixed(4)));
           el.setAttribute("font-size", String(scaled));
           el.style.setProperty("font-size", `${scaled}px`);
         } else {
@@ -2893,7 +2915,7 @@
       });
       requestSelectionVisualRefresh();
       if (push) pushHistory("text-size");
-      if (withStatus) setStatus(`Text size set: ${size}`);
+      if (withStatus) setStatus(`Text size set: ${targetEffectiveSize}`);
       return true;
     }
 
@@ -6879,11 +6901,19 @@
         originalText: extracted.text,
         originalRuns: normalizeScriptRuns(extracted.text.length, extracted.runs)
       };
+      
       textEditorInput.value = extracted.text || "";
       textEditorInput.style.left = `${Math.max(0, box.left - wrap.left + canvasWrapEl.scrollLeft - 4)}px`;
       textEditorInput.style.top = `${Math.max(0, box.top - wrap.top + canvasWrapEl.scrollTop - 4)}px`;
       textEditorInput.style.width = `${Math.max(120, box.width + 24)}px`;
-      textEditorInput.style.fontSize = textEl.getAttribute("font-size") ? `${Number(textEl.getAttribute("font-size"))}px` : "16px";
+      
+      // Effective font size calculation for the editor input
+      const rawSize = Number(textEl.getAttribute("font-size") || 16);
+      const effectiveScale = getElementEffectiveScale(textEl);
+      const zoom = state.viewScale || 1;
+      const visualSize = rawSize * effectiveScale * zoom;
+      textEditorInput.style.fontSize = `${Math.max(10, Math.round(visualSize))}px`;
+      
       textEditorInput.style.display = "block";
       textEditorInput.focus();
       textEditorInput.select();
