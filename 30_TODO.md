@@ -181,6 +181,7 @@
 - [done][P1-Low] テキスト編集ショートカット（Enter/F2で編集開始）+ 編集中グローバルキー抑止
 - [done][P1-Low] ツール切替ショートカット（`V`=Black Arrow, `A`=White Arrow）
 - [done][P1-Low] 図形追加ショートカット（`R/L/E/T`）
+- [done][P1-High] `plain-svg` 貼り付けで成功表示なのに見えない問題を修正（アートボード中央へ自動フィット + 空wrapper除去）
 
 ## P0 (Critical Fixes)
 - [ ] [P0-Crit] メモリリーク対策: Undo/Redo履歴の最適化 (innerHTML全保存の廃止、差分管理または参照管理へ移行)

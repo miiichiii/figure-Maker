@@ -1367,6 +1367,12 @@
       return !!el && el instanceof SVGElement && el.getAttribute("data-fm-group-label") === "1";
     }
 
+    function isMarkText(el) {
+      if (!(el instanceof SVGElement) || el.tagName !== "text") return false;
+      if (el.getAttribute("data-fm-mark") === "1") return true;
+      return isGroupLabel(el);
+    }
+
     function isFigureTitle(el) {
       return !!el && el instanceof SVGElement && (el.getAttribute("data-fm-figure-title") === "1" || el.classList.contains("fm-figure-title"));
     }
@@ -2211,40 +2217,16 @@
       const y = Number((b.y - 5).toFixed(4));
       labelEl.setAttribute("x", String(x));
       labelEl.setAttribute("y", String(y));
-      labelEl.dataset.baseTransform = "";
-      labelEl.dataset.tx = "0";
-      labelEl.dataset.ty = "0";
-      labelEl.removeAttribute("transform");
-      const baseSize = Number(labelEl.dataset.markBaseSize || labelEl.getAttribute("font-size") || "");
-      if (Number.isFinite(baseSize) && baseSize > 0) {
-        const locked = Math.max(6, Math.round(baseSize));
-        labelEl.dataset.markBaseSize = String(locked);
-        labelEl.setAttribute("font-size", String(locked));
-        labelEl.style.setProperty("font-size", `${locked}px`);
-      }
       return true;
     }
 
     function refreshAllGroupLabels() {
-      const labels = Array.from(canvas.querySelectorAll('[data-fm-group-label="1"], .fm-group-label'))
-        .filter((n) => n instanceof SVGElement);
+      // Mark labels are now normal text objects. Keep their position/size untouched.
+      const labels = Array.from(canvas.querySelectorAll('[data-fm-group-label="1"], .fm-group-label')).filter((n) => n instanceof SVGElement);
       labels.forEach((label) => {
-        const linkedIdRaw = String(label.getAttribute("data-fm-mark-target-id") || "").trim();
-        let target = linkedIdRaw ? getById(linkedIdRaw) : null;
-        if (!(target instanceof SVGElement) || !isEditableElement(target) || target === label) {
-          const parent = label.parentNode instanceof SVGElement ? label.parentNode : null;
-          if (parent && parent.tagName === "g" && parent !== canvas && parent.dataset?.id) {
-            target = parent;
-            label.setAttribute("data-fm-mark-target-id", parent.dataset.id);
-          }
-        }
-        if (!(target instanceof SVGElement) || !target.dataset?.id) {
-          if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
-          label.remove();
-          return;
-        }
-        if (label.parentNode !== canvas) canvas.appendChild(label);
-        positionMarkLabelForTarget(target, label);
+        label.removeAttribute("data-fm-group-label");
+        label.classList.remove("fm-group-label");
+        if (label.tagName === "text" && !label.getAttribute("data-fm-mark")) label.setAttribute("data-fm-mark", "1");
         if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
       });
     }
@@ -2518,7 +2500,7 @@
       if (!(markSizeEl instanceof HTMLInputElement)) return;
       if (state.selectedIds.length !== 1) return;
       const selected = getById(state.selectedIds[0]);
-      if (!(selected instanceof SVGElement) || !isGroupLabel(selected)) return;
+      if (!(selected instanceof SVGElement) || !isMarkText(selected)) return;
       const computed = window.getComputedStyle(selected).fontSize || "";
       const fromComputed = Number.parseFloat(computed);
       const size = Number.isFinite(fromComputed) ? fromComputed : Number(selected.getAttribute("font-size") || 16);
@@ -4739,14 +4721,15 @@
       const push = options.push !== false;
       const withStatus = options.withStatus !== false;
       const size = getMarkFontSizeValue();
-      const labels = Array.from(canvas.querySelectorAll('[data-fm-group-label="1"], .fm-group-label')).filter((n) => n instanceof SVGElement);
+      const labels = Array.from(canvas.querySelectorAll('[data-fm-mark="1"], [data-fm-group-label="1"], .fm-group-label'))
+        .filter((n) => n instanceof SVGElement && n.tagName === "text");
       labels.forEach((label) => {
-        if (!label.getAttribute("data-fm-group-label")) label.setAttribute("data-fm-group-label", "1");
-        label.classList.add("fm-group-label");
+        label.removeAttribute("data-fm-group-label");
+        label.classList.remove("fm-group-label");
+        if (!label.getAttribute("data-fm-mark")) label.setAttribute("data-fm-mark", "1");
         label.setAttribute("font-size", String(size));
         label.style.setProperty("font-size", `${size}px`);
         label.dataset.markBaseSize = String(size);
-        if (label.dataset?.id) applyMarkLabelCompensation(label);
       });
       if (push && labels.length) pushHistory("mark-size");
       if (withStatus) setStatus(labels.length ? `Mark size set: ${size}` : "No mark labels to resize.");
@@ -4756,10 +4739,10 @@
     function getExistingMarkLabelForTarget(targetEl) {
       if (!(targetEl instanceof SVGElement) || !targetEl.dataset?.id) return null;
       const id = targetEl.dataset.id;
-      const byLinked = canvas.querySelector(`:scope > [data-fm-group-label="1"][data-fm-mark-target-id="${CSS.escape(id)}"]`);
+      const byLinked = canvas.querySelector(`:scope > text[data-fm-mark-target-id="${CSS.escape(id)}"]`);
       if (byLinked instanceof SVGElement) return byLinked;
       if (targetEl.tagName === "g") {
-        const legacy = targetEl.querySelector(':scope > [data-fm-group-label="1"]');
+        const legacy = targetEl.querySelector(':scope > text[data-fm-mark-target-id], :scope > [data-fm-group-label="1"]');
         if (legacy instanceof SVGElement) return legacy;
       }
       return null;
@@ -4768,21 +4751,29 @@
     function addOrReplaceMarkLabel(targetEl, letter) {
       if (!(targetEl instanceof SVGElement) || !targetEl.dataset?.id) return false;
       let label = getExistingMarkLabelForTarget(targetEl);
+      const isNew = !(label instanceof SVGElement);
       if (!(label instanceof SVGElement)) {
         label = document.createElementNS(SVG_NS, "text");
       }
-      label.setAttribute("class", "fm-group-label");
-      label.setAttribute("data-fm-group-label", "1");
+      label.removeAttribute("data-fm-group-label");
+      label.classList.remove("fm-group-label");
+      label.setAttribute("data-fm-mark", "1");
       label.setAttribute("data-fm-mark-target-id", targetEl.dataset.id);
       const markSize = getMarkFontSizeValue();
-      label.setAttribute("font-size", String(markSize));
-      label.style.setProperty("font-size", `${markSize}px`);
-      label.dataset.markBaseSize = String(markSize);
+      const currentSize = Number(label.getAttribute("font-size") || "");
+      if (!Number.isFinite(currentSize) || currentSize <= 0) {
+        label.setAttribute("font-size", String(markSize));
+        label.style.setProperty("font-size", `${markSize}px`);
+        label.dataset.markBaseSize = String(markSize);
+      }
+      label.setAttribute("font-family", "Arial, sans-serif");
+      label.setAttribute("font-weight", "700");
+      label.setAttribute("fill", label.getAttribute("fill") || "#111827");
       label.textContent = letter;
       ensureId(label);
       applyPointerEventPolicy(label);
       if (label.parentNode !== canvas) canvas.appendChild(label);
-      positionMarkLabelForTarget(targetEl, label);
+      if (isNew) positionMarkLabelForTarget(targetEl, label);
       if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
       pushHistory(`label-${letter}`);
       return true;
@@ -4791,18 +4782,19 @@
     function resolveContextMarkTarget() {
       const byTarget = getById(state.contextTargetId || "");
       if (byTarget instanceof SVGElement) {
-        if (isGroupLabel(byTarget)) {
+        if (isMarkText(byTarget)) {
           const linkedId = String(byTarget.getAttribute("data-fm-mark-target-id") || "").trim();
           const linked = linkedId ? getById(linkedId) : null;
           if (linked instanceof SVGElement && isEditableElement(linked)) return linked;
+          return null;
         }
-        if (isEditableElement(byTarget) && !isGroupLabel(byTarget)) return byTarget;
+        if (isEditableElement(byTarget)) return byTarget;
       }
       const byGroup = getById(state.contextGroupId || "");
-      if (byGroup instanceof SVGElement && isEditableElement(byGroup) && !isGroupLabel(byGroup)) return byGroup;
+      if (byGroup instanceof SVGElement && isEditableElement(byGroup) && !isMarkText(byGroup)) return byGroup;
       if (state.selectedIds.length === 1) {
         const selected = getById(state.selectedIds[0]);
-        if (selected instanceof SVGElement && isEditableElement(selected) && !isGroupLabel(selected)) return selected;
+        if (selected instanceof SVGElement && isEditableElement(selected) && !isMarkText(selected)) return selected;
       }
       return null;
     }
@@ -4875,6 +4867,14 @@
     }
 
     function clearGroupMark() {
+      const contextTarget = getById(state.contextTargetId || "");
+      if (contextTarget instanceof SVGElement && isMarkText(contextTarget)) {
+        if (contextTarget.dataset?.id) delete state.markLabelComp[contextTarget.dataset.id];
+        contextTarget.remove();
+        pushHistory("label-clear");
+        setStatus("Mark cleared.");
+        return;
+      }
       const target = resolveContextMarkTarget();
       if (!(target instanceof SVGElement) || !target.dataset?.id) {
         setStatus("Clear Mark needs a target.");
@@ -4899,9 +4899,11 @@
       const hasGroupSelection = getTopSelectedElements().some((el) => el && el.tagName === "g");
       const singleSelectedImage = getSingleSelectedImageElement();
       const canRasterizeImage = !!singleSelectedImage;
+      const contextNode = getById(state.contextTargetId || "");
+      const contextIsMark = contextNode instanceof SVGElement && isMarkText(contextNode);
       const markTarget = resolveContextMarkTarget();
       const canMark = !!markTarget;
-      const canMarkClear = !!(markTarget && getExistingMarkLabelForTarget(markTarget));
+      const canMarkClear = !!contextIsMark || !!(markTarget && getExistingMarkLabelForTarget(markTarget));
       const canPaste = Array.isArray(state.clipboardItems) && state.clipboardItems.length > 0;
       ctxMenu.querySelectorAll("button[data-ctx-action]").forEach((btn) => {
         const action = btn.dataset.ctxAction || "";
@@ -6319,6 +6321,7 @@
                 push: false,
                 setMessage: false,
                 select: false,
+                fitToCanvas: true,
                 offsetX: nudge.x + idx * 24,
                 offsetY: nudge.y + idx * 24
               });
@@ -6608,6 +6611,8 @@
       const offsetX = Number(options.offsetX || 0);
       const offsetY = Number(options.offsetY || 0);
       const wrap = options.wrap !== false;
+      const fitToCanvas = options.fitToCanvas === true;
+      const fitMargin = Math.max(8, Number(options.fitMargin || 28) || 28);
       const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
       if (doc.querySelector("parsererror")) return [];
       const root = doc.querySelector("svg");
@@ -6615,19 +6620,19 @@
       sanitizeSvgTree(root);
       const importedIds = [];
       let wrapper = null;
-      if (wrap) {
-        wrapper = document.createElementNS(SVG_NS, "g");
-        ensureId(wrapper);
-        applyPointerEventPolicy(wrapper);
-        setTranslate(wrapper, 0, 0);
-        canvas.appendChild(wrapper);
-      }
       Array.from(root.children).forEach((child) => {
         const imported = document.importNode(child, true);
         if (!(imported instanceof SVGElement)) return;
         sanitizeSvgTree(imported);
         ensureId(imported);
         ensureTransformState(imported);
+        if (wrap && !wrapper) {
+          wrapper = document.createElementNS(SVG_NS, "g");
+          ensureId(wrapper);
+          applyPointerEventPolicy(wrapper);
+          setTranslate(wrapper, 0, 0);
+          canvas.appendChild(wrapper);
+        }
         if (!wrap && (offsetX || offsetY)) {
           const t = getTranslate(imported);
           setTranslate(imported, t.x + offsetX, t.y + offsetY);
@@ -6637,6 +6642,13 @@
         if (!wrap && imported.dataset.id) importedIds.push(imported.dataset.id);
       });
       if (wrapper) {
+        if (wrapper.childElementCount === 0) {
+          wrapper.remove();
+          wrapper = null;
+        }
+      }
+      if (wrapper) {
+        if (fitToCanvas) fitImportedWrapperToCanvas(wrapper, { margin: fitMargin });
         if (offsetX || offsetY) {
           const t = getTranslate(wrapper);
           setTranslate(wrapper, t.x + offsetX, t.y + offsetY);
@@ -6644,9 +6656,9 @@
         if (wrapper.dataset.id) importedIds.push(wrapper.dataset.id);
       }
       assignIds();
-      if (select) setSelection(importedIds);
-      if (push) pushHistory("paste-svg");
-      if (setMessage) setStatus("Pasted SVG content.");
+      if (importedIds.length && select) setSelection(importedIds);
+      if (importedIds.length && push) pushHistory("paste-svg");
+      if (importedIds.length && setMessage) setStatus("Pasted SVG content.");
       return importedIds;
     }
 
@@ -6654,6 +6666,7 @@
       const nudge = getPasteNudgeOffset();
       return importSvgText(svgText, {
         ...options,
+        fitToCanvas: options.fitToCanvas !== false,
         offsetX: Number(options.offsetX || 0) + nudge.x,
         offsetY: Number(options.offsetY || 0) + nudge.y
       });
@@ -6747,6 +6760,7 @@
               push: false,
               setMessage: false,
               select: false,
+              fitToCanvas: true,
               offsetX: nudge.x + idx * 24,
               offsetY: nudge.y + idx * 24
             });
@@ -6848,6 +6862,7 @@
                         push: false,
                         setMessage: false,
                         select: false,
+                        fitToCanvas: true,
                         offsetX: nudge.x + idx * 24,
                         offsetY: nudge.y + idx * 24
                       });

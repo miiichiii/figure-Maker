@@ -1166,3 +1166,15 @@
   - `00_SUPERVISOR_BRIEF.md` / `01_SPEC.md` / `02_BUILD_PLAN.md` / `03_REVIEW_CHECKLIST.md` / `30_TODO.md`に再発防止ルールを追記。
 - Open issues: 実ブラウザで「全ハンドル非等方リサイズ時の線幅不変」「Mark非変形」の最終確認が必要。
 - Next action: transform系変更時はレビューで必ず回帰3点（線幅・Mark・Paste/Undo）を検証する。
+
+### Step 145 - Builder fix (plain-svg paste invisible regression)
+- Date: 2026-02-21
+- Owner: Builder
+- Decisions: ワークスペース(8000x8000)+中央アートボード化後、外部SVG貼り付けが座標0,0付近に入り「成功表示だが見えない」状態になっていた。貼り付けSVGは自動でアートボード中心へフィット配置する。
+- Changes:
+  - `importSvgText`に`fitToCanvas`オプションを追加し、wrapper生成後に`fitImportedWrapperToCanvas`で中央へ再配置。
+  - `importSvgTextWithPasteNudge`は貼り付け時に`fitToCanvas`をデフォルト有効化。
+  - `text/html`由来の複数SVG貼り付け経路でも`fitToCanvas: true`を適用。
+  - 子要素が1つもないSVGで空wrapperだけ残るケースを除去（空貼り付けの誤成功を防止）。
+- Open issues: 実機で`Cmd+V`（web app SVG / PowerPoint PNG）の両方を再確認する。
+- Next action: ユーザー再現ケースでpaste reportが`plain-svg`でも目視で貼り付くことを確認。
