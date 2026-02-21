@@ -7920,7 +7920,7 @@
       let width = Math.max(MIN_RESIZE_SIZE, right - left);
       let height = Math.max(MIN_RESIZE_SIZE, bottom - top);
       if (keepAspect) {
-        const aspect = Math.max(0.01, Number(it.aspect || 1));
+        const aspect = cm.resize.aspect || it.aspect || 1;
         if (width / Math.max(height, 1e-6) > aspect) {
           width = height * aspect;
         } else {
@@ -7931,6 +7931,7 @@
         if (it.handle.includes("n")) top = bottom - height;
         else bottom = top + height;
       }
+
       const disableSnap = !!options.disableSnap;
       let guides = null;
       if (!disableSnap) {
@@ -7939,46 +7940,91 @@
         const xTargets = it.snapTargets?.xTargets || [];
         const yTargets = it.snapTargets?.yTargets || [];
         
-        // X Axis: Check moving edges for snap, OR static edges for guides
-        const movingX = it.handle.includes("w") || it.handle.includes("e");
-        const xValues = [];
-        if (movingX) {
-          if (it.handle.includes("w")) xValues.push(left);
-          if (it.handle.includes("e")) xValues.push(right);
+        // Determine static edges based on handle
+        // If handle is 'n', then 's' (bottom) is static.
+        // If handle is 'ne', then 'w' (left) and 's' (bottom) are static.
+        const isStaticL = !it.handle.includes("w");
+        const isStaticR = !it.handle.includes("e");
+        const isStaticT = !it.handle.includes("n");
+        const isStaticB = !it.handle.includes("s");
+
+        // X Axis Logic
+        // 1. Snap moving edges
+        if (!isStaticL || !isStaticR) {
+          const xValues = [];
+          if (!isStaticL) xValues.push(left);
+          if (!isStaticR) xValues.push(right);
+          // Center is moving if either side is moving (unless symmetric resize, but basic logic holds)
           xValues.push((left + right) / 2);
+          
           const bestX = pickBestSnapDelta(0, xValues, xTargets, snapThreshold);
           if (bestX) {
             const ddx = bestX.delta;
-            if (it.handle.includes("w")) left += ddx;
-            if (it.handle.includes("e")) right += ddx;
-            guides = { ...(guides || {}), x: bestX.guide };
+            if (!keepAspect) {
+              if (!isStaticL) left += ddx;
+              if (!isStaticR) right += ddx;
+              guides = { ...(guides || {}), x: bestX.guide };
+            } else {
+              // In aspect mode, snapping causes conflict. For now, show guide only if very close.
+              // Or implement aspect-locked snap (complex).
+              // Let's allow snap if it doesn't break aspect too much? No, strict aspect is better.
+              // Just show guide for now if we are accidentally aligned.
+              // Re-check alignment without applying delta
+              if (Math.abs(bestX.dist) < snapThreshold) {
+                 guides = { ...(guides || {}), x: bestX.guide };
+              }
+            }
           }
-        } else {
-          // Static X Check (Show guides if static sides align)
-          const staticX = [left, right, (left + right) / 2];
-          const bestX = pickBestSnapDelta(0, staticX, xTargets, snapThreshold);
-          if (bestX) guides = { ...(guides || {}), x: bestX.guide };
+        }
+        
+        // 2. Check static edges for guides (Visual only)
+        if (isStaticL || isStaticR) {
+          const staticXValues = [];
+          if (isStaticL) staticXValues.push(left);
+          if (isStaticR) staticXValues.push(right);
+          // If both static (e.g. N/S resize), center is static
+          if (isStaticL && isStaticR) staticXValues.push((left + right) / 2);
+
+          const staticBestX = pickBestSnapDelta(0, staticXValues, xTargets, snapThreshold);
+          if (staticBestX) {
+             guides = { ...(guides || {}), x: staticBestX.guide };
+          }
         }
 
-        // Y Axis: Check moving edges for snap, OR static edges for guides
-        const movingY = it.handle.includes("n") || it.handle.includes("s");
-        const yValues = [];
-        if (movingY) {
-          if (it.handle.includes("n")) yValues.push(top);
-          if (it.handle.includes("s")) yValues.push(bottom);
+        // Y Axis Logic
+        // 1. Snap moving edges
+        if (!isStaticT || !isStaticB) {
+          const yValues = [];
+          if (!isStaticT) yValues.push(top);
+          if (!isStaticB) yValues.push(bottom);
           yValues.push((top + bottom) / 2);
+
           const bestY = pickBestSnapDelta(0, yValues, yTargets, snapThreshold);
           if (bestY) {
             const ddy = bestY.delta;
-            if (it.handle.includes("n")) top += ddy;
-            if (it.handle.includes("s")) bottom += ddy;
-            guides = { ...(guides || {}), y: bestY.guide };
+            if (!keepAspect) {
+              if (!isStaticT) top += ddy;
+              if (!isStaticB) bottom += ddy;
+              guides = { ...(guides || {}), y: bestY.guide };
+            } else {
+              if (Math.abs(bestY.dist) < snapThreshold) {
+                 guides = { ...(guides || {}), y: bestY.guide };
+              }
+            }
           }
-        } else {
-          // Static Y Check (Show guides if static sides align)
-          const staticY = [top, bottom, (top + bottom) / 2];
-          const bestY = pickBestSnapDelta(0, staticY, yTargets, snapThreshold);
-          if (bestY) guides = { ...(guides || {}), y: bestY.guide };
+        }
+
+        // 2. Check static edges for guides (Visual only)
+        if (isStaticT || isStaticB) {
+          const staticYValues = [];
+          if (isStaticT) staticYValues.push(top);
+          if (isStaticB) staticYValues.push(bottom);
+          if (isStaticT && isStaticB) staticYValues.push((top + bottom) / 2);
+
+          const staticBestY = pickBestSnapDelta(0, staticYValues, yTargets, snapThreshold);
+          if (staticBestY) {
+             guides = { ...(guides || {}), y: staticBestY.guide };
+          }
         }
       }
       if (right - left < MIN_RESIZE_SIZE) {
