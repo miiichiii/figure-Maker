@@ -8231,25 +8231,36 @@
       });
       canvasWrapEl.addEventListener("drop", async (e) => {
         clearDragOver();
+        if (state.isPasting && !tryRecoverPasteLock()) {
+          setStatus("Import is already running.");
+          return;
+        }
         const files = Array.from(e.dataTransfer?.files || []).filter((f) => isImageFile(f));
         if (!files.length) return;
         e.preventDefault();
+        state.isPasting = true;
+        state.pasteLockAt = Date.now();
+        setStatus("Importing images...");
         const ids = [];
-        for (const file of files.slice(0, 20)) {
-          try {
-            const id = await importImageFile(file, { select: false, skipHistory: true });
-            if (id) ids.push(id);
-          } catch (err) {
-            captureError("drop-image-import", err, { userMessage: "Dropped image import failed." });
+        try {
+          for (const file of files.slice(0, 20)) {
+            try {
+              const id = await importImageFile(file, { select: false, skipHistory: true });
+              if (id) ids.push(id);
+            } catch (err) {
+              captureError("drop-image-import", err, { userMessage: "Dropped image import failed." });
+            }
           }
+          if (!ids.length) {
+            setStatus("Drop import failed: no supported image files.");
+            return;
+          }
+          setSelection(ids);
+          pushHistory("drop-image-import");
+          setStatus(`Imported ${ids.length} image file(s) by drag & drop.`);
+        } finally {
+          clearPasteLock();
         }
-        if (!ids.length) {
-          setStatus("Drop import failed: no supported image files.");
-          return;
-        }
-        setSelection(ids);
-        pushHistory("drop-image-import");
-        setStatus(`Imported ${ids.length} image file(s) by drag & drop.`);
       });
 
       document.getElementById("autosaveSelect").addEventListener("change", updateAutosaveTimer);
@@ -8375,6 +8386,10 @@
       canvas.addEventListener("pointerdown", (e) => {
         state.hoverRotateReady = false;
         updateToolCursor();
+        if (state.isPasting && !tryRecoverPasteLock()) {
+          // Block interaction during paste/import
+          return;
+        }
         if (e.button === 2) {
           if (state.pinch.active || state.cropMode) return;
           closeContextMenu();
