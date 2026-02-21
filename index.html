@@ -196,13 +196,23 @@
     .canvas-wrap.hand-mode { cursor: grab; }
     .canvas-wrap.is-panning { cursor: grabbing; }
     #canvas {
-      width: 794px;
-      height: 1123px;
-      background: #fff;
-      border: 1px solid var(--border);
-      box-shadow: 0 8px 20px rgba(43, 42, 39, 0.18);
+      width: 8000px;
+      height: 8000px;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      overflow: visible;
       user-select: none;
       touch-action: none;
+    }
+    .fm-artboard-layer {
+      pointer-events: none;
+    }
+    .fm-artboard-bg {
+      fill: #ffffff;
+      stroke: var(--border);
+      stroke-width: 1;
+      filter: drop-shadow(0 8px 20px rgba(43, 42, 39, 0.18));
     }
     #status.status {
       padding: 6px 10px;
@@ -331,10 +341,6 @@
       text-align: center;
       font-weight: 700;
     }
-    #figureEditorFontSize {
-      width: 58px;
-      text-align: center;
-    }
     .mark-editor-spin {
       display: grid;
       grid-template-rows: 1fr 1fr;
@@ -376,7 +382,10 @@
     body.compact #restoreFromList { display: none; }
     body.compact.show-advanced #restoreList,
     body.compact.show-advanced #restoreFromList { display: inline-block; }
-    body.compact #canvas { max-width: 100%; min-width: 0; }
+    body.compact #canvas {
+      max-width: none;
+      min-width: 0;
+    }
     #textEditorInput {
       position: absolute;
       display: none;
@@ -518,7 +527,7 @@
         <button class="toolbar-tab-btn" data-toolbar-tab-btn="object">Object</button>
         <button class="toolbar-tab-btn" data-toolbar-tab-btn="text">Text</button>
       </div>
-      <div class="group" data-toolbar-tab="tool">
+      <div class="group" data-toolbar-tab="all">
         <button id="toolSelect" class="active tool-icon-btn" title="Black Arrow (V)" aria-label="Black Arrow (V)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
@@ -531,6 +540,8 @@
           </svg>
           <span class="sr-only">White Arrow</span>
         </button>
+      </div>
+      <div class="group" data-toolbar-tab="tool">
         <button id="toolHand" class="tool-icon-btn" title="Hand tool (H / hold Space)" aria-label="Hand tool (H / hold Space)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M7 18 C5.5 18 4.4 16.9 4.3 15.4 L3.8 10.3 C3.7 9.4 4.4 8.6 5.3 8.6 C6.1 8.6 6.8 9.2 6.9 10 L7.2 12.5 V4.7 C7.2 3.8 7.9 3.1 8.8 3.1 C9.7 3.1 10.4 3.8 10.4 4.7 V10.4 H10.8 V3.9 C10.8 3 11.5 2.3 12.4 2.3 C13.3 2.3 14 3 14 3.9 V10.4 H14.4 V5 C14.4 4.1 15.1 3.4 16 3.4 C16.9 3.4 17.6 4.1 17.6 5 V12.2 C17.6 15.4 14.9 18 11.7 18 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -692,7 +703,7 @@
     <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
     <input id="importFileInput" type="file" accept=".svg,image/svg+xml" hidden />
     <div class="canvas-wrap" tabindex="0">
-      <svg id="canvas" viewBox="0 0 794 1123" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg id="canvas" viewBox="0 0 8000 8000" xmlns="http://www.w3.org/2000/svg"></svg>
       <input id="textEditorInput" type="text" />
     </div>
     <textarea id="pasteSink" aria-hidden="true" inputmode="none"></textarea>
@@ -738,7 +749,6 @@
     </select>
     <span class="figure-editor-prefix">Figure</span>
     <input id="figureEditorInput" type="number" min="0" max="9999" step="1" inputmode="numeric" />
-    <input id="figureEditorFontSize" type="number" min="8" max="200" step="1" inputmode="numeric" title="Figure font size" />
     <button id="figureEditorApplyBtn" type="button">OK</button>
     <button id="figureEditorCancelBtn" type="button">Cancel</button>
   </div>
@@ -781,6 +791,9 @@
     const MAX_AUTOSAVE_REFS_BYTES = 1200 * 1024;
     const MAX_AUTOSAVE_TOTAL_BYTES = 4500 * 1024;
     const DEFAULT_VIEWBOX = "0 0 794 1123";
+    const WORKSPACE_SIZE = 8000;
+    const WORKSPACE_VIEWBOX = `0 0 ${WORKSPACE_SIZE} ${WORKSPACE_SIZE}`;
+    const DEFAULT_ARTBOARD_VIEWBOX = `${(WORKSPACE_SIZE - 794) / 2} ${(WORKSPACE_SIZE - 1123) / 2} 794 1123`;
     const FIGURE_TITLE_DEFAULT_FONT_SIZE = 16;
     const MIN_RESIZE_SIZE = 6;
     const MIN_VIEW_SCALE = 0.05;
@@ -801,7 +814,6 @@
     const figureEditorEl = document.getElementById("figureEditor");
     const figureEditorInputEl = document.getElementById("figureEditorInput");
     const figureEditorTypeEl = document.getElementById("figureEditorType");
-    const figureEditorFontSizeEl = document.getElementById("figureEditorFontSize");
     const textEditorInput = document.getElementById("textEditorInput");
     const pasteSinkEl = document.getElementById("pasteSink");
     const errorNoticeEl = document.getElementById("errorNotice");
@@ -902,6 +914,8 @@
       hydrateImageRefs(imageRefs);
       const resolved = restoreMarkupFromRefs(String(markup || ""));
       canvas.innerHTML = resolved;
+      ensureArtboardLayer();
+      updateArtboardVisual();
     }
 
     function isQuotaExceededError(err) {
@@ -987,6 +1001,7 @@
       tool: "select",
       selectedIds: [],
       idCounter: 1,
+      artboardViewBox: DEFAULT_ARTBOARD_VIEWBOX,
       history: [],
       future: [],
       maxHistory: MAX_HISTORY_ENTRIES_DEFAULT,
@@ -1207,7 +1222,9 @@
         el.classList.contains("selection-outline") ||
         el.classList.contains("selection-handle") ||
         el.classList.contains("marquee") ||
-        el.classList.contains("smart-guide")
+        el.classList.contains("smart-guide") ||
+        el.classList.contains("fm-artboard-layer") ||
+        el.classList.contains("fm-artboard-bg")
       );
     }
 
@@ -1239,6 +1256,57 @@
           el.dataset.id = createId();
         }
       }
+    }
+
+    function parseViewBoxString(raw, fallback = { minX: 0, minY: 0, width: 794, height: 1123 }) {
+      const parts = String(raw || "").trim().split(/\s+/).map(Number);
+      const minX = Number.isFinite(parts[0]) ? parts[0] : Number(fallback.minX || 0);
+      const minY = Number.isFinite(parts[1]) ? parts[1] : Number(fallback.minY || 0);
+      const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : Math.max(1, Number(fallback.width || 794));
+      const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : Math.max(1, Number(fallback.height || 1123));
+      return { minX, minY, width, height };
+    }
+
+    function formatViewBoxString(box) {
+      const minX = Number(box?.minX || 0);
+      const minY = Number(box?.minY || 0);
+      const width = Math.max(1, Number(box?.width || 794));
+      const height = Math.max(1, Number(box?.height || 1123));
+      return `${Number(minX.toFixed(4))} ${Number(minY.toFixed(4))} ${Number(width.toFixed(4))} ${Number(height.toFixed(4))}`;
+    }
+
+    function centeredArtboardBox(width, height) {
+      const w = Math.max(1, Number(width || 794));
+      const h = Math.max(1, Number(height || 1123));
+      return {
+        minX: (WORKSPACE_SIZE - w) / 2,
+        minY: (WORKSPACE_SIZE - h) / 2,
+        width: w,
+        height: h
+      };
+    }
+
+    function normalizeArtboardBox(raw, options = {}) {
+      const parsed = parseViewBoxString(raw, parseViewBoxString(DEFAULT_VIEWBOX));
+      const isLegacyOrigin = Math.abs(parsed.minX) < 1e-6 && Math.abs(parsed.minY) < 1e-6;
+      let box = parsed;
+      if (options.centerIfLegacy !== false && isLegacyOrigin) {
+        box = centeredArtboardBox(parsed.width, parsed.height);
+      }
+      if (box.width > WORKSPACE_SIZE) box.width = WORKSPACE_SIZE;
+      if (box.height > WORKSPACE_SIZE) box.height = WORKSPACE_SIZE;
+      box.minX = Math.max(0, Math.min(WORKSPACE_SIZE - box.width, box.minX));
+      box.minY = Math.max(0, Math.min(WORKSPACE_SIZE - box.height, box.minY));
+      return box;
+    }
+
+    function getWorkspaceDimensions() {
+      return parseViewBoxString(canvas.getAttribute("viewBox") || WORKSPACE_VIEWBOX, {
+        minX: 0,
+        minY: 0,
+        width: WORKSPACE_SIZE,
+        height: WORKSPACE_SIZE
+      });
     }
 
     function applyPointerEventPolicy(el) {
@@ -1447,7 +1515,7 @@
     function drawSmartGuides(guides) {
       clearSmartGuides();
       if (!guides) return;
-      const { minX, minY, width, height } = getCanvasDimensions();
+      const { minX, minY, width, height } = getWorkspaceDimensions();
       if (Number.isFinite(guides.x)) {
         const v = document.createElementNS(SVG_NS, "line");
         v.setAttribute("class", "smart-guide");
@@ -2031,7 +2099,20 @@
     }
 
     function addRect() {
-      const el = createShape("rect", { x: 120, y: 120, width: 180, height: 110, fill: "#fef3c7", stroke: "#374151", "stroke-width": 2 });
+      const dims = getCanvasDimensions();
+      const width = 180;
+      const height = 110;
+      const x = dims.minX + dims.width * 0.35 - width / 2;
+      const y = dims.minY + dims.height * 0.38 - height / 2;
+      const el = createShape("rect", {
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+        width,
+        height,
+        fill: "#fef3c7",
+        stroke: "#374151",
+        "stroke-width": 2
+      });
       setSelection([el.dataset.id]);
       pushHistory("add-rect");
     }
@@ -2049,15 +2130,31 @@
 
     function addLine() {
       const stroke = 3;
-      const el = createShape("line", { x1: 150, y1: 300, x2: 340, y2: 300, stroke: "#0f172a", "stroke-width": stroke });
+      const dims = getCanvasDimensions();
+      const cx = dims.minX + dims.width * 0.5;
+      const cy = dims.minY + dims.height * 0.55;
+      const half = Math.max(60, Math.min(220, dims.width * 0.15));
+      const el = createShape("line", {
+        x1: Number((cx - half).toFixed(2)),
+        y1: Number(cy.toFixed(2)),
+        x2: Number((cx + half).toFixed(2)),
+        y2: Number(cy.toFixed(2)),
+        stroke: "#0f172a",
+        "stroke-width": stroke
+      });
       applyLineStyle(el, stroke);
       setSelection([el.dataset.id]);
       pushHistory("add-line");
     }
 
     function addTriangle() {
+      const dims = getCanvasDimensions();
+      const cx = dims.minX + dims.width * 0.68;
+      const cy = dims.minY + dims.height * 0.38;
+      const halfW = Math.max(40, Math.min(120, dims.width * 0.08));
+      const h = Math.max(70, Math.min(180, dims.height * 0.16));
       const el = createShape("polygon", {
-        points: "260,150 340,300 180,300",
+        points: `${Number(cx.toFixed(2))},${Number((cy - h / 2).toFixed(2))} ${Number((cx + halfW).toFixed(2))},${Number((cy + h / 2).toFixed(2))} ${Number((cx - halfW).toFixed(2))},${Number((cy + h / 2).toFixed(2))}`,
         fill: "#dbeafe",
         stroke: "#1e3a8a",
         "stroke-width": 2
@@ -2122,6 +2219,55 @@
         canvas.insertBefore(defs, canvas.firstChild);
       }
       return defs;
+    }
+
+    function ensureArtboardLayer() {
+      const defs = ensureCanvasDefs();
+      const layers = Array.from(canvas.querySelectorAll(":scope > g.fm-artboard-layer"));
+      let layer = layers[0] || null;
+      layers.slice(1).forEach((el) => el.remove());
+      if (!(layer instanceof SVGElement)) {
+        layer = document.createElementNS(SVG_NS, "g");
+        layer.classList.add("fm-artboard-layer");
+        layer.setAttribute("aria-hidden", "true");
+      }
+      layer.classList.add("fm-artboard-layer");
+      layer.removeAttribute("data-id");
+      layer.removeAttribute("data-base-transform");
+      layer.removeAttribute("data-tx");
+      layer.removeAttribute("data-ty");
+      layer.setAttribute("pointer-events", "none");
+
+      const anchor = defs.nextSibling;
+      if (anchor !== layer) {
+        if (anchor) canvas.insertBefore(layer, anchor);
+        else canvas.appendChild(layer);
+      }
+      let artboardRect = layer.querySelector(":scope > rect.fm-artboard-bg");
+      if (!(artboardRect instanceof SVGElement)) {
+        artboardRect = document.createElementNS(SVG_NS, "rect");
+        artboardRect.classList.add("fm-artboard-bg");
+        layer.innerHTML = "";
+        layer.appendChild(artboardRect);
+      } else {
+        Array.from(layer.querySelectorAll(":scope > rect.fm-artboard-bg")).slice(1).forEach((n) => n.remove());
+      }
+      artboardRect.classList.add("fm-artboard-bg");
+      artboardRect.removeAttribute("data-id");
+      artboardRect.removeAttribute("data-base-transform");
+      artboardRect.removeAttribute("data-tx");
+      artboardRect.removeAttribute("data-ty");
+      artboardRect.setAttribute("pointer-events", "none");
+      return { layer, rect: artboardRect };
+    }
+
+    function updateArtboardVisual() {
+      const { minX, minY, width, height } = getCanvasDimensions();
+      const refs = ensureArtboardLayer();
+      refs.rect.setAttribute("x", String(Number(minX.toFixed(4))));
+      refs.rect.setAttribute("y", String(Number(minY.toFixed(4))));
+      refs.rect.setAttribute("width", String(Number(width.toFixed(4))));
+      refs.rect.setAttribute("height", String(Number(height.toFixed(4))));
     }
 
     function applyArrowStyle(lineEl) {
@@ -2732,13 +2878,35 @@
     }
 
     function addEllipse() {
-      const el = createShape("ellipse", { cx: 520, cy: 190, rx: 95, ry: 60, fill: "#dbeafe", stroke: "#1e3a8a", "stroke-width": 2 });
+      const dims = getCanvasDimensions();
+      const cx = dims.minX + dims.width * 0.62;
+      const cy = dims.minY + dims.height * 0.42;
+      const rx = Math.max(40, Math.min(120, dims.width * 0.12));
+      const ry = Math.max(28, Math.min(90, dims.height * 0.08));
+      const el = createShape("ellipse", {
+        cx: Number(cx.toFixed(2)),
+        cy: Number(cy.toFixed(2)),
+        rx: Number(rx.toFixed(2)),
+        ry: Number(ry.toFixed(2)),
+        fill: "#dbeafe",
+        stroke: "#1e3a8a",
+        "stroke-width": 2
+      });
       setSelection([el.dataset.id]);
       pushHistory("add-ellipse");
     }
 
     function addText() {
-      const el = createShape("text", { x: 520, y: 330, fill: "#111827", "font-size": 28, "font-family": "Arial" }, "Text");
+      const dims = getCanvasDimensions();
+      const x = dims.minX + dims.width * 0.5;
+      const y = dims.minY + dims.height * 0.62;
+      const el = createShape("text", {
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+        fill: "#111827",
+        "font-size": 28,
+        "font-family": "Arial"
+      }, "Text");
       setSelection([el.dataset.id]);
       pushHistory("add-text");
     }
@@ -2850,11 +3018,7 @@
       if (!(figureEditorEl instanceof HTMLElement) || !(figureEditorInputEl instanceof HTMLInputElement)) return;
       const number = readFigureNumber(titleEl);
       const kind = readFigureKind(titleEl);
-      const fontSize = readFigureFontSize(titleEl);
       figureEditorInputEl.value = String(number);
-      if (figureEditorFontSizeEl instanceof HTMLInputElement) {
-        figureEditorFontSizeEl.value = String(fontSize);
-      }
       if (figureEditorTypeEl instanceof HTMLSelectElement) {
         figureEditorTypeEl.value = kind;
       }
@@ -2882,15 +3046,13 @@
       }
       const before = readFigureNumber(target);
       const beforeKind = readFigureKind(target);
-      const beforeFontSize = readFigureFontSize(target);
       const next = normalizeFigureNumber(Number(figureEditorInputEl?.value || before));
       const nextKind = normalizeFigureKind(figureEditorTypeEl?.value || beforeKind);
-      const nextFontSize = normalizeFigureFontSize(Number(figureEditorFontSizeEl?.value || beforeFontSize));
-      setFigureTitleNumber(target, next, nextKind, nextFontSize);
+      setFigureTitleNumber(target, next, nextKind);
       closeFigureEditor();
       requestSelectionVisualRefresh();
-      if (next !== before || nextKind !== beforeKind || nextFontSize !== beforeFontSize) pushHistory("figure-title-number");
-      setStatus(`${getFigurePrefixLabel(nextKind)} ${next} (${nextFontSize}px)`);
+      if (next !== before || nextKind !== beforeKind) pushHistory("figure-title-number");
+      setStatus(`${getFigurePrefixLabel(nextKind)} ${next}`);
     }
 
     function getCleanCanvasMarkup() {
@@ -2911,31 +3073,49 @@
     }
 
     function getCanvasMeta() {
-      const vb = canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX;
-      return { viewBox: vb };
+      return {
+        viewBox: state.artboardViewBox || DEFAULT_ARTBOARD_VIEWBOX,
+        artboardViewBox: state.artboardViewBox || DEFAULT_ARTBOARD_VIEWBOX,
+        workspaceViewBox: WORKSPACE_VIEWBOX
+      };
     }
 
-    function applyCanvasMeta(meta) {
-      const vb = meta?.viewBox || DEFAULT_VIEWBOX;
-      canvas.setAttribute("viewBox", vb);
-      const dims = getCanvasDimensions();
-      canvas.setAttribute("width", String(Math.round(dims.width)));
-      canvas.setAttribute("height", String(Math.round(dims.height)));
+    function centerViewportOnArtboard() {
+      const art = getCanvasDimensions();
+      const z = Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, Number(state.viewScale) || 1));
+      const centerX = (art.minX + art.width / 2) * z;
+      const centerY = (art.minY + art.height / 2) * z;
+      const maxScrollX = Math.max(0, canvas.scrollWidth - canvasWrapEl.clientWidth);
+      const maxScrollY = Math.max(0, canvas.scrollHeight - canvasWrapEl.clientHeight);
+      canvasWrapEl.scrollLeft = Math.max(0, Math.min(maxScrollX, centerX - canvasWrapEl.clientWidth / 2));
+      canvasWrapEl.scrollTop = Math.max(0, Math.min(maxScrollY, centerY - canvasWrapEl.clientHeight / 2));
+    }
+
+    function applyCanvasMeta(meta, options = {}) {
+      const rawArtboard = meta?.artboardViewBox || meta?.viewBox || state.artboardViewBox || DEFAULT_ARTBOARD_VIEWBOX;
+      const art = normalizeArtboardBox(rawArtboard, { centerIfLegacy: true });
+      state.artboardViewBox = formatViewBoxString(art);
+      canvas.setAttribute("viewBox", WORKSPACE_VIEWBOX);
+      canvas.setAttribute("width", String(WORKSPACE_SIZE));
+      canvas.setAttribute("height", String(WORKSPACE_SIZE));
+      ensureArtboardLayer();
+      updateArtboardVisual();
       syncCanvasDisplaySizeFromViewBox();
+      if (options.centerScroll) centerViewportOnArtboard();
     }
 
     function getCanvasDimensions() {
-      const parts = (canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX).split(/\s+/).map(Number);
-      const minX = Number.isFinite(parts[0]) ? parts[0] : 0;
-      const minY = Number.isFinite(parts[1]) ? parts[1] : 0;
-      const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : 794;
-      const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : 1123;
+      const parts = parseViewBoxString(state.artboardViewBox || DEFAULT_ARTBOARD_VIEWBOX, parseViewBoxString(DEFAULT_ARTBOARD_VIEWBOX));
+      const minX = Number.isFinite(parts.minX) ? parts.minX : 0;
+      const minY = Number.isFinite(parts.minY) ? parts.minY : 0;
+      const width = Number.isFinite(parts.width) && parts.width > 0 ? parts.width : 794;
+      const height = Number.isFinite(parts.height) && parts.height > 0 ? parts.height : 1123;
       return { minX, minY, width, height };
     }
 
     function getCanvasDisplayScale() {
       const rect = canvas.getBoundingClientRect();
-      const { width, height } = getCanvasDimensions();
+      const { width, height } = getWorkspaceDimensions();
       const sx = rect.width / Math.max(width, 1e-6);
       const sy = rect.height / Math.max(height, 1e-6);
       const s = Math.min(sx, sy);
@@ -2943,7 +3123,7 @@
     }
 
     function getCanvasDisplaySize() {
-      const { width, height } = getCanvasDimensions();
+      const { width, height } = getWorkspaceDimensions();
       const z = Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, Number(state.viewScale) || 1));
       return { width: width * z, height: height * z };
     }
@@ -3053,7 +3233,8 @@
         btn.classList.toggle("active", btn.getAttribute("data-toolbar-tab-btn") === next);
       });
       document.querySelectorAll(".toolbar .group[data-toolbar-tab]").forEach((group) => {
-        group.hidden = group.getAttribute("data-toolbar-tab") !== next;
+        const groupTab = group.getAttribute("data-toolbar-tab") || "";
+        group.hidden = groupTab !== "all" && groupTab !== next;
       });
       if (!options.silent) setStatus(`Toolbar tab: ${next}`);
     }
@@ -4450,8 +4631,8 @@
       }
       cancelImageCropMode({ silent: true });
       sanitizeSvgTree(root);
-      applyCanvasMeta({ viewBox: root.getAttribute("viewBox") || DEFAULT_VIEWBOX });
-      canvas.innerHTML = root.innerHTML;
+      applyCanvasMeta({ viewBox: root.getAttribute("viewBox") || DEFAULT_VIEWBOX }, { centerScroll: true });
+      applySnapshotMarkup(root.innerHTML);
       assignIds();
       ensureFigureTitle();
       clearSelection();
@@ -4516,8 +4697,8 @@
 
     function newCanvas() {
       cancelImageCropMode({ silent: true });
-      applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX });
-      canvas.innerHTML = "";
+      applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX }, { centerScroll: true });
+      applySnapshotMarkup("");
       ensureFigureTitle();
       clearSelection();
       resetHistory("new-canvas");
@@ -4724,8 +4905,11 @@
       const step = 24;
       const extraX = Number(options.offsetX || 0);
       const extraY = Number(options.offsetY || 0);
-      const x = 600 - width / 2 + offsetIndex * step + extraX;
-      const y = 350 - height / 2 + offsetIndex * step + extraY;
+      const dims = getCanvasDimensions();
+      const baseX = dims.minX + dims.width / 2 - width / 2;
+      const baseY = dims.minY + dims.height / 2 - height / 2;
+      const x = baseX + offsetIndex * step + extraX;
+      const y = baseY + offsetIndex * step + extraY;
       const el = document.createElementNS(SVG_NS, "image");
       el.setAttribute("x", String(x));
       el.setAttribute("y", String(y));
@@ -6719,24 +6903,6 @@
           }
         });
       }
-      if (figureEditorFontSizeEl) {
-        figureEditorFontSizeEl.addEventListener("input", () => {
-          const next = normalizeFigureFontSize(Number(figureEditorFontSizeEl.value || FIGURE_TITLE_DEFAULT_FONT_SIZE));
-          figureEditorFontSizeEl.value = String(next);
-        });
-        figureEditorFontSizeEl.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
-            applyFigureFromEditor();
-          }
-          if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            closeFigureEditor();
-          }
-        });
-      }
       if (shortcutModalEl) {
         shortcutModalEl.addEventListener("pointerdown", (e) => {
           if (e.target === shortcutModalEl) closeShortcutHelp();
@@ -7539,7 +7705,8 @@
       setupGlobalErrorHandlers();
       setupEventRingHooks();
       state.viewScale = 1;
-      applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX });
+      applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX }, { centerScroll: true });
+      applySnapshotMarkup("");
       assignIds();
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();

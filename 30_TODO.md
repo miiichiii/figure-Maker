@@ -13,6 +13,7 @@
 - [done][P0-High] 自動保存 Off/10/30 + Restore latest/list
 - [done][P0-High] Paste(PNG/SVG text)
 - [doing][P0-Med] 手動テストとバグ修正
+- [done][P0-High] ワークスペース拡張 + 内部アートボード化（SVG外周を作業領域化し、保存/PDFはアートボード範囲のみ出力）
 - [done][P1-High] Line選択時のリサイズハンドルを2点（両端）化し、4点BBoxハンドルを廃止
 - [done][P1-High] Line専用のstroke幅数値入力を追加（選択Lineへ即時反映、Arrowにも整合）
 - [done][P1-Med] Triangle追加ボタンを実装（任意矢印作成向け、頂点ハンドルで編集）
@@ -183,5 +184,11 @@
 
 ## P0 (Critical Fixes)
 - [ ] [P0-Crit] メモリリーク対策: Undo/Redo履歴の最適化 (innerHTML全保存の廃止、差分管理または参照管理へ移行)
+- [ ] [P0-Crit] Phase 0: 履歴サイズ/メモリ/復元時間のベースライン計測を固定
+- [ ] [P0-Crit] Phase 1: ActionBatch定義とdual-write実装（snapshotと同時記録）
+- [ ] [P0-Crit] Phase 2: checkpoint + action replay 検証経路を追加（本番はsnapshot維持）
+- [ ] [P0-Crit] Phase 3: Undo/Redoをaction優先に切替（失敗時snapshotフォールバック）
+- [ ] [P0-Crit] Phase 4: Autosaveをcheckpoint + actions保存へ移行
+- [ ] [P0-Crit] Phase 5: 大容量snapshot常時保存を停止しcheckpoint用途へ限定
 - [ ] [P0-Crit] クリップボード処理の堅牢化: pasteSink依存の廃止とClipboard APIへの完全移行
 - [ ] [P0-Crit] 単一ファイル分割の検討: 保守性向上のため、JS/CSSのモジュール化 (ES Modules) を検討
