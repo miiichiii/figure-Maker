@@ -21,6 +21,13 @@
 - [done][P1-Med] 回転可能ゾーン（BBox外周）で回転カーソルを表示
 - [done][P1-High] Line stroke入力を線以外の図形ストローク幅にも適用
 - [done][P1-Med] ストローク幅入力中のリアルタイム描画を再確認（回帰防止）
+- [done][P0-High] 履歴上限を100→30へ削減し、高解像度編集時のメモリ圧迫を緩和
+- [done][P0-High] 履歴/Autosaveにサイズガードを追加（巨大スナップショットを保存対象から除外）
+- [done][P0-Med] Autosaveレコード件数を20→8へ縮小しLocalStorage容量超過リスクを低減
+- [done][P0-Med] Autosave総容量予算（約4.5MB）で古い記録を自動削減
+- [done][P0-Med] imageRefsが巨大な不完全Autosaveを禁止（復元不能レコードを作らない）
+- [done][P0-Med] 画像参照プールのGCを追加（履歴/キャンバス未参照の画像を解放）
+- [done][P1-High] Drag/Resize/Rotate終了時にtransformをBakeし、連続操作でのCTM蓄積を抑制
 - [done][P1-Med] 上部メニューバー（File/Edit/View/Window）追加
 - [done][P1-Med] ViewメニューからCanvasサイズ変更（A4 Portrait/A4 Landscape/カスタム）
 - [done][P1-Med] New/Open SVG/Save SVG/Export PDF をツールバーからFileメニューへ集約

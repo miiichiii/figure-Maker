@@ -773,7 +773,13 @@
     const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
     const LAST_ERROR_KEY = "figureMaker_last_error";
     const LIVE_AUTOSAVE_KEY = "figureMaker_live_snapshot";
-    const AUTOSAVE_MAX_RECORDS = 20;
+    const AUTOSAVE_MAX_RECORDS = 8;
+    const MAX_HISTORY_ENTRIES_DEFAULT = 30;
+    const MAX_HISTORY_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+    const MAX_HISTORY_TOTAL_BYTES = 24 * 1024 * 1024;
+    const MAX_AUTOSAVE_RECORD_BYTES = 2 * 1024 * 1024;
+    const MAX_AUTOSAVE_REFS_BYTES = 1200 * 1024;
+    const MAX_AUTOSAVE_TOTAL_BYTES = 4500 * 1024;
     const DEFAULT_VIEWBOX = "0 0 794 1123";
     const FIGURE_TITLE_DEFAULT_FONT_SIZE = 16;
     const MIN_RESIZE_SIZE = 6;
@@ -906,17 +912,73 @@
       return msg.includes("exceeded the quota") || msg.includes("QuotaExceededError");
     }
 
+    function estimateBytes(value) {
+      if (value == null) return 0;
+      if (typeof value !== "string") {
+        try {
+          value = JSON.stringify(value);
+        } catch (_) {
+          value = String(value);
+        }
+      }
+      return Math.max(0, String(value).length * 2);
+    }
+
+    function estimateSnapshotBytes(snap) {
+      if (!snap || typeof snap !== "object") return 0;
+      return estimateBytes(snap.markup) + estimateBytes(snap.selectedIds) + estimateBytes(snap.canvasMeta) + 96;
+    }
+
+    function estimateAutosaveRecordBytes(rec) {
+      if (!rec || typeof rec !== "object") return 0;
+      return estimateBytes(rec.markup) + estimateBytes(rec.selectedIds) + estimateBytes(rec.canvasMeta) + estimateBytes(rec.imageRefs) + 128;
+    }
+
+    function collectRefIdsFromMarkup(markup, outSet) {
+      const set = outSet instanceof Set ? outSet : new Set();
+      const regex = /img-ref:([A-Za-z0-9_-]+)/g;
+      const text = String(markup || "");
+      let m = regex.exec(text);
+      while (m) {
+        set.add(m[1]);
+        m = regex.exec(text);
+      }
+      return set;
+    }
+
+    function garbageCollectImagePool() {
+      const used = new Set();
+      collectRefIdsFromMarkup(canvas?.innerHTML || "", used);
+      (state.history || []).forEach((snap) => collectRefIdsFromMarkup(snap?.markup || "", used));
+      (state.future || []).forEach((snap) => collectRefIdsFromMarkup(snap?.markup || "", used));
+      (state.clipboardItems || []).forEach((item) => collectRefIdsFromMarkup(item?.markup || "", used));
+      Array.from(imagePoolRev.keys()).forEach((id) => {
+        if (used.has(id)) return;
+        const dataUrl = imagePoolRev.get(id);
+        imagePoolRev.delete(id);
+        if (dataUrl) imagePool.delete(dataUrl);
+      });
+    }
+
     function makeAutosaveRecord(prefix, reason) {
       const snap = getSnapshot(`${prefix}:${reason}`, { useRefs: true });
+      if (Number(snap.sizeBytes || 0) > MAX_AUTOSAVE_RECORD_BYTES) return null;
       const rec = {
         id: `${prefix}-${Date.now()}`,
         at: Number(snap.at || Date.now()),
         markup: snap.markup,
         selectedIds: Array.isArray(snap.selectedIds) ? [...snap.selectedIds] : [],
-        canvasMeta: snap.canvasMeta
+        canvasMeta: snap.canvasMeta,
+        snapBytes: Number(snap.sizeBytes || 0)
       };
       const refs = collectImageRefsForMarkup(snap.markup);
-      if (refs) rec.imageRefs = refs;
+      if (refs) {
+        const refsBytes = estimateBytes(refs);
+        if (refsBytes > MAX_AUTOSAVE_REFS_BYTES) return null;
+        rec.imageRefs = refs;
+      }
+      rec.sizeBytes = estimateAutosaveRecordBytes(rec);
+      if (rec.sizeBytes > MAX_AUTOSAVE_RECORD_BYTES) return null;
       return rec;
     }
     /* ---------------------------------------- */
@@ -927,7 +989,7 @@
       idCounter: 1,
       history: [],
       future: [],
-      maxHistory: 100,
+      maxHistory: MAX_HISTORY_ENTRIES_DEFAULT,
       interaction: null,
       autosaveTimer: null,
       liveAutosaveTimer: 0,
@@ -957,6 +1019,9 @@
       cropMode: null,
       autosaveQuotaWarned: false,
       liveAutosaveQuotaWarned: false,
+      historySizeWarned: false,
+      autosaveSizeWarned: false,
+      liveAutosaveSizeWarned: false,
       pasteNudgeCounter: 0,
       suppressContextMenuOnce: false,
       hoverRotateReady: false,
@@ -3128,7 +3193,9 @@
       if (options.useRefs) {
         markup = processMarkupForRefs(markup);
       }
-      return { markup, selectedIds: [...state.selectedIds], canvasMeta: getCanvasMeta(), at: Date.now(), reason };
+      const snap = { markup, selectedIds: [...state.selectedIds], canvasMeta: getCanvasMeta(), at: Date.now(), reason };
+      snap.sizeBytes = estimateSnapshotBytes(snap);
+      return snap;
     }
 
     function updateHistoryButtons() {
@@ -3140,6 +3207,15 @@
 
     function pushHistory(reason, options = {}) {
       const snap = getSnapshot(reason, { useRefs: true });
+      if (Number(snap.sizeBytes || 0) > MAX_HISTORY_SNAPSHOT_BYTES) {
+        scheduleLiveAutosave(reason || "history-too-large");
+        if (!state.historySizeWarned) {
+          state.historySizeWarned = true;
+          setStatus("History snapshot skipped: canvas is too large. Use Save SVG.");
+        }
+        return;
+      }
+      state.historySizeWarned = false;
       const last = state.history[state.history.length - 1];
       if (last && last.markup === snap.markup && JSON.stringify(last.selectedIds) === JSON.stringify(snap.selectedIds)) {
         scheduleLiveAutosave(reason || "history-nochange");
@@ -3161,6 +3237,12 @@
       }
       state.history.push(snap);
       if (state.history.length > state.maxHistory) state.history.shift();
+      let totalBytes = state.history.reduce((sum, s) => sum + Number(s?.sizeBytes || estimateSnapshotBytes(s)), 0);
+      while (state.history.length > 1 && totalBytes > MAX_HISTORY_TOTAL_BYTES) {
+        const removed = state.history.shift();
+        totalBytes -= Number(removed?.sizeBytes || estimateSnapshotBytes(removed));
+      }
+      garbageCollectImagePool();
       state.future = [];
       updateHistoryButtons();
       scheduleLiveAutosave(reason || "history");
@@ -3171,6 +3253,7 @@
       const snap = getSnapshot(reason, { useRefs: true });
       state.history = [snap];
       state.future = [];
+      garbageCollectImagePool();
       updateHistoryButtons();
       scheduleLiveAutosave(reason || "reset-history");
     }
@@ -3182,6 +3265,7 @@
       applySnapshotMarkup(snap.markup, snap.imageRefs || null);
       assignIds();
       setSelection(snap.selectedIds || []);
+      garbageCollectImagePool();
     }
 
     function undo() {
@@ -3578,6 +3662,483 @@
       el.dataset.ty = "0";
       setTranslate(el, 0, 0);
       return true;
+    }
+
+    function identityTransformMatrix() {
+      return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    }
+
+    function matrixFromSvgMatrix(m) {
+      if (!m) return identityTransformMatrix();
+      const a = Number(m.a);
+      const b = Number(m.b);
+      const c = Number(m.c);
+      const d = Number(m.d);
+      const e = Number(m.e);
+      const f = Number(m.f);
+      if (![a, b, c, d, e, f].every(Number.isFinite)) return identityTransformMatrix();
+      return { a, b, c, d, e, f };
+    }
+
+    function matrixFromTransformString(raw) {
+      const text = String(raw || "").trim();
+      if (!text) return identityTransformMatrix();
+      try {
+        const temp = document.createElementNS(SVG_NS, "g");
+        temp.setAttribute("transform", text);
+        const list = temp.transform?.baseVal;
+        if (!list || !list.numberOfItems) return identityTransformMatrix();
+        const consolidated = list.consolidate();
+        return matrixFromSvgMatrix(consolidated?.matrix);
+      } catch (_) {
+        return identityTransformMatrix();
+      }
+    }
+
+    function multiplyTransformMatrices(left, right) {
+      return {
+        a: left.a * right.a + left.c * right.b,
+        b: left.b * right.a + left.d * right.b,
+        c: left.a * right.c + left.c * right.d,
+        d: left.b * right.c + left.d * right.d,
+        e: left.a * right.e + left.c * right.f + left.e,
+        f: left.b * right.e + left.d * right.f + left.f
+      };
+    }
+
+    function isIdentityTransformMatrix(m, eps = 1e-8) {
+      return (
+        Math.abs(m.a - 1) < eps &&
+        Math.abs(m.b) < eps &&
+        Math.abs(m.c) < eps &&
+        Math.abs(m.d - 1) < eps &&
+        Math.abs(m.e) < eps &&
+        Math.abs(m.f) < eps
+      );
+    }
+
+    function isAxisAlignedTransformMatrix(m, eps = 1e-8) {
+      return Math.abs(m.b) < eps && Math.abs(m.c) < eps;
+    }
+
+    function transformPointByMatrix(m, x, y) {
+      const nx = m.a * x + m.c * y + m.e;
+      const ny = m.b * x + m.d * y + m.f;
+      return { x: nx, y: ny };
+    }
+
+    function transformScaleX(m) {
+      return Math.hypot(m.a, m.b);
+    }
+
+    function transformScaleY(m) {
+      return Math.hypot(m.c, m.d);
+    }
+
+    function toNumString(value, digits = 4) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n)) return "0";
+      return String(Number(n.toFixed(digits)));
+    }
+
+    function toMatrixTransformString(m, digits = 8) {
+      return `matrix(${toNumString(m.a, digits)} ${toNumString(m.b, digits)} ${toNumString(m.c, digits)} ${toNumString(m.d, digits)} ${toNumString(m.e, digits)} ${toNumString(m.f, digits)})`;
+    }
+
+    function setElementMatrixTransform(el, matrix) {
+      if (!(el instanceof SVGElement) || el === canvas) return;
+      if (isIdentityTransformMatrix(matrix)) el.removeAttribute("transform");
+      else el.setAttribute("transform", toMatrixTransformString(matrix));
+      el.removeAttribute("data-base-transform");
+      el.removeAttribute("data-tx");
+      el.removeAttribute("data-ty");
+      ensureTransformState(el);
+    }
+
+    function clearElementTransformState(el) {
+      if (!(el instanceof SVGElement) || el === canvas) return;
+      el.removeAttribute("transform");
+      el.dataset.baseTransform = "";
+      el.dataset.tx = "0";
+      el.dataset.ty = "0";
+    }
+
+    function getAttrNumber(el, name, fallback = 0) {
+      const raw = String(el.getAttribute(name) || "").trim();
+      if (!raw) return fallback;
+      const first = raw.split(/[\s,]+/).find((v) => v.length);
+      const n = Number(first);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function transformPathDataByMatrix(d, matrix) {
+      const tokens = [];
+      const re = /([a-zA-Z])|([-+]?\d*\.?\d+(?:e[-+]?\d+)?)/g;
+      let m;
+      while ((m = re.exec(String(d || ""))) !== null) {
+        if (m[1]) tokens.push({ type: "cmd", value: m[1] });
+        else tokens.push({ type: "num", value: Number(m[2]) });
+      }
+      if (!tokens.length) return "";
+      const out = [];
+      let i = 0;
+      let cmd = "";
+      let cx = 0;
+      let cy = 0;
+      let sx = 0;
+      let sy = 0;
+      const hasNums = (count) => {
+        if (i + count > tokens.length) return false;
+        for (let k = 0; k < count; k += 1) {
+          if (tokens[i + k].type !== "num") return false;
+        }
+        return true;
+      };
+      const readNum = () => {
+        if (i >= tokens.length || tokens[i].type !== "num") return null;
+        return tokens[i++].value;
+      };
+      const emit = (c, vals = []) => {
+        out.push(c);
+        vals.forEach((v) => out.push(toNumString(v)));
+      };
+      const det = matrix.a * matrix.d - matrix.b * matrix.c;
+      const canTransformArc = isAxisAlignedTransformMatrix(matrix);
+      while (i < tokens.length) {
+        const loopStart = i;
+        if (tokens[i].type === "cmd") {
+          cmd = tokens[i].value;
+          i += 1;
+        } else if (!cmd) {
+          break;
+        }
+        const lower = cmd.toLowerCase();
+        const rel = cmd === lower;
+        if (lower === "z") {
+          emit("Z");
+          cx = sx;
+          cy = sy;
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "m") {
+          let first = true;
+          while (hasNums(2)) {
+            let x = readNum();
+            let y = readNum();
+            if (rel) {
+              x += cx;
+              y += cy;
+            }
+            const p = transformPointByMatrix(matrix, x, y);
+            emit(first ? "M" : "L", [p.x, p.y]);
+            cx = x;
+            cy = y;
+            if (first) {
+              sx = x;
+              sy = y;
+              first = false;
+            }
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "l") {
+          while (hasNums(2)) {
+            let x = readNum();
+            let y = readNum();
+            if (rel) {
+              x += cx;
+              y += cy;
+            }
+            const p = transformPointByMatrix(matrix, x, y);
+            emit("L", [p.x, p.y]);
+            cx = x;
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "h") {
+          while (hasNums(1)) {
+            let x = readNum();
+            if (rel) x += cx;
+            const p = transformPointByMatrix(matrix, x, cy);
+            emit("L", [p.x, p.y]);
+            cx = x;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "v") {
+          while (hasNums(1)) {
+            let y = readNum();
+            if (rel) y += cy;
+            const p = transformPointByMatrix(matrix, cx, y);
+            emit("L", [p.x, p.y]);
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "c") {
+          while (hasNums(6)) {
+            let x1 = readNum(); let y1 = readNum();
+            let x2 = readNum(); let y2 = readNum();
+            let x = readNum(); let y = readNum();
+            if (rel) {
+              x1 += cx; y1 += cy;
+              x2 += cx; y2 += cy;
+              x += cx; y += cy;
+            }
+            const p1 = transformPointByMatrix(matrix, x1, y1);
+            const p2 = transformPointByMatrix(matrix, x2, y2);
+            const p = transformPointByMatrix(matrix, x, y);
+            emit("C", [p1.x, p1.y, p2.x, p2.y, p.x, p.y]);
+            cx = x;
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "s") {
+          while (hasNums(4)) {
+            let x2 = readNum(); let y2 = readNum();
+            let x = readNum(); let y = readNum();
+            if (rel) {
+              x2 += cx; y2 += cy;
+              x += cx; y += cy;
+            }
+            const p2 = transformPointByMatrix(matrix, x2, y2);
+            const p = transformPointByMatrix(matrix, x, y);
+            emit("S", [p2.x, p2.y, p.x, p.y]);
+            cx = x;
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "q") {
+          while (hasNums(4)) {
+            let x1 = readNum(); let y1 = readNum();
+            let x = readNum(); let y = readNum();
+            if (rel) {
+              x1 += cx; y1 += cy;
+              x += cx; y += cy;
+            }
+            const p1 = transformPointByMatrix(matrix, x1, y1);
+            const p = transformPointByMatrix(matrix, x, y);
+            emit("Q", [p1.x, p1.y, p.x, p.y]);
+            cx = x;
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "t") {
+          while (hasNums(2)) {
+            let x = readNum();
+            let y = readNum();
+            if (rel) {
+              x += cx;
+              y += cy;
+            }
+            const p = transformPointByMatrix(matrix, x, y);
+            emit("T", [p.x, p.y]);
+            cx = x;
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        if (lower === "a") {
+          if (!canTransformArc) return "";
+          while (hasNums(7)) {
+            const rx = readNum();
+            const ry = readNum();
+            const xAxisRotation = readNum();
+            const largeArc = readNum();
+            let sweep = readNum();
+            let x = readNum();
+            let y = readNum();
+            if (rel) {
+              x += cx;
+              y += cy;
+            }
+            const sxScale = Math.max(1e-6, transformScaleX(matrix));
+            const syScale = Math.max(1e-6, transformScaleY(matrix));
+            const p = transformPointByMatrix(matrix, x, y);
+            if (det < 0) sweep = sweep ? 0 : 1;
+            emit("A", [
+              Math.max(0.5, Math.abs(rx * sxScale)),
+              Math.max(0.5, Math.abs(ry * syScale)),
+              xAxisRotation,
+              largeArc ? 1 : 0,
+              sweep ? 1 : 0,
+              p.x,
+              p.y
+            ]);
+            cx = x;
+            cy = y;
+          }
+          if (i === loopStart) break;
+          continue;
+        }
+        break;
+      }
+      return out.join(" ");
+    }
+
+    function bakeGeometryByMatrix(el, matrix) {
+      if (!(el instanceof SVGElement)) return false;
+      if (isIdentityTransformMatrix(matrix)) return true;
+      if (el.tagName === "line") {
+        const x1 = getAttrNumber(el, "x1");
+        const y1 = getAttrNumber(el, "y1");
+        const x2 = getAttrNumber(el, "x2");
+        const y2 = getAttrNumber(el, "y2");
+        const p1 = transformPointByMatrix(matrix, x1, y1);
+        const p2 = transformPointByMatrix(matrix, x2, y2);
+        el.setAttribute("x1", toNumString(p1.x));
+        el.setAttribute("y1", toNumString(p1.y));
+        el.setAttribute("x2", toNumString(p2.x));
+        el.setAttribute("y2", toNumString(p2.y));
+        return true;
+      }
+      if (el.tagName === "polygon" || el.tagName === "polyline") {
+        const points = parseSvgPoints(el.getAttribute("points"));
+        if (!points.length) return true;
+        const mapped = points.map((p) => transformPointByMatrix(matrix, p.x, p.y));
+        el.setAttribute("points", formatSvgPoints(mapped));
+        return true;
+      }
+      if (el.tagName === "path") {
+        const d = String(el.getAttribute("d") || "");
+        if (!d) return true;
+        const mappedD = transformPathDataByMatrix(d, matrix);
+        if (!mappedD) return false;
+        el.setAttribute("d", mappedD);
+        return true;
+      }
+      if (el.tagName === "rect" || el.tagName === "image" || el.tagName === "foreignObject" || el.tagName === "use") {
+        if (!isAxisAlignedTransformMatrix(matrix)) return false;
+        const x = getAttrNumber(el, "x", 0);
+        const y = getAttrNumber(el, "y", 0);
+        const w = Math.max(0, getAttrNumber(el, "width", 0));
+        const h = Math.max(0, getAttrNumber(el, "height", 0));
+        const corners = [
+          transformPointByMatrix(matrix, x, y),
+          transformPointByMatrix(matrix, x + w, y),
+          transformPointByMatrix(matrix, x, y + h),
+          transformPointByMatrix(matrix, x + w, y + h)
+        ];
+        const minX = Math.min(...corners.map((p) => p.x));
+        const minY = Math.min(...corners.map((p) => p.y));
+        const maxX = Math.max(...corners.map((p) => p.x));
+        const maxY = Math.max(...corners.map((p) => p.y));
+        el.setAttribute("x", toNumString(minX));
+        el.setAttribute("y", toNumString(minY));
+        el.setAttribute("width", toNumString(Math.max(1e-6, maxX - minX)));
+        el.setAttribute("height", toNumString(Math.max(1e-6, maxY - minY)));
+        if (el.tagName === "rect") {
+          const sx = Math.max(1e-6, transformScaleX(matrix));
+          const sy = Math.max(1e-6, transformScaleY(matrix));
+          const rx = getAttrNumber(el, "rx", NaN);
+          const ry = getAttrNumber(el, "ry", NaN);
+          if (Number.isFinite(rx)) el.setAttribute("rx", toNumString(Math.max(0, rx * sx)));
+          if (Number.isFinite(ry)) el.setAttribute("ry", toNumString(Math.max(0, ry * sy)));
+        }
+        return true;
+      }
+      if (el.tagName === "ellipse") {
+        if (!isAxisAlignedTransformMatrix(matrix)) return false;
+        const cx = getAttrNumber(el, "cx");
+        const cy = getAttrNumber(el, "cy");
+        const rx = Math.max(0, getAttrNumber(el, "rx"));
+        const ry = Math.max(0, getAttrNumber(el, "ry"));
+        const center = transformPointByMatrix(matrix, cx, cy);
+        const sx = Math.max(1e-6, transformScaleX(matrix));
+        const sy = Math.max(1e-6, transformScaleY(matrix));
+        el.setAttribute("cx", toNumString(center.x));
+        el.setAttribute("cy", toNumString(center.y));
+        el.setAttribute("rx", toNumString(Math.max(0.5, rx * sx)));
+        el.setAttribute("ry", toNumString(Math.max(0.5, ry * sy)));
+        return true;
+      }
+      if (el.tagName === "circle") {
+        if (!isAxisAlignedTransformMatrix(matrix)) return false;
+        const cx = getAttrNumber(el, "cx");
+        const cy = getAttrNumber(el, "cy");
+        const r = Math.max(0, getAttrNumber(el, "r"));
+        const center = transformPointByMatrix(matrix, cx, cy);
+        const sx = Math.max(1e-6, transformScaleX(matrix));
+        const sy = Math.max(1e-6, transformScaleY(matrix));
+        const nr = Math.max(0.5, r * ((sx + sy) / 2));
+        el.setAttribute("cx", toNumString(center.x));
+        el.setAttribute("cy", toNumString(center.y));
+        el.setAttribute("r", toNumString(nr));
+        return true;
+      }
+      if (el.tagName === "text") {
+        const x = getAttrNumber(el, "x");
+        const y = getAttrNumber(el, "y");
+        const p = transformPointByMatrix(matrix, x, y);
+        el.setAttribute("x", toNumString(p.x));
+        el.setAttribute("y", toNumString(p.y));
+        if (isGroupLabel(el)) {
+          if (el.dataset?.id) delete state.markLabelComp[el.dataset.id];
+          const baseSize = Number(el.dataset.markBaseSize || el.getAttribute("font-size") || "");
+          if (Number.isFinite(baseSize) && baseSize > 0) {
+            const locked = Math.max(6, Math.round(baseSize));
+            el.dataset.markBaseSize = String(locked);
+            el.setAttribute("font-size", String(locked));
+            el.style.setProperty("font-size", `${locked}px`);
+          }
+          return true;
+        }
+        if (!isAxisAlignedTransformMatrix(matrix)) return false;
+        const fsRaw = Number(el.getAttribute("font-size") || Number.parseFloat(window.getComputedStyle(el).fontSize || ""));
+        if (Number.isFinite(fsRaw) && fsRaw > 0) {
+          const sx = Math.max(1e-6, transformScaleX(matrix));
+          const sy = Math.max(1e-6, transformScaleY(matrix));
+          el.setAttribute("font-size", toNumString(Math.max(1, fsRaw * ((sx + sy) / 2))));
+        }
+        return true;
+      }
+      return false;
+    }
+
+    function bakeElementTransformTree(el, inheritedMatrix = null) {
+      if (!(el instanceof SVGElement) || el === canvas || isHelperElement(el)) return true;
+      const parentMatrix = inheritedMatrix || identityTransformMatrix();
+      const ownRaw = String(el.getAttribute("transform") || "").trim();
+      const ownMatrix = ownRaw ? matrixFromTransformString(ownRaw) : identityTransformMatrix();
+      const combined = multiplyTransformMatrices(parentMatrix, ownMatrix);
+      if (el.tagName === "g") {
+        Array.from(el.children).forEach((child) => {
+          if (!(child instanceof SVGElement)) return;
+          bakeElementTransformTree(child, combined);
+        });
+        clearElementTransformState(el);
+        return true;
+      }
+      const baked = bakeGeometryByMatrix(el, combined);
+      if (baked) {
+        clearElementTransformState(el);
+        return true;
+      }
+      setElementMatrixTransform(el, combined);
+      return false;
+    }
+
+    function bakeTransformsAfterInteraction(elements) {
+      const targets = (Array.isArray(elements) ? elements : [])
+        .filter((el) => el instanceof SVGElement)
+        .filter((el) => el.isConnected)
+        .filter((el, idx, arr) => arr.indexOf(el) === idx);
+      if (!targets.length) return;
+      targets.forEach((el) => bakeElementTransformTree(el, identityTransformMatrix()));
+      requestSelectionVisualRefresh();
     }
 
     function importMarkupFragment(markup, offsetX = 0, offsetY = 0, parentId = "") {
@@ -3980,6 +4541,11 @@
     function setAutosaveRecords(records) {
       const capped = Array.isArray(records) ? records.slice(-AUTOSAVE_MAX_RECORDS) : [];
       let working = capped.slice();
+      let totalBytes = working.reduce((sum, rec) => sum + estimateAutosaveRecordBytes(rec), 0);
+      while (working.length > 1 && totalBytes > MAX_AUTOSAVE_TOTAL_BYTES) {
+        const removed = working.shift();
+        totalBytes -= estimateAutosaveRecordBytes(removed);
+      }
       while (true) {
         try {
           if (!working.length) {
@@ -4015,8 +4581,16 @@
     function writeLiveAutosave(reason = "live") {
       try {
         const rec = makeAutosaveRecord("live", reason);
+        if (!rec) {
+          if (!state.liveAutosaveSizeWarned) {
+            state.liveAutosaveSizeWarned = true;
+            setStatus("Live autosave skipped: snapshot too large. Use Save SVG.");
+          }
+          return;
+        }
         localStorage.setItem(LIVE_AUTOSAVE_KEY, JSON.stringify(rec));
         state.liveAutosaveQuotaWarned = false;
+        state.liveAutosaveSizeWarned = false;
       } catch (err) {
         if (isQuotaExceededError(err)) {
           if (!state.liveAutosaveQuotaWarned) {
@@ -4040,7 +4614,16 @@
 
     function saveAutosave() {
       const records = getAutosaveRecords();
-      records.push(makeAutosaveRecord("as", "timed"));
+      const rec = makeAutosaveRecord("as", "timed");
+      if (!rec) {
+        if (!state.autosaveSizeWarned) {
+          state.autosaveSizeWarned = true;
+          setStatus("Autosave skipped: snapshot too large. Use Save SVG.");
+        }
+        return;
+      }
+      state.autosaveSizeWarned = false;
+      records.push(rec);
       let result = { stored: 0, dropped: 0 };
       try {
         result = setAutosaveRecords(records);
@@ -5579,7 +6162,11 @@
     function finishRotate() {
       const it = state.interaction;
       if (!it || it.type !== "rotate") return;
-      if (it.moved) pushHistory("rotate");
+      if (it.moved) {
+        const target = getById(it.targetId);
+        if (target instanceof SVGElement) bakeTransformsAfterInteraction([target]);
+        pushHistory("rotate");
+      }
       state.interaction = null;
     }
 
@@ -5942,7 +6529,11 @@
       const it = state.interaction;
       if (!it || it.type !== "resize") return;
       clearSmartGuides();
-      if (it.moved) pushHistory("resize");
+      if (it.moved) {
+        const target = getById(it.targetId);
+        if (target instanceof SVGElement) bakeTransformsAfterInteraction([target]);
+        pushHistory("resize");
+      }
       state.interaction = null;
     }
 
@@ -5986,6 +6577,10 @@
       const it = state.interaction;
       if (!it || it.type !== "drag") return;
       clearSmartGuides();
+      if (it.moved) {
+        const movedTargets = getTopSelectedElements();
+        bakeTransformsAfterInteraction(movedTargets);
+      }
       if (it.fromRightCopy) {
         if (!it.moved) {
           (it.clonedIds || []).forEach((id) => {
