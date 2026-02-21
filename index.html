@@ -6138,12 +6138,13 @@
       if (!cm || !cm.draftRect || !handle) return;
       cm.resize = {
         handle: String(handle),
-        startRect: { ...cm.draftRect }
+        startRect: { ...cm.draftRect },
+        aspect: cm.draftRect.height > 0 ? cm.draftRect.width / cm.draftRect.height : 1
       };
       state.interaction = { type: "crop-resize", pointerId: null };
     }
 
-    function updateCropResize(pt) {
+    function updateCropResize(pt, keepAspect = false) {
       const cm = state.cropMode;
       if (!cm || !cm.resize || !cm.resize.startRect) return;
       const handle = String(cm.resize.handle || "");
@@ -6151,8 +6152,10 @@
       const start = cm.resize.startRect;
       const minSize = 2;
       const b = cm.imageBox;
+      
       const px = Math.max(b.x, Math.min(b.x + b.width, Number(pt?.x || start.x)));
       const py = Math.max(b.y, Math.min(b.y + b.height, Number(pt?.y || start.y)));
+      
       let left = start.x;
       let right = start.x + start.width;
       let top = start.y;
@@ -6163,6 +6166,27 @@
       if (handle.includes("n")) top = Math.min(py, bottom - minSize);
       if (handle.includes("s")) bottom = Math.max(py, top + minSize);
 
+      let width = Math.max(minSize, right - left);
+      let height = Math.max(minSize, bottom - top);
+
+      if (keepAspect) {
+        const aspect = cm.resize.aspect || 1;
+        // Adjust width/height to match aspect, pivoting on the opposite corner
+        if (width / Math.max(height, 1e-6) > aspect) {
+          width = height * aspect;
+        } else {
+          height = width / aspect;
+        }
+        
+        // Re-calculate edges based on pivoting corner
+        if (handle.includes("w")) left = right - width;
+        else if (handle.includes("e")) right = left + width;
+        
+        if (handle.includes("n")) top = bottom - height;
+        else if (handle.includes("s")) bottom = top + height;
+      }
+
+      // Re-clamp to image bounds
       left = Math.max(b.x, Math.min(left, b.x + b.width - minSize));
       right = Math.max(left + minSize, Math.min(right, b.x + b.width));
       top = Math.max(b.y, Math.min(top, b.y + b.height - minSize));
@@ -7510,7 +7534,7 @@
       const angle = Math.atan2(local.y - it.centerLocal.y, local.x - it.centerLocal.x) * 180 / Math.PI;
       if (!Number.isFinite(angle)) return;
       let delta = angle - it.startAngle;
-      if (options.snapAngle) delta = Math.round(delta / 15) * 15;
+      if (options.snapAngle) delta = Math.round(delta / 45) * 45; // Changed 15 -> 45
       if (Math.abs(delta) > 0.2) it.moved = true;
       const rotation = `rotate(${Number(delta.toFixed(4))} ${Number(it.centerLocal.x.toFixed(4))} ${Number(it.centerLocal.y.toFixed(4))})`;
       target.dataset.baseTransform = `${rotation}${it.baseTransformRaw ? ` ${it.baseTransformRaw}` : ""}`.trim();
@@ -7902,13 +7926,24 @@
       let dx = pt.x - it.start.x;
       let dy = pt.y - it.start.y;
       const disableSnap = !!options.disableSnap;
+      const axisLock = !!options.axisLock;
+
+      // Illustrator-style Axis Lock (0, 45, 90, 135...)
+      if (axisLock) {
+        const dist = Math.hypot(dx, dy);
+        const angle = Math.atan2(dy, dx);
+        const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+        dx = Math.cos(snappedAngle) * dist;
+        dy = Math.sin(snappedAngle) * dist;
+      }
+
       const movingBounds = it.movingBounds;
       const xTargets = it.snapTargets?.xTargets || [];
       const yTargets = it.snapTargets?.yTargets || [];
       const displayScale = Math.max(getCanvasDisplayScale(), 1e-6);
       const snapThreshold = 7 / displayScale;
       let guides = null;
-      if (!disableSnap && movingBounds && (xTargets.length || yTargets.length)) {
+      if (!disableSnap && !axisLock && movingBounds && (xTargets.length || yTargets.length)) {
         const movedLeft = movingBounds.x + dx;
         const movedCx = movingBounds.x + movingBounds.width / 2 + dx;
         const movedRight = movingBounds.x + movingBounds.width + dx;
@@ -7923,14 +7958,14 @@
       }
       it.currentDx = dx;
       it.currentDy = dy;
-      if (disableSnap) clearSmartGuides();
+      if (disableSnap || axisLock) clearSmartGuides();
       if (Math.abs(dx) > 0.3 || Math.abs(dy) > 0.3) it.moved = true;
       getTopSelectedElements().forEach((el) => {
         const o = it.original.get(el.dataset.id);
         if (!o) return;
         setTranslate(el, o.x + dx, o.y + dy);
       });
-      if (!disableSnap) drawSmartGuides(guides);
+      if (!disableSnap && !axisLock) drawSmartGuides(guides);
       requestSelectionVisualRefresh();
     }
 
@@ -8629,8 +8664,8 @@
         const disableSnap = !!(e.altKey || e.ctrlKey);
         if (it.type === "pan") updatePan(e.clientX, e.clientY);
         if (it.type === "crop-move") updateCropMove(pt);
-        if (it.type === "crop-resize") updateCropResize(pt);
-        if (it.type === "drag") updateDrag(pt, { disableSnap });
+        if (it.type === "crop-resize") updateCropResize(pt, e.shiftKey);
+        if (it.type === "drag") updateDrag(pt, { disableSnap, axisLock: e.shiftKey });
         if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
         if (it.type === "rotate") updateRotate(pt, { snapAngle: e.shiftKey });
         if (it.type === "marquee") updateMarquee(pt);
