@@ -1682,9 +1682,27 @@
 
     function getSelectionRenderBox(el) {
       const it = state.interaction;
-      if (!it || it.type !== "resize" || !it.liveBox) return null;
-      if (!el || !el.dataset || el.dataset.id !== it.targetId) return null;
-      return it.liveBox;
+      if (!it || !el || !el.dataset) return null;
+      if (it.type === "resize") {
+        if (!it.liveBox) return null;
+        if (el.dataset.id !== it.targetId) return null;
+        return it.liveBox;
+      }
+      if (it.type === "drag") {
+        const id = String(el.dataset.id || "");
+        if (!id || !(it.initialBoxes instanceof Map)) return null;
+        const base = it.initialBoxes.get(id);
+        if (!base) return null;
+        const dx = Number(it.currentDx || 0);
+        const dy = Number(it.currentDy || 0);
+        return {
+          x: base.x + dx,
+          y: base.y + dy,
+          width: base.width,
+          height: base.height
+        };
+      }
+      return null;
     }
 
     function isResizableElement(el) {
@@ -7093,14 +7111,32 @@
         : getTopSelectedElements();
       if (!elements.length) return;
       const original = new Map();
-      elements.forEach((el) => original.set(el.dataset.id, getTranslate(el)));
-      const movingBoxes = elements.map((el) => safeBBox(el)).filter(Boolean);
+      const initialBoxes = new Map();
+      const movingBoxes = [];
+      elements.forEach((el) => {
+        const id = String(el?.dataset?.id || "");
+        if (!id) return;
+        original.set(id, getTranslate(el));
+        const box = safeBBox(el);
+        if (!box) return;
+        const cached = {
+          x: Number(box.x) || 0,
+          y: Number(box.y) || 0,
+          width: Math.max(1, Number(box.width) || 0),
+          height: Math.max(1, Number(box.height) || 0)
+        };
+        initialBoxes.set(id, cached);
+        movingBoxes.push(cached);
+      });
       const movingBounds = combineBoxes(movingBoxes);
       const snapTargets = buildDragSnapTargets(elements);
       state.interaction = {
         type: "drag",
         start,
         original,
+        initialBoxes,
+        currentDx: 0,
+        currentDy: 0,
         moved: false,
         pointerId: null,
         movingBounds,
@@ -7641,6 +7677,8 @@
         if (bestY) dy = bestY.delta;
         guides = { x: bestX?.guide, y: bestY?.guide };
       }
+      it.currentDx = dx;
+      it.currentDy = dy;
       if (disableSnap) clearSmartGuides();
       if (Math.abs(dx) > 0.3 || Math.abs(dy) > 0.3) it.moved = true;
       getTopSelectedElements().forEach((el) => {
