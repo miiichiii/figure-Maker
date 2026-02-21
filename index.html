@@ -986,6 +986,7 @@
         <button id="textSubBtn" title="Subscript">X<sub>2</sub></button>
         <label for="textFontSizeInput">Text size</label>
         <input id="textFontSizeInput" type="number" min="6" max="240" step="1" value="28" style="width:64px" />
+        <button id="textResetScaleBtn" title="Reset text distortion (set X/Y scale to 100%)">Text 100%</button>
         <label for="textColorInput">Color</label>
         <input id="textColorInput" type="color" value="#111827" />
         <label for="markFontSizeInput">Mark size</label>
@@ -3010,6 +3011,58 @@
       requestSelectionVisualRefresh();
       if (push) pushHistory("text-size");
       if (withStatus) setStatus(`Text size set: ${targetEffectiveSize}`);
+      return true;
+    }
+
+    function resetTextScaleTo100(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        if (withStatus) setStatus("Select text object(s) first.");
+        return false;
+      }
+      let fixed = 0;
+      targets.forEach((textEl) => {
+        if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return;
+        const parent = textEl.parentNode instanceof SVGElement ? textEl.parentNode : canvas;
+        const parentLinear = getElementLinearMatrix(parent);
+        const invParent = invertLinearMatrix(parentLinear);
+        if (!invParent) return;
+        const x = Number(textEl.getAttribute("x") || 0);
+        const y = Number(textEl.getAttribute("y") || 0);
+        const anchorCanvas = elementPointToCanvas(textEl, x, y);
+        const computedSize = Number.parseFloat(window.getComputedStyle(textEl).fontSize || "");
+        const attrSize = Number(textEl.getAttribute("font-size") || "");
+        const effectiveSize = Math.max(6, Number.isFinite(computedSize) && computedSize > 0
+          ? computedSize
+          : (Number.isFinite(attrSize) && attrSize > 0 ? attrSize : 16));
+        setElementMatrixTransform(textEl, {
+          a: invParent.a,
+          b: invParent.b,
+          c: invParent.c,
+          d: invParent.d,
+          e: 0,
+          f: 0
+        });
+        const local = canvasPointToElementLocal(textEl, anchorCanvas.x, anchorCanvas.y);
+        textEl.setAttribute("x", toNumString(local.x));
+        textEl.setAttribute("y", toNumString(local.y));
+        textEl.setAttribute("font-size", toNumString(effectiveSize, 2));
+        textEl.style.setProperty("font-size", `${toNumString(effectiveSize, 2)}px`);
+        if (textEl.hasAttribute("data-fm-script-base-size")) {
+          textEl.setAttribute("data-fm-script-base-size", String(Math.max(6, Math.round(effectiveSize))));
+        }
+        fixed += 1;
+      });
+      if (!fixed) {
+        if (withStatus) setStatus("Text scale reset failed on current selection.");
+        return false;
+      }
+      requestSelectionVisualRefresh();
+      syncTextControlsFromSelection();
+      if (push) pushHistory("text-scale-reset");
+      if (withStatus) setStatus(`Text scale reset to 100% (${fixed}).`);
       return true;
     }
 
@@ -8495,6 +8548,9 @@
       });
       document.getElementById("textColorInput").addEventListener("input", () => {
         applyTextColorToSelection({ push: false, withStatus: false });
+      });
+      bindClick("textResetScaleBtn", () => {
+        resetTextScaleTo100({ push: true, withStatus: true });
       });
       document.getElementById("textBoldBtn").addEventListener("click", toggleTextBold);
       document.getElementById("textItalicBtn").addEventListener("click", toggleTextItalic);
