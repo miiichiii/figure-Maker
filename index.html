@@ -89,12 +89,11 @@
     }
     .toolbar {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 8px 8px 4px 8px;
+      flex-direction: column;
+      gap: 0;
+      padding: 0;
       border-bottom: 1px solid var(--border);
       background: var(--panel);
-      align-items: center;
       position: relative;
       z-index: 10;
     }
@@ -103,9 +102,19 @@
       display: flex;
       gap: 4px;
       margin-bottom: 0;
-      padding-bottom: 0;
+      padding: 8px 8px 0 8px;
       border-bottom: 2px solid var(--border);
       align-items: flex-end;
+      background: var(--panel);
+    }
+    .toolbar-content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px;
+      width: 100%;
+      background: var(--panel);
+      align-items: center;
     }
     .toolbar-tab-btn {
       min-width: 80px;
@@ -546,10 +555,12 @@
     }
 
     /* Object Tab Active Theme */
-    body[data-active-tab="object"] .toolbar {
+    body[data-active-tab="object"] .toolbar-content {
       background: var(--tab-tea);
-      border-bottom-color: #3f5a22;
       color: #ffffff;
+    }
+    body[data-active-tab="object"] .toolbar {
+      border-bottom-color: #3f5a22;
     }
     body[data-active-tab="object"] .toolbar-tabs {
       border-bottom-color: var(--tab-tea);
@@ -676,6 +687,7 @@
         <button class="toolbar-tab-btn" data-toolbar-tab-btn="object">Object</button>
         <button class="toolbar-tab-btn" data-toolbar-tab-btn="text">Text</button>
       </div>
+      <div class="toolbar-content">
       <div class="group" data-toolbar-tab="all">
         <button id="toolSelect" class="active tool-icon-btn" title="Select tool" aria-label="Select tool">
           <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -846,6 +858,7 @@
         <input id="textColorInput" type="color" value="#111827" />
         <label for="markFontSizeInput">Mark size</label>
         <input id="markFontSizeInput" type="number" min="6" max="120" step="1" value="16" style="width:64px" />
+      </div>
       </div>
     </div>
     <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
