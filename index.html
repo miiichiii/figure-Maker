@@ -7587,9 +7587,54 @@
     }
 
     function beginResize(start, targetEl, handle) {
+      // Handle multi-selection resize
+      if (handle && targetEl === "multi") {
+        const elements = getTopSelectedElements();
+        if (!elements.length) return;
+        const boxes = elements.map((el) => safeBBox(el)).filter(Boolean);
+        const combined = combineBoxes(boxes);
+        if (!combined) return;
+        
+        const aspect = combined.height > 0 ? combined.width / combined.height : 1;
+        const snapTargets = buildDragSnapTargets(elements);
+        
+        // Cache initial state for all selected elements
+        const multiState = elements.map(el => ({
+          id: el.dataset.id,
+          baseBox: safeBBox(el),
+          baseTransform: String(el.getAttribute("transform") || "").trim(),
+          // For shapes we might need geometry snapshot if we use geometry resize, 
+          // but scaleSingleElement reads current attrs. 
+          // To support undo/redo properly during interaction, we rely on the fact 
+          // that we update live. 
+          // However, scaleSingleElement calculates from *oldBox* to *newBox*.
+          // So we need the 'original' combined box as 'oldBox'.
+        }));
+
+        state.interaction = {
+          type: "resize",
+          start,
+          targetId: "multi", // Special ID
+          handle,
+          originalBox: combined,
+          baseBox: combined, // Used as 'oldBox' for scaling reference
+          liveBox: combined,
+          transformResize: false, // Mixed mode, delegated to scaleSingleElement
+          snapTargets,
+          aspect,
+          multiState,
+          isMulti: true,
+          moved: false,
+          pointerId: null
+        };
+        clearSmartGuides();
+        return;
+      }
+
       if (!targetEl || !isResizableElement(targetEl)) return;
       const b = safeBBox(targetEl);
       if (!b) return;
+      // ... (existing single logic) ...
       const aspect = b.height > 0 ? b.width / b.height : 1;
       const snapTargets = buildDragSnapTargets([targetEl]);
       const groupLinearStart = targetEl.tagName === "g" ? getElementLinearMatrix(targetEl) : null;
@@ -7597,27 +7642,27 @@
         ? Array.from(targetEl.querySelectorAll(':scope > [data-fm-group-label="1"]'))
           .filter((n) => n instanceof SVGElement && n.dataset?.id)
           .map((label) => {
-            const attrSize = Number(label.getAttribute("font-size") || "");
-            const computedSize = Number.parseFloat(window.getComputedStyle(label).fontSize || "");
-            const baseSize = Number(label.dataset.markBaseSize || "");
-            const fontSize = Number.isFinite(baseSize) && baseSize > 0
-              ? baseSize
-              : (Number.isFinite(attrSize) && attrSize > 0
-                ? attrSize
-                : (Number.isFinite(computedSize) && computedSize > 0 ? computedSize : 16));
-            const prior = state.markLabelComp[label.dataset.id] || null;
-            const baseRaw = prior && typeof prior.baseTransform === "string"
-              ? prior.baseTransform
-              : String(label.getAttribute("transform") || "");
-            return {
-              id: label.dataset.id,
-              fontSize,
-              baseTransform: String(baseRaw || "").trim()
-            };
+             // ...
+             const attrSize = Number(label.getAttribute("font-size") || "");
+             const computedSize = Number.parseFloat(window.getComputedStyle(label).fontSize || "");
+             const baseSize = Number(label.dataset.markBaseSize || "");
+             const fontSize = Number.isFinite(baseSize) && baseSize > 0
+               ? baseSize
+               : (Number.isFinite(attrSize) && attrSize > 0
+                 ? attrSize
+                 : (Number.isFinite(computedSize) && computedSize > 0 ? computedSize : 16));
+             const prior = state.markLabelComp[label.dataset.id] || null;
+             const baseRaw = prior && typeof prior.baseTransform === "string"
+               ? prior.baseTransform
+               : String(label.getAttribute("transform") || "");
+             return {
+               id: label.dataset.id,
+               fontSize,
+               baseTransform: String(baseRaw || "").trim()
+             };
           })
         : [];
-      // Regression note: pasted SVG often carries parent/child transforms.
-      // Resizing by editing geometry attrs caused position drift, so resize stays transform-based.
+
       state.interaction = {
         type: "resize",
         start,
