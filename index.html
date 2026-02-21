@@ -1946,6 +1946,12 @@
       if (!it || !el || !el.dataset) return null;
       if (it.type === "resize") {
         if (!it.liveBox) return null;
+        if (it.isMulti) {
+           // In multi-resize, individual boxes are not tracked live in the same way, 
+           // or we'd need to calculate them. 
+           // For simplicity, we return null for individual elements and handle the group box in renderSelectionOutlines.
+           return null; 
+        }
         if (el.dataset.id !== it.targetId) return null;
         return it.liveBox;
       }
