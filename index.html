@@ -628,6 +628,22 @@
     body[data-active-tab="object"] .group .align-icon-btn svg {
       stroke: currentColor;
     }
+    
+    /* Collapsed Toolbar State */
+    body.toolbar-collapsed .toolbar-content {
+      display: none !important;
+    }
+    body.toolbar-collapsed .toolbar-tabs {
+      border-bottom: 1px solid var(--border) !important;
+    }
+    body.toolbar-collapsed .toolbar-tab-btn.active {
+      border-bottom: 1px solid var(--border) !important;
+      margin-bottom: 0 !important;
+      padding-top: 6px !important;
+      padding-bottom: 6px !important;
+      box-shadow: inset 1px 1px 0 var(--bevel-light) !important;
+    }
+
     /* Text Tab Active Theme */
     body[data-active-tab="text"] .toolbar-content {
       background: var(--tab-text);
@@ -3580,6 +3596,9 @@
 
     function switchToolbarTab(tab, options = {}) {
       const next = tab === "object" || tab === "text" ? tab : "tool";
+      if (state.toolbarTab !== next) {
+        document.body.classList.remove("toolbar-collapsed");
+      }
       document.body.dataset.activeTab = next;
       if (state.cropMode && next !== "tool") {
         cancelImageCropMode({ silent: true });
@@ -3598,6 +3617,12 @@
     function setupToolbarTabs() {
       const bar = document.getElementById("toolbarTabBar");
       if (!bar) return;
+      bar.addEventListener("dblclick", (e) => {
+        const btn = e.target instanceof Element ? e.target.closest("[data-toolbar-tab-btn]") : null;
+        if (!btn) return;
+        e.preventDefault();
+        document.body.classList.toggle("toolbar-collapsed");
+      });
       bar.addEventListener("click", (e) => {
         const btn = e.target instanceof Element ? e.target.closest("[data-toolbar-tab-btn]") : null;
         if (!btn) return;
