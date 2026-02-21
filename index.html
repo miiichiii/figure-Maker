@@ -2577,6 +2577,63 @@
       };
     }
 
+    function getWorldRotationAngleFromLinear(linear) {
+      const a = Number(linear?.a || 1);
+      const b = Number(linear?.b || 0);
+      const c = Number(linear?.c || 0);
+      const d = Number(linear?.d || 1);
+      let theta = Math.atan2(b - c, a + d);
+      if (!Number.isFinite(theta)) theta = Math.atan2(b, a);
+      return Number.isFinite(theta) ? theta : 0;
+    }
+
+    function normalizeTextTransformNoDistortion(textEl, options = {}) {
+      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return false;
+      const parent = textEl.parentNode instanceof SVGElement ? textEl.parentNode : canvas;
+      const parentLinear = getElementLinearMatrix(parent);
+      const invParent = invertLinearMatrix(parentLinear);
+      if (!invParent) return false;
+      const worldLinear = getElementLinearMatrix(textEl);
+      const x = Number(textEl.getAttribute("x") || 0);
+      const y = Number(textEl.getAttribute("y") || 0);
+      const defaultAnchor = elementPointToCanvas(textEl, x, y);
+      const anchorCanvas = options.anchorCanvas && Number.isFinite(options.anchorCanvas.x) && Number.isFinite(options.anchorCanvas.y)
+        ? { x: Number(options.anchorCanvas.x), y: Number(options.anchorCanvas.y) }
+        : defaultAnchor;
+      const anchorLocalBefore = canvasPointToElementLocal(textEl, anchorCanvas.x, anchorCanvas.y);
+      const desiredParent = canvasPointToParentLocal(parent, anchorCanvas.x, anchorCanvas.y);
+      const attrSize = Number(textEl.getAttribute("font-size") || "");
+      const baseScriptSize = Number(textEl.getAttribute("data-fm-script-base-size") || "");
+      const rawSize = Number.isFinite(attrSize) && attrSize > 0
+        ? attrSize
+        : (Number.isFinite(baseScriptSize) && baseScriptSize > 0 ? baseScriptSize : 16);
+      const sy = Math.max(1e-6, transformScaleY(worldLinear));
+      const effectiveSize = Math.max(6, rawSize * sy);
+      const theta = Number.isFinite(options.worldAngleRad)
+        ? Number(options.worldAngleRad)
+        : getWorldRotationAngleFromLinear(worldLinear);
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      const worldRotation = { a: cos, b: sin, c: -sin, d: cos };
+      const localLinear = multiplyLinearMatrix(invParent, worldRotation);
+      const tx = desiredParent.x - (localLinear.a * anchorLocalBefore.x + localLinear.c * anchorLocalBefore.y);
+      const ty = desiredParent.y - (localLinear.b * anchorLocalBefore.x + localLinear.d * anchorLocalBefore.y);
+      setElementMatrixTransform(textEl, {
+        a: localLinear.a,
+        b: localLinear.b,
+        c: localLinear.c,
+        d: localLinear.d,
+        e: tx,
+        f: ty
+      });
+      textEl.setAttribute("font-size", toNumString(effectiveSize, 2));
+      textEl.style.setProperty("font-size", `${toNumString(effectiveSize, 2)}px`);
+      if (textEl.hasAttribute("data-fm-script-base-size")) {
+        textEl.setAttribute("data-fm-script-base-size", String(Math.max(6, Math.round(effectiveSize))));
+      }
+      return true;
+    }
+
     function getMarkTargetBox(targetEl) {
       if (!(targetEl instanceof SVGElement)) return null;
       if (targetEl.tagName === "g") return getGroupContentBBox(targetEl) || safeBBox(targetEl);
@@ -3025,45 +3082,12 @@
       let fixed = 0;
       targets.forEach((textEl) => {
         if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return;
-        const parent = textEl.parentNode instanceof SVGElement ? textEl.parentNode : canvas;
-        const parentLinear = getElementLinearMatrix(parent);
-        const invParent = invertLinearMatrix(parentLinear);
-        if (!invParent) return;
         const worldLinear = getElementLinearMatrix(textEl);
         const x = Number(textEl.getAttribute("x") || 0);
         const y = Number(textEl.getAttribute("y") || 0);
         const anchorCanvas = elementPointToCanvas(textEl, x, y);
-        // Use SVG-unit based size (not CSS pixels) so zoom level does not inflate font size.
-        const attrSize = Number(textEl.getAttribute("font-size") || "");
-        const baseScriptSize = Number(textEl.getAttribute("data-fm-script-base-size") || "");
-        const rawSize = Number.isFinite(attrSize) && attrSize > 0
-          ? attrSize
-          : (Number.isFinite(baseScriptSize) && baseScriptSize > 0 ? baseScriptSize : 16);
-        const sy = Math.max(1e-6, transformScaleY(worldLinear));
-        const effectiveSize = Math.max(6, rawSize * sy);
-        // Preserve current text orientation (rotation) while removing non-uniform scale/shear.
-        const theta = Math.atan2(Number(worldLinear.b || 0), Number(worldLinear.a || 1));
-        const cos = Math.cos(theta);
-        const sin = Math.sin(theta);
-        const worldRotation = { a: cos, b: sin, c: -sin, d: cos };
-        const localLinear = multiplyLinearMatrix(invParent, worldRotation);
-        setElementMatrixTransform(textEl, {
-          a: localLinear.a,
-          b: localLinear.b,
-          c: localLinear.c,
-          d: localLinear.d,
-          e: 0,
-          f: 0
-        });
-        const local = canvasPointToElementLocal(textEl, anchorCanvas.x, anchorCanvas.y);
-        textEl.setAttribute("x", toNumString(local.x));
-        textEl.setAttribute("y", toNumString(local.y));
-        textEl.setAttribute("font-size", toNumString(effectiveSize, 2));
-        textEl.style.setProperty("font-size", `${toNumString(effectiveSize, 2)}px`);
-        if (textEl.hasAttribute("data-fm-script-base-size")) {
-          textEl.setAttribute("data-fm-script-base-size", String(Math.max(6, Math.round(effectiveSize))));
-        }
-        fixed += 1;
+        const theta = getWorldRotationAngleFromLinear(worldLinear);
+        if (normalizeTextTransformNoDistortion(textEl, { anchorCanvas, worldAngleRad: theta })) fixed += 1;
       });
       if (!fixed) {
         if (withStatus) setStatus("Text scale reset failed on current selection.");
@@ -7725,8 +7749,11 @@
         type: "rotate",
         start,
         targetId: targetEl.dataset.id,
+        targetTag: targetEl.tagName,
+        centerCanvas,
         centerLocal,
         startAngle,
+        textBaseWorldAngle: targetEl.tagName === "text" ? getWorldRotationAngleFromLinear(getElementLinearMatrix(targetEl)) : null,
         baseTransformRaw: String(targetEl.dataset.baseTransform || "").trim(),
         originalTranslate: getTranslate(targetEl),
         moved: false,
@@ -7845,6 +7872,14 @@
       let delta = angle - it.startAngle;
       if (options.snapAngle) delta = Math.round(delta / 45) * 45; // Changed 15 -> 45
       if (Math.abs(delta) > 0.2) it.moved = true;
+      if (it.targetTag === "text") {
+        const baseWorld = Number.isFinite(it.textBaseWorldAngle) ? it.textBaseWorldAngle : getWorldRotationAngleFromLinear(getElementLinearMatrix(target));
+        const desired = baseWorld + (delta * Math.PI / 180);
+        if (normalizeTextTransformNoDistortion(target, { anchorCanvas: it.centerCanvas, worldAngleRad: desired })) {
+          requestSelectionVisualRefresh();
+          return;
+        }
+      }
       const rotation = `rotate(${Number(delta.toFixed(4))} ${Number(it.centerLocal.x.toFixed(4))} ${Number(it.centerLocal.y.toFixed(4))})`;
       target.dataset.baseTransform = `${rotation}${it.baseTransformRaw ? ` ${it.baseTransformRaw}` : ""}`.trim();
       setTranslate(target, it.originalTranslate.x, it.originalTranslate.y);
