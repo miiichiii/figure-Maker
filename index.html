@@ -21,6 +21,9 @@
       --focus: #5a8fc7;
       --selection: #ff1493;
       --danger: #B84A3A;
+      --tab-tool: #8f6b3f;
+      --tab-tool-border: #6e512f;
+      --tab-tool-highlight: #c6a575;
       --tab-tea: #5b7d36;
       --tab-text: #C3A2AF;
       --bevel-light: rgba(255,255,255,0.5);
@@ -556,6 +559,86 @@
       opacity: 1;
     }
 
+    /* Tool Tab Active Theme (Panel only) */
+    body[data-active-tab="tool"] .toolbar-content {
+      background: var(--tab-tool);
+      color: #ffffff;
+    }
+    body[data-active-tab="tool"] .toolbar {
+      border-bottom-color: #6f5433;
+    }
+    body[data-active-tab="tool"] .toolbar-tabs {
+      border-bottom-color: var(--tab-tool);
+    }
+    body[data-active-tab="tool"] .group {
+      border-right-color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Tool tab persistent color + 3D feel */
+    .toolbar-tab-btn[data-toolbar-tab-btn="tool"] {
+      background: linear-gradient(to bottom, #b99666 0%, var(--tab-tool) 58%, #7c5a34 100%);
+      color: #fff7ea;
+      border-color: var(--tab-tool-border);
+      box-shadow:
+        inset 0 2px 0 rgba(255,255,255,0.26),
+        inset 1px 1px 0 rgba(255,255,255,0.18),
+        0 1px 0 rgba(0,0,0,0.08);
+      text-shadow: 0 1px 1px rgba(0,0,0,0.22);
+    }
+    .toolbar-tab-btn[data-toolbar-tab-btn="tool"]:hover {
+      filter: brightness(1.1) saturate(1.04);
+      color: #fff;
+    }
+    .toolbar-tab-btn[data-toolbar-tab-btn="tool"].active {
+      background: linear-gradient(to bottom, #c8a876 0%, #9a7547 58%, #7a5732 100%);
+      color: #fff;
+      border-color: var(--tab-tool-border);
+      border-bottom-color: #9a7547;
+      box-shadow:
+        inset 0 2px 0 rgba(255,255,255,0.34),
+        inset 1px 1px 0 rgba(255,255,255,0.18),
+        0 1px 0 rgba(0,0,0,0.1);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.28);
+      z-index: 20;
+    }
+
+    /* Tool tab buttons: stronger contrast so button boundaries are clear */
+    body[data-active-tab="tool"] .group button {
+      border-color: #6f522f;
+      background: linear-gradient(to bottom, #ddc199 0%, #be9a6a 60%, #a17d4f 100%);
+      color: #ffffff;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.32),
+        0 1px 0 rgba(0,0,0,0.08);
+    }
+    body[data-active-tab="tool"] .group button:hover {
+      background: linear-gradient(to bottom, #e6ccaa 0%, #c6a173 60%, #aa8353 100%);
+      border-color: #5f4527;
+    }
+    body[data-active-tab="tool"] .group button.active {
+      background: #ffffff;
+      color: #6f5433;
+      border-color: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    body[data-active-tab="tool"] .group label {
+      color: rgba(255, 255, 255, 0.92);
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    body[data-active-tab="tool"] .group input,
+    body[data-active-tab="tool"] .group select {
+      border-color: rgba(255, 255, 255, 0.45);
+      background: rgba(255, 255, 255, 0.96);
+      color: #2b2a27;
+    }
+    body[data-active-tab="tool"] .group input:focus,
+    body[data-active-tab="tool"] .group select:focus {
+      background: #ffffff;
+      outline-color: #fff;
+      border-color: #fff;
+    }
+
     /* Object Tab Active Theme (Panel only) */
     body[data-active-tab="object"] .toolbar-content {
       background: var(--tab-tea);
@@ -986,7 +1069,7 @@
         <button id="textSubBtn" title="Subscript">X<sub>2</sub></button>
         <label for="textFontSizeInput">Text size</label>
         <input id="textFontSizeInput" type="number" min="6" max="240" step="1" value="28" style="width:64px" />
-        <button id="textResetScaleBtn" title="Reset text distortion (set X/Y scale to 100%)">Text 100%</button>
+        <button id="textResetScaleBtn" title="Normalize text shape (remove distortion, keep orientation)">Normalize Text</button>
         <label for="textColorInput">Color</label>
         <input id="textColorInput" type="color" value="#111827" />
         <label for="markFontSizeInput">Mark size</label>
@@ -8381,7 +8464,10 @@
       clearSmartGuides();
       if (it.moved) {
         const movedTargets = getTopSelectedElements();
-        bakeTransformsAfterInteraction(movedTargets);
+        // Avoid re-baking standalone text on drag-finish:
+        // text normalization stores stable transform/font metrics, and extra bake can re-inflate size.
+        const bakeTargets = movedTargets.filter((el) => !(el instanceof SVGElement && el.tagName === "text"));
+        if (bakeTargets.length) bakeTransformsAfterInteraction(bakeTargets);
       }
       if (it.fromRightCopy) {
         if (!it.moved) {
