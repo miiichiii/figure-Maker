@@ -1093,8 +1093,8 @@
     const AUTOSAVE_META_LIVE_KEY = "liveSnapshot";
     const AUTOSAVE_MAX_RECORDS = 8;
     const MAX_HISTORY_ENTRIES_DEFAULT = 30;
-    const MAX_HISTORY_SNAPSHOT_BYTES = 12 * 1024 * 1024; // Increased from 2MB to 12MB
-    const MAX_HISTORY_TOTAL_BYTES = 64 * 1024 * 1024; // Increased from 24MB to 64MB
+    const MAX_HISTORY_SNAPSHOT_BYTES = 512 * 1024 * 1024; // Increased to 512MB for >100MB images
+    const MAX_HISTORY_TOTAL_BYTES = 1024 * 1024 * 1024; // Increased to 1GB total
     const DEFAULT_VIEWBOX = "0 0 794 1123";
     const WORKSPACE_SIZE = 8000;
     const WORKSPACE_VIEWBOX = `0 0 ${WORKSPACE_SIZE} ${WORKSPACE_SIZE}`;
