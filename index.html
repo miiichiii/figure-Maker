@@ -718,6 +718,7 @@
     <button data-ctx-action="copy">Copy</button>
     <button data-ctx-action="cut">Cut</button>
     <button data-ctx-action="paste">Paste</button>
+    <button data-ctx-action="rasterize-image" hidden>Rasterize...</button>
     <div class="menu-sep"></div>
     <button data-ctx-action="mark">Mark (A-Z)...</button>
     <button data-ctx-action="mark-clear">Clear Mark</button>
@@ -4614,6 +4615,8 @@
       state.contextTargetId = options.targetId || "";
       const hasSelection = state.selectedIds.length > 0;
       const hasGroupSelection = getTopSelectedElements().some((el) => el && el.tagName === "g");
+      const singleSelectedImage = getSingleSelectedImageElement();
+      const canRasterizeImage = !!singleSelectedImage;
       const markGroup = resolveContextGroupTarget();
       const canMark = !!markGroup;
       const canMarkClear = !!markGroup?.querySelector(':scope > [data-fm-group-label="1"]');
@@ -4623,10 +4626,13 @@
         let disabled = false;
         if (action === "copy" || action === "cut" || action === "duplicate") disabled = !hasSelection;
         if (action === "paste") disabled = !canPaste;
+        if (action === "rasterize-image") disabled = !canRasterizeImage;
         if (action === "group") disabled = state.selectedIds.length < 2;
         if (action === "ungroup") disabled = !hasGroupSelection;
         if (action === "mark") disabled = !canMark;
         if (action === "mark-clear") disabled = !canMarkClear;
+        if (action === "rasterize-image") btn.hidden = !canRasterizeImage;
+        else btn.hidden = false;
         btn.disabled = disabled;
         btn.classList.toggle("disabled", disabled);
       });
@@ -5059,6 +5065,127 @@
         img.onerror = () => reject(new Error("Image decode failed."));
         img.src = src;
       });
+    }
+
+    function getSingleSelectedImageElement() {
+      if (state.selectedIds.length !== 1) return null;
+      const el = getById(state.selectedIds[0]);
+      if (!(el instanceof SVGElement) || el.tagName !== "image") return null;
+      return el;
+    }
+
+    function readDataUrlMime(src) {
+      const m = String(src || "").match(/^data:([^;,]+)[;,]/i);
+      return m ? String(m[1] || "").toLowerCase() : "";
+    }
+
+    function canvasHasTransparency(ctx, w, h) {
+      const width = Math.max(1, Math.floor(Number(w || 0)));
+      const height = Math.max(1, Math.floor(Number(h || 0)));
+      const maxPixelsForFullScan = 8_000_000;
+      if (width * height > maxPixelsForFullScan) return false;
+      const data = ctx.getImageData(0, 0, width, height).data;
+      const step = Math.max(4, Math.floor((width * height) / 250_000) * 4);
+      for (let i = 3; i < data.length; i += step) {
+        if (data[i] < 250) return true;
+      }
+      return false;
+    }
+
+    async function rasterizeSelectedImage(targetDpi) {
+      const imgEl = getSingleSelectedImageElement();
+      if (!imgEl) {
+        setStatus("Rasterize requires one selected image.");
+        return false;
+      }
+      const dpi = Math.max(30, Math.min(1200, Number(targetDpi || 0)));
+      if (!Number.isFinite(dpi)) {
+        setStatus("Invalid rasterize DPI.");
+        return false;
+      }
+      const hrefRaw = imgEl.getAttribute("href") || imgEl.getAttribute("xlink:href") || "";
+      const source = resolveImage(hrefRaw) || hrefRaw;
+      if (!source) {
+        setStatus("Image source not found.");
+        return false;
+      }
+      const displayBox = getSelectionRenderBox(imgEl) || safeBBox(imgEl);
+      if (!displayBox || displayBox.width < 1 || displayBox.height < 1) {
+        setStatus("Image size is invalid for rasterize.");
+        return false;
+      }
+
+      setStatus("Rasterizing...");
+      try {
+        const img = await loadImageElement(source);
+        const naturalW = Math.max(1, Math.floor(Number(img.naturalWidth || img.width || 1)));
+        const naturalH = Math.max(1, Math.floor(Number(img.naturalHeight || img.height || 1)));
+        let targetW = Math.max(1, Math.round((displayBox.width / 96) * dpi));
+        let targetH = Math.max(1, Math.round((displayBox.height / 96) * dpi));
+        targetW = Math.min(targetW, naturalW);
+        targetH = Math.min(targetH, naturalH);
+        if (!Number.isFinite(targetW) || !Number.isFinite(targetH) || targetW < 1 || targetH < 1) {
+          setStatus("Rasterize target size is invalid.");
+          return false;
+        }
+        const canvasTmp = document.createElement("canvas");
+        canvasTmp.width = targetW;
+        canvasTmp.height = targetH;
+        const ctx = canvasTmp.getContext("2d");
+        if (!ctx) {
+          setStatus("Rasterize failed: canvas unavailable.");
+          return false;
+        }
+        ctx.clearRect(0, 0, targetW, targetH);
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        const sourceMime = readDataUrlMime(source);
+        let outputMime = "image/jpeg";
+        const alphaCandidate = sourceMime === "image/png" || sourceMime === "image/webp" || sourceMime === "image/gif" || sourceMime === "image/svg+xml";
+        if (alphaCandidate) {
+          try {
+            if (canvasHasTransparency(ctx, targetW, targetH)) outputMime = "image/png";
+          } catch (_) {
+            outputMime = "image/png";
+          }
+        }
+        const nextSrc = outputMime === "image/png"
+          ? canvasTmp.toDataURL("image/png")
+          : canvasTmp.toDataURL("image/jpeg", 0.85);
+        if (!nextSrc || nextSrc === source) {
+          setStatus(`Image already near target (${targetW}x${targetH}).`);
+          return false;
+        }
+        imgEl.setAttribute("href", nextSrc);
+        imgEl.setAttributeNS(XLINK_NS, "href", nextSrc);
+        requestSelectionVisualRefresh();
+        pushHistory("rasterize-image");
+        setStatus(`Image rasterized to ${targetW}x${targetH}.`);
+        return true;
+      } catch (err) {
+        setStatus("Image rasterize failed.");
+        captureError("image-rasterize", err, { userMessage: "Image rasterize failed." });
+        return false;
+      }
+    }
+
+    function promptRasterizeSelectedImage() {
+      const imgEl = getSingleSelectedImageElement();
+      if (!imgEl) {
+        setStatus("Rasterize requires one selected image.");
+        return;
+      }
+      const box = getSelectionRenderBox(imgEl) || safeBBox(imgEl);
+      const hintW = Math.max(1, Math.round(((box?.width || 0) / 96) * 150));
+      const hintH = Math.max(1, Math.round(((box?.height || 0) / 96) * 150));
+      const input = window.prompt(`Rasterize target DPI (72 / 150 / 300)\nCurrent draft target: ${hintW} x ${hintH}px`, "150");
+      if (input == null) return;
+      const dpi = Number(String(input).trim());
+      if (!Number.isFinite(dpi) || dpi < 30 || dpi > 1200) {
+        setStatus("Invalid DPI. Enter 72, 150, or 300.");
+        return;
+      }
+      rasterizeSelectedImage(dpi);
     }
 
     async function cropImageSourceToDataUrl(src, crop) {
@@ -7274,6 +7401,7 @@
         if (action === "copy") copySelected();
         if (action === "cut") cutSelected();
         if (action === "paste") pasteInternalClipboard();
+        if (action === "rasterize-image") promptRasterizeSelectedImage();
         if (action === "mark") promptGroupMark();
         if (action === "mark-clear") clearGroupMark();
         if (action === "group") groupSelected();
