@@ -1699,6 +1699,10 @@
         offsetX: 0,
         offsetY: 0
       },
+      strokeWidthInputSelectionSig: "",
+      strokeWidthInputDirty: false,
+      textSizeInputSelectionSig: "",
+      textSizeInputDirty: false,
       statusMessage: "Ready."
     };
 
@@ -2456,6 +2460,11 @@
       setStatus(state.selectedIds.length ? `Selected: ${state.selectedIds.length}` : "Ready.");
     }
 
+    function getSelectionSignature(ids = state.selectedIds) {
+      const list = Array.isArray(ids) ? ids : [];
+      return [...list].sort().join("|");
+    }
+
     function toggleSelection(id) {
       if (!id) return;
       if (state.selectedIds.includes(id)) {
@@ -3009,12 +3018,32 @@
       pushHistory("add-triangle");
     }
 
-    function getLineStrokeWidthValue() {
+    function getLineStrokeWidthValue(options = {}) {
       const input = document.getElementById("lineStrokeWidthInput");
-      const raw = Number(input?.value || 3);
-      const stroke = Math.max(0.5, Math.min(20, Number.isFinite(raw) ? raw : 3));
-      if (input) input.value = String(Number(stroke.toFixed(2)));
+      const strict = options.strict !== false;
+      const rawText = String(input?.value || "").trim();
+      if (!rawText) return strict ? null : 3;
+      const raw = Number(rawText);
+      if (!Number.isFinite(raw)) return strict ? null : 3;
+      const stroke = Math.max(0.5, Math.min(20, raw));
+      if (input) {
+        input.value = String(Number(stroke.toFixed(2)));
+        input.placeholder = "";
+        input.dataset.mixed = "0";
+      }
       return stroke;
+    }
+
+    function getStrokeWidthForControl(el) {
+      if (!(el instanceof SVGElement)) return null;
+      const fallback = el.tagName === "line" ? 3 : 2;
+      const widthAttr = Number(el.getAttribute("stroke-width") || "");
+      const widthInline = Number.parseFloat(el.style?.strokeWidth || "");
+      const rawWidth = Number.isFinite(widthAttr) && widthAttr > 0
+        ? widthAttr
+        : (Number.isFinite(widthInline) && widthInline > 0 ? widthInline : fallback);
+      if (!Number.isFinite(rawWidth) || rawWidth <= 0) return null;
+      return Math.max(0.5, Math.min(20, rawWidth));
     }
 
     function syncLineStrokeWidthControlFromSelection() {
@@ -3023,17 +3052,43 @@
       const targets = collectSelectedShapeElements().filter((el) =>
         ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)
       );
-      if (!targets.length) return;
-      const first = targets[0];
-      const fallback = first.tagName === "line" ? 3 : 2;
-      const stroke = Math.max(0.5, Math.min(20, Number(first.getAttribute("stroke-width") || fallback) || fallback));
+      if (!targets.length) {
+        input.disabled = true;
+        input.value = "";
+        input.placeholder = "";
+        input.dataset.mixed = "0";
+        return;
+      }
+      input.disabled = false;
+      const values = targets.map((el) => getStrokeWidthForControl(el)).filter((v) => Number.isFinite(v));
+      if (!values.length) {
+        input.value = "";
+        input.placeholder = "";
+        input.dataset.mixed = "0";
+        return;
+      }
+      const firstVal = values[0];
+      const mixed = values.some((v) => Math.abs(v - firstVal) > 1e-2);
+      if (targets.length > 1 && mixed) {
+        input.value = "";
+        input.placeholder = "-";
+        input.dataset.mixed = "1";
+        return;
+      }
+      const stroke = firstVal;
+      input.placeholder = "";
+      input.dataset.mixed = "0";
       input.value = String(Number(stroke.toFixed(2)));
     }
 
     function applyLineStrokeWidthToSelection(options = {}) {
       const push = options.push !== false;
       const withStatus = options.withStatus !== false;
-      const stroke = getLineStrokeWidthValue();
+      const stroke = getLineStrokeWidthValue({ strict: true });
+      if (!Number.isFinite(stroke) || stroke <= 0) {
+        if (withStatus) setStatus("Enter Stroke width value.");
+        return false;
+      }
       const targets = collectSelectedShapeElements().filter((el) =>
         ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)
       );
@@ -3228,11 +3283,19 @@
       return out;
     }
 
-    function getTextFontSizeValue() {
+    function getTextFontSizeValue(options = {}) {
       const input = document.getElementById("textFontSizeInput");
-      const raw = Number(input?.value || 28);
-      const size = Math.max(6, Math.min(240, Number.isFinite(raw) ? raw : 28));
-      if (input) input.value = String(Math.round(size));
+      const strict = options.strict !== false;
+      const rawText = String(input?.value || "").trim();
+      if (!rawText) return strict ? null : 28;
+      const raw = Number(rawText);
+      if (!Number.isFinite(raw)) return strict ? null : 28;
+      const size = Math.max(6, Math.min(240, raw));
+      if (input) {
+        input.value = String(Math.round(size));
+        input.placeholder = "";
+        input.dataset.mixed = "0";
+      }
       return Math.round(size);
     }
 
@@ -3260,30 +3323,57 @@
       const textSizeEl = document.getElementById("textFontSizeInput");
       if (!(textSizeEl instanceof HTMLInputElement)) return;
       const texts = getNormalSelectedTextElements();
-      if (!texts.length) return;
-      const first = texts[0];
-      const baseScript = Number(first.getAttribute("data-fm-script-base-size") || "");
-      const attr = Number(first.getAttribute("font-size") || "");
-      const computed = Number.parseFloat(window.getComputedStyle(first).fontSize || "");
-      const rawSize = Number.isFinite(baseScript) && baseScript > 0
-        ? baseScript
-        : (Number.isFinite(attr) && attr > 0 ? attr : (Number.isFinite(computed) && computed > 0 ? computed : 28));
-      
-      const effectiveScale = getElementEffectiveScale(first);
-      const effectiveSize = rawSize * effectiveScale;
-
-      if (!Number.isFinite(effectiveSize)) return;
-      textSizeEl.value = String(Math.max(6, Math.min(240, Math.round(effectiveSize))));
+      if (!texts.length) {
+        textSizeEl.disabled = true;
+        textSizeEl.value = "";
+        textSizeEl.placeholder = "";
+        textSizeEl.dataset.mixed = "0";
+        return;
+      }
+      textSizeEl.disabled = false;
+      const effectiveSizes = texts.map((el) => {
+        const baseScript = Number(el.getAttribute("data-fm-script-base-size") || "");
+        const attr = Number(el.getAttribute("font-size") || "");
+        const computed = Number.parseFloat(window.getComputedStyle(el).fontSize || "");
+        const rawSize = Number.isFinite(baseScript) && baseScript > 0
+          ? baseScript
+          : (Number.isFinite(attr) && attr > 0 ? attr : (Number.isFinite(computed) && computed > 0 ? computed : 28));
+        const effectiveScale = getElementEffectiveScale(el);
+        const effectiveSize = rawSize * effectiveScale;
+        if (!Number.isFinite(effectiveSize)) return null;
+        return Math.max(6, Math.min(240, Math.round(effectiveSize)));
+      }).filter((v) => Number.isFinite(v));
+      if (!effectiveSizes.length) {
+        textSizeEl.value = "";
+        textSizeEl.placeholder = "";
+        textSizeEl.dataset.mixed = "0";
+        return;
+      }
+      const firstVal = effectiveSizes[0];
+      const mixed = effectiveSizes.some((v) => Math.abs(v - firstVal) >= 1);
+      if (texts.length > 1 && mixed) {
+        textSizeEl.value = "";
+        textSizeEl.placeholder = "-";
+        textSizeEl.dataset.mixed = "1";
+      } else {
+        textSizeEl.placeholder = "";
+        textSizeEl.dataset.mixed = "0";
+        textSizeEl.value = String(firstVal);
+      }
       const colorInput = document.getElementById("textColorInput");
       if (colorInput instanceof HTMLInputElement) {
-        colorInput.value = normalizeCssColorToHex(first.getAttribute("fill"), "#111827");
+        colorInput.value = normalizeCssColorToHex(texts[0].getAttribute("fill"), "#111827");
       }
     }
 
     function applyTextFontSizeToSelection(options = {}) {
       const push = options.push !== false;
       const withStatus = options.withStatus !== false;
-      const targetEffectiveSize = getTextFontSizeValue();
+      const targetEffectiveSize = getTextFontSizeValue({ strict: true });
+      if (!Number.isFinite(targetEffectiveSize) || targetEffectiveSize <= 0) {
+        if (withStatus) setStatus("Enter Text size value.");
+        return false;
+      }
       const targets = getNormalSelectedTextElements();
       if (!targets.length) {
         if (withStatus) setStatus("Select text object(s) to change Text size.");
@@ -9119,10 +9209,32 @@
       document.getElementById("matchArrowBtn").addEventListener("click", () => {
         matchSelectedLinesToArrow();
       });
-      document.getElementById("lineStrokeWidthInput").addEventListener("change", () => {
-        applyLineStrokeWidthToSelection({ push: true, withStatus: true });
+      const lineStrokeWidthInput = document.getElementById("lineStrokeWidthInput");
+      lineStrokeWidthInput.addEventListener("focus", () => {
+        state.strokeWidthInputSelectionSig = getSelectionSignature();
+        state.strokeWidthInputDirty = false;
       });
-      document.getElementById("lineStrokeWidthInput").addEventListener("input", () => {
+      lineStrokeWidthInput.addEventListener("change", () => {
+        const startSig = String(state.strokeWidthInputSelectionSig || "");
+        const nowSig = getSelectionSignature();
+        if (startSig !== nowSig) {
+          state.strokeWidthInputDirty = false;
+          state.strokeWidthInputSelectionSig = nowSig;
+          syncLineStrokeWidthControlFromSelection();
+          setStatus("Stroke width editor synced to current selection.");
+          return;
+        }
+        if (!String(lineStrokeWidthInput.value || "").trim()) {
+          state.strokeWidthInputDirty = false;
+          syncLineStrokeWidthControlFromSelection();
+          return;
+        }
+        applyLineStrokeWidthToSelection({ push: true, withStatus: true });
+        state.strokeWidthInputDirty = false;
+        state.strokeWidthInputSelectionSig = nowSig;
+      });
+      lineStrokeWidthInput.addEventListener("input", () => {
+        state.strokeWidthInputDirty = true;
         applyLineStrokeWidthToSelection({ push: false, withStatus: false });
       });
       document.getElementById("markFontSizeInput").addEventListener("change", () => {
@@ -9131,10 +9243,32 @@
       document.getElementById("markFontSizeInput").addEventListener("input", () => {
         applyGlobalMarkFontSize({ push: false, withStatus: false });
       });
-      document.getElementById("textFontSizeInput").addEventListener("change", () => {
-        applyTextFontSizeToSelection({ push: true, withStatus: true });
+      const textFontSizeInput = document.getElementById("textFontSizeInput");
+      textFontSizeInput.addEventListener("focus", () => {
+        state.textSizeInputSelectionSig = getSelectionSignature();
+        state.textSizeInputDirty = false;
       });
-      document.getElementById("textFontSizeInput").addEventListener("input", () => {
+      textFontSizeInput.addEventListener("change", () => {
+        const startSig = String(state.textSizeInputSelectionSig || "");
+        const nowSig = getSelectionSignature();
+        if (startSig !== nowSig) {
+          state.textSizeInputDirty = false;
+          state.textSizeInputSelectionSig = nowSig;
+          syncTextControlsFromSelection();
+          setStatus("Text size editor synced to current selection.");
+          return;
+        }
+        if (!String(textFontSizeInput.value || "").trim()) {
+          state.textSizeInputDirty = false;
+          syncTextControlsFromSelection();
+          return;
+        }
+        applyTextFontSizeToSelection({ push: true, withStatus: true });
+        state.textSizeInputDirty = false;
+        state.textSizeInputSelectionSig = nowSig;
+      });
+      textFontSizeInput.addEventListener("input", () => {
+        state.textSizeInputDirty = true;
         applyTextFontSizeToSelection({ push: false, withStatus: false });
       });
       document.getElementById("textColorInput").addEventListener("change", () => {
