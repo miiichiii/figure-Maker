@@ -4199,14 +4199,77 @@
       } catch (_) {}
       setFloatingToolPalettePosition(state.floatingToolPalette.x, state.floatingToolPalette.y, { save: false });
 
-      const stopBubble = (e) => {
-        e.stopPropagation();
-      };
-      palette.addEventListener("pointerdown", stopBubble);
-      palette.addEventListener("mousedown", stopBubble);
-      palette.addEventListener("click", stopBubble);
+      let longPressTimer = null;
+      let startX = 0;
+      let startY = 0;
+      let isDragMode = false;
 
+      // Header Drag (Immediate)
       header.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = palette.getBoundingClientRect();
+        state.floatingToolPalette.dragging = true;
+        state.floatingToolPalette.pointerId = e.pointerId;
+        state.floatingToolPalette.offsetX = e.clientX - rect.left;
+        state.floatingToolPalette.offsetY = e.clientY - rect.top;
+        palette.classList.add("dragging");
+        if (header.setPointerCapture) {
+          try { header.setPointerCapture(e.pointerId); } catch(_) {}
+        }
+      });
+
+      // Palette Long Press Drag
+      palette.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation(); // Stop bubbling to canvas
+        
+        if (e.target === header || header.contains(e.target)) return;
+
+        startX = e.clientX;
+        startY = e.clientY;
+        isDragMode = false;
+
+        longPressTimer = setTimeout(() => {
+          isDragMode = true;
+          const rect = palette.getBoundingClientRect();
+          state.floatingToolPalette.dragging = true;
+          state.floatingToolPalette.pointerId = e.pointerId;
+          state.floatingToolPalette.offsetX = e.clientX - rect.left;
+          state.floatingToolPalette.offsetY = e.clientY - rect.top;
+          palette.classList.add("dragging");
+          if (palette.setPointerCapture) {
+            try { palette.setPointerCapture(e.pointerId); } catch(_) {}
+          }
+          // Visual feedback
+          palette.style.transform = "scale(1.05)";
+          setTimeout(() => palette.style.transform = "", 200);
+          setStatus("Palette unlocked: Drag to move.");
+        }, 500);
+      });
+
+      palette.addEventListener("pointermove", (e) => {
+        if (longPressTimer && !isDragMode) {
+            const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+            if (dist > 10) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        }
+      });
+
+      // Capture click to prevent button action if we dragged
+      palette.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (isDragMode) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            isDragMode = false;
+        }
+      }, true);
+
+
         if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
@@ -4231,13 +4294,23 @@
       });
 
       const endDrag = (e) => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+
         const fp = state.floatingToolPalette;
         if (!fp.dragging) return;
         if (fp.pointerId !== null && e?.pointerId != null && e.pointerId !== fp.pointerId) return;
+        
         fp.dragging = false;
         fp.pointerId = null;
         palette.classList.remove("dragging");
         setFloatingToolPalettePosition(fp.x, fp.y, { save: true });
+
+        if (palette.releasePointerCapture && e.pointerId) {
+            try { palette.releasePointerCapture(e.pointerId); } catch(_) {}
+        }
       };
       window.addEventListener("pointerup", endDrag);
       window.addEventListener("pointercancel", endDrag);
