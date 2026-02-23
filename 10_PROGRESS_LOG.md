@@ -259,6 +259,14 @@
 - Open issues: 親階層が変形済みの場合の見た目位置は相対オフセットで調整継続。
 - Next action: 構文確認と差分更新。
 
+### Step 32 - Critic review and recurrence fix (resize/rotate/stroke)
+- Date: 2026-02-23
+- Owner: Reviewer
+- Decisions: 再発ポイントは「multi選択のresize/rotate経路」「`g`拡縮時の子線幅補正」「text回転確定時アンカー」の3点に固定。
+- Changes: `updateResize`のmulti分岐を修正、multi rotateを追加、`g`内stroke補正を追加、text回転確定時のアンカー依存を撤廃。
+- Open issues: 実ブラウザで貼り付けグラフの非等方リサイズ見え方を継続確認。
+- Next action: ユーザー操作で回帰テスト（multi resize/rotate、graph line resize、text rotate）。
+
 ### Step 32 - Builder implementation (requested bug fixes)
 - Date: 2026-02-18
 - Owner: Builder

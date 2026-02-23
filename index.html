@@ -8188,6 +8188,41 @@
       return true;
     }
 
+    function captureGroupStrokeSnapshot(groupEl) {
+      const snapshot = new Map();
+      if (!(groupEl instanceof SVGElement) || groupEl.tagName !== "g") return snapshot;
+      const targets = groupEl.querySelectorAll("line,path,polyline,polygon,rect,ellipse,circle");
+      targets.forEach((node) => {
+        if (!(node instanceof SVGElement)) return;
+        if (!node.dataset.id) ensureId(node);
+        const id = String(node.dataset.id || "");
+        if (!id) return;
+        const cs = window.getComputedStyle ? window.getComputedStyle(node) : null;
+        const stroke = String(node.getAttribute("stroke") || cs?.stroke || "").trim().toLowerCase();
+        if (!stroke || stroke === "none" || stroke === "transparent" || /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(stroke)) return;
+        const widthAttr = Number(node.getAttribute("stroke-width") || "");
+        const widthComputed = Number.parseFloat(cs?.strokeWidth || "");
+        const width = Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : widthComputed;
+        if (!Number.isFinite(width) || width <= 0) return;
+        snapshot.set(id, width);
+      });
+      return snapshot;
+    }
+
+    function applyGroupStrokeCompensation(snapshot, sx, sy) {
+      if (!(snapshot instanceof Map) || !snapshot.size) return;
+      const scale = Math.max((Math.abs(sx) + Math.abs(sy)) / 2, 1e-6);
+      snapshot.forEach((baseWidth, id) => {
+        const el = getById(id);
+        if (!(el instanceof SVGElement)) return;
+        const cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
+        const stroke = String(el.getAttribute("stroke") || cs?.stroke || "").trim().toLowerCase();
+        if (!stroke || stroke === "none" || stroke === "transparent" || /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(stroke)) return;
+        const compensated = Math.max(0.1, baseWidth / scale);
+        el.setAttribute("stroke-width", String(Number(compensated.toFixed(4))));
+      });
+    }
+
     function beginResize(start, targetEl, handle) {
       // Handle multi-selection resize
       if (handle && targetEl === "multi") {
@@ -8205,6 +8240,7 @@
           id: el.dataset.id,
           baseBox: safeBBox(el),
           baseTransformRaw: String(el.getAttribute("transform") || "").trim(),
+          groupStrokeSnapshot: el.tagName === "g" ? captureGroupStrokeSnapshot(el) : null,
           // For shapes we might need geometry snapshot if we use geometry resize, 
           // but scaleSingleElement reads current attrs. 
           // To support undo/redo properly during interaction, we rely on the fact 
@@ -8277,6 +8313,7 @@
         liveBox: b,
         snapTargets,
         groupLinearStart,
+        groupStrokeSnapshot: targetEl.tagName === "g" ? captureGroupStrokeSnapshot(targetEl) : null,
         groupLabelCompensations,
         aspect,
         moved: false,
@@ -8335,6 +8372,8 @@
           const targets = (Array.isArray(it.itemIds) ? it.itemIds : [])
             .map((id) => getById(id))
             .filter((el) => el instanceof SVGElement);
+          const textTargets = targets.filter((el) => el.tagName === "text");
+          textTargets.forEach((textEl) => normalizeTextTransformNoDistortion(textEl));
           const bakeTargets = targets.filter((el) => el.tagName !== "text");
           if (bakeTargets.length) bakeTransformsAfterInteraction(bakeTargets);
           pushHistory("rotate");
@@ -8344,8 +8383,9 @@
         const target = getById(it.targetId);
         if (target instanceof SVGElement) {
           if (target.tagName === "text") {
-            // Keep text rotation stable: normalize once at pointer-up instead of every move.
-            normalizeTextTransformNoDistortion(target, { anchorCanvas: it.centerCanvas });
+            // Keep text rotation stable around its own anchor.
+            // Using selection-center as anchor can cause position jumps on finalize.
+            normalizeTextTransformNoDistortion(target);
           } else {
             bakeTransformsAfterInteraction([target]);
           }
@@ -8744,14 +8784,22 @@
       width = Math.max(MIN_RESIZE_SIZE, right - left);
       height = Math.max(MIN_RESIZE_SIZE, bottom - top);
       it.liveBox = { x: left, y: top, width, height };
+      const sx = it.liveBox.width / Math.max(ob.width, 1e-6);
+      const sy = it.liveBox.height / Math.max(ob.height, 1e-6);
       if (isMulti) {
         (Array.isArray(it.multiState) ? it.multiState : []).forEach((item) => {
           const target = getById(item.id);
           if (!(target instanceof SVGElement)) return;
           applyResizeByTransform(target, ob, it.liveBox, item.baseTransformRaw || "");
+          if (target.tagName === "g" && item.groupStrokeSnapshot instanceof Map) {
+            applyGroupStrokeCompensation(item.groupStrokeSnapshot, sx, sy);
+          }
         });
       } else {
         applyResizeByTransform(el, ob, it.liveBox, it.baseTransformRaw || "");
+      }
+      if (!isMulti && el.tagName === "g" && it.groupStrokeSnapshot instanceof Map) {
+        applyGroupStrokeCompensation(it.groupStrokeSnapshot, sx, sy);
       }
       if (!isMulti && el.tagName === "g" && Array.isArray(it.groupLabelCompensations) && it.groupLabelCompensations.length) {
         const startLinear = it.groupLinearStart || { a: 1, b: 0, c: 0, d: 1 };

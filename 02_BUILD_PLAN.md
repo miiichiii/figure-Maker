@@ -77,6 +77,9 @@
 - 既存バグ再発防止（必須）:
   - pasted SVG の座標飛び
   - bbox 同期ズレ
+  - 複数選択BBoxの resize/rotate 無効化
+  - テキスト rotate 確定時の座標ジャンプ
+  - `g` リサイズ時の子線分 `stroke-width` 肥大
   - mark サイズ/位置崩れ
   - text 編集不能
   - paste 経路の取りこぼし
