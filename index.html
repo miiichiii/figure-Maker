@@ -8082,9 +8082,7 @@
       clearSmartGuides();
     }
 
-    function isRotateHotzoneHit(pt, targetEl) {
-      if (!(targetEl instanceof SVGElement) || !isResizableElement(targetEl)) return false;
-      const b = safeBBox(targetEl);
+    function isRotateHotzoneHitBox(pt, b) {
       if (!b || b.width <= 0 || b.height <= 0) return false;
       const scale = Math.max(getCanvasDisplayScale(), 1e-6);
       const innerPad = 4 / scale;
@@ -8094,16 +8092,29 @@
       return pointInRect(pt, outer) && !pointInRect(pt, inner);
     }
 
+    function isRotateHotzoneHit(pt, targetEl) {
+      if (!(targetEl instanceof SVGElement) || !isResizableElement(targetEl)) return false;
+      return isRotateHotzoneHitBox(pt, safeBBox(targetEl));
+    }
+
     function computeRotateHoverReady(clientX, clientY, hoverTarget = null) {
       if (state.interaction) return false;
       if (state.cropMode) return false;
       const effectiveTool = getEffectiveTool();
       if (effectiveTool === "hand") return false;
-      if (state.selectedIds.length !== 1) return false;
-      const selected = getById(state.selectedIds[0]);
-      if (!(selected instanceof SVGElement)) return false;
+      if (!state.selectedIds.length) return false;
       const pt = getSvgPoint(clientX, clientY);
-      if (!isRotateHotzoneHit(pt, selected)) return false;
+      let rotateReady = false;
+      if (state.selectedIds.length === 1) {
+        const selected = getById(state.selectedIds[0]);
+        if (!(selected instanceof SVGElement)) return false;
+        rotateReady = isRotateHotzoneHit(pt, selected);
+      } else {
+        const boxes = getTopSelectedElements().map((el) => safeBBox(el)).filter(Boolean);
+        const combined = combineBoxes(boxes);
+        rotateReady = isRotateHotzoneHitBox(pt, combined);
+      }
+      if (!rotateReady) return false;
       const raw = hoverTarget ? closestEditableTarget(hoverTarget) : null;
       const stack = getEditableTargetsAtPoint(clientX, clientY);
       const hasCanvasHit = !!raw || stack.length > 0;
@@ -8140,6 +8151,43 @@
       return true;
     }
 
+    function beginRotateMulti(start, elements) {
+      const targets = (Array.isArray(elements) ? elements : [])
+        .filter((el) => el instanceof SVGElement)
+        .filter((el, idx, arr) => arr.indexOf(el) === idx);
+      if (targets.length < 2) return false;
+      const boxes = targets.map((el) => safeBBox(el)).filter(Boolean);
+      const combined = combineBoxes(boxes);
+      if (!combined) return false;
+      const centerCanvas = { x: combined.x + combined.width / 2, y: combined.y + combined.height / 2 };
+      const dx = start.x - centerCanvas.x;
+      const dy = start.y - centerCanvas.y;
+      const startAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+      if (!Number.isFinite(startAngle)) return false;
+      const items = targets.map((el) => {
+        ensureTransformState(el);
+        return {
+          id: el.dataset.id,
+          baseTransformRaw: String(el.getAttribute("transform") || "").trim()
+        };
+      }).filter((item) => !!item.id);
+      if (items.length < 2) return false;
+      state.interaction = {
+        type: "rotate",
+        start,
+        targetId: "",
+        isMulti: true,
+        itemIds: items.map((item) => item.id),
+        items,
+        centerCanvas,
+        startAngle,
+        moved: false,
+        pointerId: null
+      };
+      clearSmartGuides();
+      return true;
+    }
+
     function beginResize(start, targetEl, handle) {
       // Handle multi-selection resize
       if (handle && targetEl === "multi") {
@@ -8156,7 +8204,7 @@
         const multiState = elements.map(el => ({
           id: el.dataset.id,
           baseBox: safeBBox(el),
-          baseTransform: String(el.getAttribute("transform") || "").trim(),
+          baseTransformRaw: String(el.getAttribute("transform") || "").trim(),
           // For shapes we might need geometry snapshot if we use geometry resize, 
           // but scaleSingleElement reads current attrs. 
           // To support undo/redo properly during interaction, we rely on the fact 
@@ -8234,12 +8282,36 @@
         moved: false,
         pointerId: null
       };
+      if (targetEl.tagName === "line") {
+        const rawStroke = Number(targetEl.getAttribute("stroke-width") || "");
+        if (Number.isFinite(rawStroke) && rawStroke > 0) {
+          state.interaction.lineStrokeWidth = rawStroke;
+        }
+      }
       clearSmartGuides();
     }
 
     function updateRotate(pt, options = {}) {
       const it = state.interaction;
       if (!it || it.type !== "rotate") return;
+      if (it.isMulti) {
+        const angle = Math.atan2(pt.y - it.centerCanvas.y, pt.x - it.centerCanvas.x) * 180 / Math.PI;
+        if (!Number.isFinite(angle)) return;
+        let delta = angle - it.startAngle;
+        if (options.snapAngle) delta = Math.round(delta / 45) * 45;
+        if (Math.abs(delta) > 0.2) it.moved = true;
+        (Array.isArray(it.items) ? it.items : []).forEach((item) => {
+          const el = getById(item.id);
+          if (!(el instanceof SVGElement)) return;
+          const parent = el.parentNode instanceof SVGElement ? el.parentNode : canvas;
+          const centerLocal = canvasPointToParentLocal(parent, it.centerCanvas.x, it.centerCanvas.y);
+          const rotation = `rotate(${Number(delta.toFixed(4))} ${Number(centerLocal.x.toFixed(4))} ${Number(centerLocal.y.toFixed(4))})`;
+          el.dataset.baseTransform = `${rotation}${item.baseTransformRaw ? ` ${item.baseTransformRaw}` : ""}`.trim();
+          setTranslate(el, 0, 0);
+        });
+        requestSelectionVisualRefresh();
+        return;
+      }
       const target = getById(it.targetId);
       if (!(target instanceof SVGElement)) return;
       const parent = target.parentNode instanceof SVGElement ? target.parentNode : canvas;
@@ -8259,6 +8331,16 @@
       const it = state.interaction;
       if (!it || it.type !== "rotate") return;
       if (it.moved) {
+        if (it.isMulti) {
+          const targets = (Array.isArray(it.itemIds) ? it.itemIds : [])
+            .map((id) => getById(id))
+            .filter((el) => el instanceof SVGElement);
+          const bakeTargets = targets.filter((el) => el.tagName !== "text");
+          if (bakeTargets.length) bakeTransformsAfterInteraction(bakeTargets);
+          pushHistory("rotate");
+          state.interaction = null;
+          return;
+        }
         const target = getById(it.targetId);
         if (target instanceof SVGElement) {
           if (target.tagName === "text") {
@@ -8372,7 +8454,7 @@
     }
 
     function scaleSingleElement(el, oldBox, newBox, parentOffset = { x: 0, y: 0 }) {
-      if (shouldUseTransformResize(el)) {
+      if (el.tagName !== "line" && shouldUseTransformResize(el)) {
         if (applyResizeByTransform(el, oldBox, newBox)) return;
       }
       const t = getTranslate(el);
@@ -8491,9 +8573,11 @@
     function updateResize(pt, keepAspect = false, options = {}) {
       const it = state.interaction;
       if (!it || it.type !== "resize") return;
-      const el = getById(it.targetId);
-      if (!el) return;
+      const isMulti = !!it.isMulti;
+      const el = isMulti ? null : getById(it.targetId);
+      if (!isMulti && !el) return;
       if (it.handle === "line-start" || it.handle === "line-end") {
+        if (!el) return;
         if (el.tagName !== "line") return;
         const local = canvasPointToElementLocal(el, pt.x, pt.y);
         if (it.handle === "line-start") {
@@ -8503,12 +8587,16 @@
           el.setAttribute("x2", String(Number(local.x.toFixed(4))));
           el.setAttribute("y2", String(Number(local.y.toFixed(4))));
         }
+        if (Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
+          el.setAttribute("stroke-width", String(Number(it.lineStrokeWidth.toFixed(4))));
+        }
         it.liveBox = safeBBox(el) || it.baseBox;
         it.moved = true;
         requestSelectionVisualRefresh();
         return;
       }
       if (it.handle.startsWith("vertex-")) {
+        if (!el) return;
         if (el.tagName !== "polygon" && el.tagName !== "polyline") return;
         const idx = Number(it.handle.slice("vertex-".length));
         const points = parseSvgPoints(el.getAttribute("points"));
@@ -8656,8 +8744,16 @@
       width = Math.max(MIN_RESIZE_SIZE, right - left);
       height = Math.max(MIN_RESIZE_SIZE, bottom - top);
       it.liveBox = { x: left, y: top, width, height };
-      applyResizeByTransform(el, ob, it.liveBox, it.baseTransformRaw || "");
-      if (el.tagName === "g" && Array.isArray(it.groupLabelCompensations) && it.groupLabelCompensations.length) {
+      if (isMulti) {
+        (Array.isArray(it.multiState) ? it.multiState : []).forEach((item) => {
+          const target = getById(item.id);
+          if (!(target instanceof SVGElement)) return;
+          applyResizeByTransform(target, ob, it.liveBox, item.baseTransformRaw || "");
+        });
+      } else {
+        applyResizeByTransform(el, ob, it.liveBox, it.baseTransformRaw || "");
+      }
+      if (!isMulti && el.tagName === "g" && Array.isArray(it.groupLabelCompensations) && it.groupLabelCompensations.length) {
         const startLinear = it.groupLinearStart || { a: 1, b: 0, c: 0, d: 1 };
         const currentLinear = getElementLinearMatrix(el);
         const invCurrent = invertLinearMatrix(currentLinear);
@@ -8695,8 +8791,23 @@
       if (!it || it.type !== "resize") return;
       clearSmartGuides();
       if (it.moved) {
-        const target = getById(it.targetId);
-        if (target instanceof SVGElement) bakeTransformsAfterInteraction([target]);
+        if (it.isMulti) {
+          const targets = (Array.isArray(it.multiState) ? it.multiState : [])
+            .map((item) => getById(item.id))
+            .filter((el) => el instanceof SVGElement);
+          if (targets.length) bakeTransformsAfterInteraction(targets);
+        } else {
+          const target = getById(it.targetId);
+          if (target instanceof SVGElement) {
+            if (target.tagName === "line" && Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
+              target.setAttribute("stroke-width", String(Number(it.lineStrokeWidth.toFixed(4))));
+            }
+            bakeTransformsAfterInteraction([target]);
+            if (target.tagName === "line" && Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
+              target.setAttribute("stroke-width", String(Number(it.lineStrokeWidth.toFixed(4))));
+            }
+          }
+        }
         pushHistory("resize");
       }
       state.interaction = null;
@@ -9337,11 +9448,14 @@
         const stack = getEditableTargetsAtPoint(e.clientX, e.clientY);
         const hasCanvasHit = !!raw || stack.length > 0;
         if (!hasCanvasHit && !e.shiftKey && computeRotateHoverReady(e.clientX, e.clientY, e.target)) {
-          const selected = getById(state.selectedIds[0]);
-          if (selected instanceof SVGElement && beginRotate(pt, selected)) {
+          const selectedElements = getTopSelectedElements();
+          const started = selectedElements.length > 1
+            ? beginRotateMulti(pt, selectedElements)
+            : (selectedElements.length === 1 ? beginRotate(pt, selectedElements[0]) : false);
+          if (started) {
             if (state.interaction) state.interaction.pointerId = e.pointerId;
             if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
-            setStatus("Rotate: drag around selection (Shift to snap 15deg).");
+            setStatus("Rotate: drag around selection (Shift to snap 45deg).");
             e.preventDefault();
             return;
           }
