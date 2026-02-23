@@ -199,21 +199,47 @@
       height: 18px;
       display: block;
     }
-    .tool-palette-group {
-      padding-right: 10px;
+    .floating-tool-palette {
+      position: fixed;
+      left: 14px;
+      top: 120px;
+      z-index: 60;
+      width: 104px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(246, 240, 227, 0.96);
+      box-shadow: 0 8px 20px rgba(43, 42, 39, 0.2);
+      padding: 6px;
+      backdrop-filter: blur(3px);
+      user-select: none;
+    }
+    .floating-tool-palette.dragging {
+      box-shadow: 0 10px 26px rgba(43, 42, 39, 0.28);
+    }
+    .floating-tool-palette-header {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+      margin-bottom: 6px;
+      padding: 3px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: rgba(231, 215, 184, 0.88);
+      cursor: grab;
+      text-align: center;
+    }
+    .floating-tool-palette.dragging .floating-tool-palette-header {
+      cursor: grabbing;
     }
     .tool-palette {
       display: grid;
-      grid-template-columns: repeat(2, minmax(38px, 38px));
+      grid-template-columns: repeat(2, 1fr);
       grid-auto-rows: 34px;
       gap: 6px;
-      padding: 4px;
-      border-radius: 8px;
-      background: rgba(0, 0, 0, 0.05);
-      border: 1px solid rgba(0, 0, 0, 0.08);
     }
     .tool-palette .tool-icon-btn {
-      width: 38px;
+      width: 100%;
       height: 34px;
       padding: 4px;
     }
@@ -917,28 +943,6 @@
         <button class="toolbar-tab-btn" data-toolbar-tab-btn="text" title="Text tab (Double-click to hide/show bars)">Text</button>
       </div>
       <div class="toolbar-content">
-      <div class="group tool-palette-group" data-toolbar-tab="all">
-        <div class="tool-palette" aria-label="Tool palette">
-          <button id="toolSelect" class="active tool-icon-btn" title="Select tool" aria-label="Select tool">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
-            </svg>
-            <span class="sr-only">Black Arrow</span>
-          </button>
-          <button id="toolDirect" class="tool-icon-btn" title="Direct select tool" aria-label="Direct select tool">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ff1493" stroke="#111827" stroke-width="1.3"></path>
-            </svg>
-            <span class="sr-only">White Arrow</span>
-          </button>
-          <button id="toolHand" class="tool-icon-btn" title="Hand tool (H / hold Space)" aria-label="Hand tool (H / hold Space)">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M7 18 C5.5 18 4.4 16.9 4.3 15.4 L3.8 10.3 C3.7 9.4 4.4 8.6 5.3 8.6 C6.1 8.6 6.8 9.2 6.9 10 L7.2 12.5 V4.7 C7.2 3.8 7.9 3.1 8.8 3.1 C9.7 3.1 10.4 3.8 10.4 4.7 V10.4 H10.8 V3.9 C10.8 3 11.5 2.3 12.4 2.3 C13.3 2.3 14 3 14 3.9 V10.4 H14.4 V5 C14.4 4.1 15.1 3.4 16 3.4 C16.9 3.4 17.6 4.1 17.6 5 V12.2 C17.6 15.4 14.9 18 11.7 18 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-            <span class="sr-only">Hand</span>
-          </button>
-        </div>
-      </div>
       <div class="group" data-toolbar-tab="tool">
         <button id="undoBtn" class="tool-icon-btn" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo (Ctrl/Cmd+Z)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -1177,6 +1181,29 @@
     <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
     <input id="importFileInput" type="file" accept=".svg,image/svg+xml" hidden />
     <div class="canvas-wrap" tabindex="0">
+      <div id="floatingToolPalette" class="floating-tool-palette" role="group" aria-label="Tool palette">
+        <div id="floatingToolPaletteHeader" class="floating-tool-palette-header" title="Drag to move palette">Tools</div>
+        <div class="tool-palette" aria-label="Tool palette buttons">
+          <button id="toolSelect" class="active tool-icon-btn" title="Select tool" aria-label="Select tool">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
+            </svg>
+            <span class="sr-only">Black Arrow</span>
+          </button>
+          <button id="toolDirect" class="tool-icon-btn" title="Direct select tool" aria-label="Direct select tool">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ff1493" stroke="#111827" stroke-width="1.3"></path>
+            </svg>
+            <span class="sr-only">White Arrow</span>
+          </button>
+          <button id="toolHand" class="tool-icon-btn" title="Hand tool (H / hold Space)" aria-label="Hand tool (H / hold Space)">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M7 18 C5.5 18 4.4 16.9 4.3 15.4 L3.8 10.3 C3.7 9.4 4.4 8.6 5.3 8.6 C6.1 8.6 6.8 9.2 6.9 10 L7.2 12.5 V4.7 C7.2 3.8 7.9 3.1 8.8 3.1 C9.7 3.1 10.4 3.8 10.4 4.7 V10.4 H10.8 V3.9 C10.8 3 11.5 2.3 12.4 2.3 C13.3 2.3 14 3 14 3.9 V10.4 H14.4 V5 C14.4 4.1 15.1 3.4 16 3.4 C16.9 3.4 17.6 4.1 17.6 5 V12.2 C17.6 15.4 14.9 18 11.7 18 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span class="sr-only">Hand</span>
+          </button>
+        </div>
+      </div>
       <svg id="canvas" viewBox="0 0 8000 8000" xmlns="http://www.w3.org/2000/svg"></svg>
       <input id="textEditorInput" type="text" />
     </div>
@@ -1267,6 +1294,7 @@
     const PASTE_REPORT_KEY = "figureMaker_last_paste_report";
     const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
     const LAST_ERROR_KEY = "figureMaker_last_error";
+    const TOOL_PALETTE_POS_KEY = "figureMaker_tool_palette_position";
     const LIVE_AUTOSAVE_KEY = "figureMaker_live_snapshot";
     const AUTOSAVE_DB_NAME = "figureMakerAutosaveDB";
     const AUTOSAVE_DB_VERSION = 1;
@@ -1613,6 +1641,14 @@
       pasteNudgeCounter: 0,
       suppressContextMenuOnce: false,
       hoverRotateReady: false,
+      floatingToolPalette: {
+        x: 14,
+        y: 120,
+        dragging: false,
+        pointerId: null,
+        offsetX: 0,
+        offsetY: 0
+      },
       statusMessage: "Ready."
     };
 
@@ -4070,6 +4106,93 @@
         switchToolbarTab(tab);
       });
       switchToolbarTab(state.toolbarTab || "tool", { silent: true });
+    }
+
+    function clampFloatingToolPalettePosition(x, y, paletteEl = null) {
+      const el = paletteEl || document.getElementById("floatingToolPalette");
+      const pad = 8;
+      const width = Math.max(80, Number(el?.offsetWidth || 104));
+      const height = Math.max(80, Number(el?.offsetHeight || 128));
+      const maxX = Math.max(pad, window.innerWidth - width - pad);
+      const maxY = Math.max(pad, window.innerHeight - height - pad);
+      const nx = Math.min(maxX, Math.max(pad, Number.isFinite(x) ? x : pad));
+      const ny = Math.min(maxY, Math.max(pad, Number.isFinite(y) ? y : pad));
+      return { x: nx, y: ny };
+    }
+
+    function setFloatingToolPalettePosition(x, y, options = {}) {
+      const palette = document.getElementById("floatingToolPalette");
+      if (!(palette instanceof HTMLElement)) return;
+      const clamped = clampFloatingToolPalettePosition(x, y, palette);
+      state.floatingToolPalette.x = clamped.x;
+      state.floatingToolPalette.y = clamped.y;
+      palette.style.left = `${Math.round(clamped.x)}px`;
+      palette.style.top = `${Math.round(clamped.y)}px`;
+      if (options.save !== false) {
+        try {
+          localStorage.setItem(TOOL_PALETTE_POS_KEY, JSON.stringify({ x: clamped.x, y: clamped.y }));
+        } catch (_) {}
+      }
+    }
+
+    function setupFloatingToolPalette() {
+      const palette = document.getElementById("floatingToolPalette");
+      const header = document.getElementById("floatingToolPaletteHeader");
+      if (!(palette instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+      try {
+        const saved = JSON.parse(localStorage.getItem(TOOL_PALETTE_POS_KEY) || "null");
+        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+          state.floatingToolPalette.x = Number(saved.x);
+          state.floatingToolPalette.y = Number(saved.y);
+        }
+      } catch (_) {}
+      setFloatingToolPalettePosition(state.floatingToolPalette.x, state.floatingToolPalette.y, { save: false });
+
+      const stopBubble = (e) => {
+        e.stopPropagation();
+      };
+      palette.addEventListener("pointerdown", stopBubble);
+      palette.addEventListener("mousedown", stopBubble);
+      palette.addEventListener("click", stopBubble);
+
+      header.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = palette.getBoundingClientRect();
+        state.floatingToolPalette.dragging = true;
+        state.floatingToolPalette.pointerId = e.pointerId;
+        state.floatingToolPalette.offsetX = e.clientX - rect.left;
+        state.floatingToolPalette.offsetY = e.clientY - rect.top;
+        palette.classList.add("dragging");
+        if (header.setPointerCapture) {
+          try {
+            header.setPointerCapture(e.pointerId);
+          } catch (_) {}
+        }
+      });
+
+      window.addEventListener("pointermove", (e) => {
+        const fp = state.floatingToolPalette;
+        if (!fp.dragging) return;
+        if (fp.pointerId !== null && e.pointerId !== fp.pointerId) return;
+        setFloatingToolPalettePosition(e.clientX - fp.offsetX, e.clientY - fp.offsetY, { save: false });
+      });
+
+      const endDrag = (e) => {
+        const fp = state.floatingToolPalette;
+        if (!fp.dragging) return;
+        if (fp.pointerId !== null && e?.pointerId != null && e.pointerId !== fp.pointerId) return;
+        fp.dragging = false;
+        fp.pointerId = null;
+        palette.classList.remove("dragging");
+        setFloatingToolPalettePosition(fp.x, fp.y, { save: true });
+      };
+      window.addEventListener("pointerup", endDrag);
+      window.addEventListener("pointercancel", endDrag);
+      window.addEventListener("resize", () => {
+        setFloatingToolPalettePosition(state.floatingToolPalette.x, state.floatingToolPalette.y, { save: false });
+      });
     }
 
     function syncZoomControls() {
@@ -9549,6 +9672,7 @@
       assignIds();
       syncCanvasDisplaySizeFromViewBox();
       setupEvents();
+      setupFloatingToolPalette();
       setupButtonTooltips();
       setupHoverTooltips();
       setupToolbarTabs();
