@@ -9817,12 +9817,6 @@
       setupGlobalErrorHandlers();
       setupEventRingHooks();
       state.viewScale = 1;
-      
-      // Responsive Initial Zoom for Mobile
-      if (window.innerWidth < 800) {
-        state.viewScale = Math.max(0.3, window.innerWidth / 1000); 
-      }
-
       applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX }, { centerScroll: true });
       applySnapshotMarkup("");
       assignIds();
