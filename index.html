@@ -1146,11 +1146,6 @@
         <input id="objectStrokeToggle" type="checkbox" checked />
       </div>
       <div class="group" data-toolbar-tab="object">
-        <label for="alignBasisSelect">Align base</label>
-        <select id="alignBasisSelect">
-          <option value="bbox">Selection Box</option>
-          <option value="first">First Selected</option>
-        </select>
         <button class="align-icon-btn" data-align="left" title="Align Left" aria-label="Align Left">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M2 2V14M4 5H12M4 9H10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
@@ -1340,7 +1335,6 @@
     const XLINK_NS = "http://www.w3.org/1999/xlink";
     const AUTOSAVE_KEY = "figureMaker_autosave_records";
     const AUTOSAVE_INTERVAL_KEY = "figureMaker_autosave_interval";
-    const ALIGN_BASIS_KEY = "figureMaker_align_basis";
     const PASTE_REPORT_KEY = "figureMaker_last_paste_report";
     const PASTE_REPORT_HISTORY_KEY = "figureMaker_paste_report_history";
     const LAST_ERROR_KEY = "figureMaker_last_error";
@@ -1660,7 +1654,6 @@
       liveAutosaveTimer: 0,
       contextGroupId: null,
       contextTargetId: null,
-      alignBasis: "bbox",
       isExportingPdf: false,
       isPasting: false,
       pasteLockAt: 0,
@@ -1857,7 +1850,6 @@
       const histTotal = Math.max(1, state.history.length);
       const autosaveSel = document.getElementById("autosaveSelect");
       const autosave = autosaveSel ? autosaveSel.value : "off";
-      const alignBase = state.alignBasis === "first" ? "first" : "bbox";
       const zoomPct = Math.round(state.viewScale * 100);
       
       const statusMsgEl = document.getElementById("statusMessage");
@@ -1865,7 +1857,7 @@
         if (compact) {
           statusMsgEl.textContent = `${state.statusMessage} | ${toolName} | sel:${selectedCount} | z:${zoomPct}% | h:${histPos}/${histTotal}`;
         } else {
-          statusMsgEl.textContent = `${state.statusMessage} | tool:${toolName} | sel:${selectedCount} | zoom:${zoomPct}% | hist:${histPos}/${histTotal} | autosave:${autosave} | align:${alignBase}`;
+          statusMsgEl.textContent = `${state.statusMessage} | tool:${toolName} | sel:${selectedCount} | zoom:${zoomPct}% | hist:${histPos}/${histTotal} | autosave:${autosave}`;
         }
       }
     }
@@ -4719,23 +4711,10 @@
       let baseMaxX = Math.max(...bounds.map((b) => b.x + b.width));
       let baseMinY = Math.min(...bounds.map((b) => b.y));
       let baseMaxY = Math.max(...bounds.map((b) => b.y + b.height));
-      let anchorEl = null;
-      if (state.alignBasis === "first") {
-        const firstId = state.selectedIds.find((id) => elements.some((el) => el.dataset.id === id));
-        anchorEl = firstId ? getById(firstId) : elements[0];
-        const anchorBox = anchorEl ? safeBBox(anchorEl) : null;
-        if (anchorBox) {
-          baseMinX = anchorBox.x;
-          baseMaxX = anchorBox.x + anchorBox.width;
-          baseMinY = anchorBox.y;
-          baseMaxY = anchorBox.y + anchorBox.height;
-        }
-      }
       const centerX = (baseMinX + baseMaxX) / 2;
       const centerY = (baseMinY + baseMaxY) / 2;
 
       elements.forEach((el) => {
-        if (state.alignBasis === "first" && anchorEl && el === anchorEl) return;
         const cur = safeBBox(el);
         if (!cur) return;
         const t = getTranslate(el);
@@ -4750,7 +4729,7 @@
         setTranslate(el, t.x + dx, t.y + dy);
       });
       applySelectionStyles();
-      pushHistory(`align-${mode}-${state.alignBasis}`);
+      pushHistory(`align-${mode}`);
     }
 
     function distributeSelected(axis) {
@@ -9200,12 +9179,6 @@
       document.querySelectorAll("[data-distribute]").forEach((btn) => {
         btn.addEventListener("click", () => distributeSelected(btn.dataset.distribute));
       });
-      document.getElementById("alignBasisSelect").addEventListener("change", (e) => {
-        const value = e.target.value === "first" ? "first" : "bbox";
-        state.alignBasis = value;
-        localStorage.setItem(ALIGN_BASIS_KEY, value);
-        setStatus(`Align base: ${value === "first" ? "first selected" : "selection box"}`);
-      });
       document.getElementById("matchArrowBtn").addEventListener("click", () => {
         matchSelectedLinesToArrow();
       });
@@ -10087,9 +10060,6 @@
       await migrateLegacyAutosaveStorage();
       const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
       document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";
-      const alignBasis = localStorage.getItem(ALIGN_BASIS_KEY);
-      state.alignBasis = alignBasis === "first" ? "first" : "bbox";
-      document.getElementById("alignBasisSelect").value = state.alignBasis;
       await refreshRestoreList();
       updateAutosaveTimer();
       ensureFigureTitle();
