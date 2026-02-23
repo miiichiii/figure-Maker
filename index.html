@@ -199,6 +199,28 @@
       height: 18px;
       display: block;
     }
+    .tool-palette-group {
+      padding-right: 10px;
+    }
+    .tool-palette {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(38px, 38px));
+      grid-auto-rows: 34px;
+      gap: 6px;
+      padding: 4px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    .tool-palette .tool-icon-btn {
+      width: 38px;
+      height: 34px;
+      padding: 4px;
+    }
+    .tool-palette .tool-icon-btn svg {
+      width: 19px;
+      height: 19px;
+    }
     .shape-icon-btn {
       width: 34px;
       height: 30px;
@@ -890,32 +912,34 @@
     </div>
     <div class="toolbar">
       <div class="toolbar-tabs" id="toolbarTabBar">
-        <button class="toolbar-tab-btn active" data-toolbar-tab-btn="tool" title="Tool tab (ダブルクリックでバーを隠す/戻す)">Tool</button>
-        <button class="toolbar-tab-btn" data-toolbar-tab-btn="object" title="Object tab (ダブルクリックでバーを隠す/戻す)">Object</button>
-        <button class="toolbar-tab-btn" data-toolbar-tab-btn="text" title="Text tab (ダブルクリックでバーを隠す/戻す)">Text</button>
+        <button class="toolbar-tab-btn active" data-toolbar-tab-btn="tool" title="Tool tab (Double-click to hide/show bars)">Tool</button>
+        <button class="toolbar-tab-btn" data-toolbar-tab-btn="object" title="Object tab (Double-click to hide/show bars)">Object</button>
+        <button class="toolbar-tab-btn" data-toolbar-tab-btn="text" title="Text tab (Double-click to hide/show bars)">Text</button>
       </div>
       <div class="toolbar-content">
-      <div class="group" data-toolbar-tab="all">
-        <button id="toolSelect" class="active tool-icon-btn" title="Select tool" aria-label="Select tool">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
-          </svg>
-          <span class="sr-only">Black Arrow</span>
-        </button>
-        <button id="toolDirect" class="tool-icon-btn" title="Direct select tool" aria-label="Direct select tool">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ff1493" stroke="#111827" stroke-width="1.3"></path>
-          </svg>
-          <span class="sr-only">White Arrow</span>
-        </button>
+      <div class="group tool-palette-group" data-toolbar-tab="all">
+        <div class="tool-palette" aria-label="Tool palette">
+          <button id="toolSelect" class="active tool-icon-btn" title="Select tool" aria-label="Select tool">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#111827" stroke="#ffffff" stroke-width="1"></path>
+            </svg>
+            <span class="sr-only">Black Arrow</span>
+          </button>
+          <button id="toolDirect" class="tool-icon-btn" title="Direct select tool" aria-label="Direct select tool">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z" fill="#ff1493" stroke="#111827" stroke-width="1.3"></path>
+            </svg>
+            <span class="sr-only">White Arrow</span>
+          </button>
+          <button id="toolHand" class="tool-icon-btn" title="Hand tool (H / hold Space)" aria-label="Hand tool (H / hold Space)">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M7 18 C5.5 18 4.4 16.9 4.3 15.4 L3.8 10.3 C3.7 9.4 4.4 8.6 5.3 8.6 C6.1 8.6 6.8 9.2 6.9 10 L7.2 12.5 V4.7 C7.2 3.8 7.9 3.1 8.8 3.1 C9.7 3.1 10.4 3.8 10.4 4.7 V10.4 H10.8 V3.9 C10.8 3 11.5 2.3 12.4 2.3 C13.3 2.3 14 3 14 3.9 V10.4 H14.4 V5 C14.4 4.1 15.1 3.4 16 3.4 C16.9 3.4 17.6 4.1 17.6 5 V12.2 C17.6 15.4 14.9 18 11.7 18 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span class="sr-only">Hand</span>
+          </button>
+        </div>
       </div>
       <div class="group" data-toolbar-tab="tool">
-        <button id="toolHand" class="tool-icon-btn" title="Hand tool (H / hold Space)" aria-label="Hand tool (H / hold Space)">
-          <svg viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M7 18 C5.5 18 4.4 16.9 4.3 15.4 L3.8 10.3 C3.7 9.4 4.4 8.6 5.3 8.6 C6.1 8.6 6.8 9.2 6.9 10 L7.2 12.5 V4.7 C7.2 3.8 7.9 3.1 8.8 3.1 C9.7 3.1 10.4 3.8 10.4 4.7 V10.4 H10.8 V3.9 C10.8 3 11.5 2.3 12.4 2.3 C13.3 2.3 14 3 14 3.9 V10.4 H14.4 V5 C14.4 4.1 15.1 3.4 16 3.4 C16.9 3.4 17.6 4.1 17.6 5 V12.2 C17.6 15.4 14.9 18 11.7 18 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-          <span class="sr-only">Hand</span>
-        </button>
         <button id="undoBtn" class="tool-icon-btn" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo (Ctrl/Cmd+Z)">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M7 5 L3 9 L7 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
