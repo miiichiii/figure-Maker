@@ -70,6 +70,7 @@
 - [done][P1-High] 画像トリミング機能を実装（選択画像の実トリム）
 - [done][P1-Med] キャンバスズームUIを実装（+/-、スライダー、Reset、ピンチ最大拡張）
 - [done][P1-High] 手のひらツールを実装（ボタン + Space一時パン）
+- [ ] [P1-High] 手のひらツール選択中にカーソルが手のひら表示にならない不具合を修正（`hand` 時は常に `grab`、ドラッグ中は `grabbing`）
 - [done][P1-High] 貼り付け直後の`sel:1`グループ選択で子要素が全点線になる視覚ノイズを修正（group子への選択クラス付与を廃止）
 - [done][P1-High] White Arrowで重なり図形下の文字を選びづらい問題を修正（クリック近傍text優先）
 - [done][P1-High] 選択枠座標のズレ修正（`getScreenCTM`→canvas逆変換でBBoxを同一座標系化）
