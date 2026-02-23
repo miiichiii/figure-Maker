@@ -248,6 +248,39 @@
       width: 16px;
       height: 16px;
     }
+    .tool-dropdown-panel {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 100%;
+      margin-left: 4px;
+      width: 120px;
+      background: rgba(246, 240, 227, 0.98);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(43, 42, 39, 0.15);
+      padding: 4px;
+      z-index: 70;
+      flex-wrap: wrap;
+      gap: 2px;
+    }
+    .tool-dropdown-panel.show {
+      display: flex;
+    }
+    .tool-dropdown-panel .align-icon-btn {
+      width: 26px;
+      height: 26px;
+      padding: 2px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--ink);
+      background: transparent;
+    }
+    .tool-dropdown-panel .align-icon-btn:hover {
+      background: rgba(0,0,0,0.05);
+      border-color: rgba(0,0,0,0.1);
+    }
+
     .shape-icon-btn {
       width: 34px;
       height: 30px;
@@ -1203,6 +1236,23 @@
             </svg>
             <span class="sr-only">Hand</span>
           </button>
+          <button id="toolAlignTrigger" class="tool-icon-btn" title="Align Tools" aria-label="Align Tools">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M2 3V13M5 5H13M5 8H11M5 11H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+        </div>
+        </div>
+        <div id="toolAlignMenu" class="tool-dropdown-panel">
+          <button class="align-icon-btn" data-align="left" title="Align Left"><svg viewBox="0 0 16 16"><path d="M2 2V14M4 5H12M4 9H10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="align-icon-btn" data-align="hcenter" title="Align Center"><svg viewBox="0 0 16 16"><path d="M8 2V14M2 5H14M4 9H12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="align-icon-btn" data-align="right" title="Align Right"><svg viewBox="0 0 16 16"><path d="M14 2V14M4 5H12M6 9H12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="align-icon-btn" data-align="top" title="Align Top"><svg viewBox="0 0 16 16"><path d="M2 2H14M4 4V12M9 4V10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="align-icon-btn" data-align="vcenter" title="Align Middle"><svg viewBox="0 0 16 16"><path d="M2 8H14M4 3V13M9 5V11" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="align-icon-btn" data-align="bottom" title="Align Bottom"><svg viewBox="0 0 16 16"><path d="M2 14H14M4 4V12M9 6V12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+          <button class="align-icon-btn" data-distribute="h" title="Distribute Horizontal"><svg viewBox="0 0 16 16"><path d="M2 2V14M14 2V14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><rect x="4.5" y="5" width="2" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9.5" y="5" width="2" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+          <button class="align-icon-btn" data-distribute="v" title="Distribute Vertical"><svg viewBox="0 0 16 16"><path d="M2 2H14M2 14H14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><rect x="5" y="4.5" width="6" height="2" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="5" y="9.5" width="6" height="2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
         </div>
       </div>
       <svg id="canvas" viewBox="0 0 8000 8000" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -4194,6 +4244,32 @@
       window.addEventListener("resize", () => {
         setFloatingToolPalettePosition(state.floatingToolPalette.x, state.floatingToolPalette.y, { save: false });
       });
+
+      const alignTrigger = document.getElementById("toolAlignTrigger");
+      const alignMenu = document.getElementById("toolAlignMenu");
+      if (alignTrigger && alignMenu) {
+        alignTrigger.addEventListener("click", (e) => {
+          e.stopPropagation();
+          alignMenu.classList.toggle("show");
+        });
+        document.addEventListener("pointerdown", (e) => {
+          if (!alignTrigger.contains(e.target) && !alignMenu.contains(e.target)) {
+            alignMenu.classList.remove("show");
+          }
+        });
+        alignMenu.querySelectorAll("[data-align]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            alignSelected(btn.dataset.align);
+            alignMenu.classList.remove("show");
+          });
+        });
+        alignMenu.querySelectorAll("[data-distribute]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            distributeSelected(btn.dataset.distribute);
+            alignMenu.classList.remove("show");
+          });
+        });
+      }
     }
 
     function syncZoomControls() {
