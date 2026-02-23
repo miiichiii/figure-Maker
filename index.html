@@ -730,6 +730,9 @@
     }
     
     /* Collapsed Toolbar State */
+    body.toolbar-collapsed .menu-bar {
+      display: none !important;
+    }
     body.toolbar-collapsed .toolbar-content {
       display: none !important;
     }
@@ -887,9 +890,9 @@
     </div>
     <div class="toolbar">
       <div class="toolbar-tabs" id="toolbarTabBar">
-        <button class="toolbar-tab-btn active" data-toolbar-tab-btn="tool">Tool</button>
-        <button class="toolbar-tab-btn" data-toolbar-tab-btn="object">Object</button>
-        <button class="toolbar-tab-btn" data-toolbar-tab-btn="text">Text</button>
+        <button class="toolbar-tab-btn active" data-toolbar-tab-btn="tool" title="Tool tab (ダブルクリックでバーを隠す/戻す)">Tool</button>
+        <button class="toolbar-tab-btn" data-toolbar-tab-btn="object" title="Object tab (ダブルクリックでバーを隠す/戻す)">Object</button>
+        <button class="toolbar-tab-btn" data-toolbar-tab-btn="text" title="Text tab (ダブルクリックでバーを隠す/戻す)">Text</button>
       </div>
       <div class="toolbar-content">
       <div class="group" data-toolbar-tab="all">
