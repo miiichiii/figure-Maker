@@ -80,6 +80,7 @@
   - 複数選択BBoxの resize/rotate 無効化
   - テキスト rotate 確定時の座標ジャンプ
   - `g` リサイズ時の子線分 `stroke-width` 肥大
+  - 選択/移動後に細線の `stroke-width` が実値へ焼き込まれて太くなる（drag finish bake由来）
   - mark サイズ/位置崩れ
   - text 編集不能
   - paste 経路の取りこぼし

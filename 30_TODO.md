@@ -157,6 +157,7 @@
 - [done][P1-High] 複数選択でBBoxのリサイズ/回転が効かない回帰を修正（multiハンドル分岐 + multi rotate）
 - [done][P1-High] 貼り付けグラフ線分のリサイズで線幅が異常肥大する回帰を修正（`g`リサイズ時のstroke補正）
 - [done][P1-High] テキスト回転確定時に座標が飛ぶ回帰を修正（選択中心アンカー正規化を廃止）
+- [done][P1-High] 細線オブジェクトを選択して移動しただけで `stroke-width` が太る回帰を修正（drag finishで非平行移動transformのBakeを抑制）
 - [done][P1-Low] Pointer Capture導入でドラッグ/リサイズの追従安定化
 - [done][P1-High] リサイズ中BBoxのliveBox表示でハンドル/枠の即時同期
 - [done][P1-High] Resize時BBox巨大化の根本修正（増分スケール化）+ 自動検証PASS

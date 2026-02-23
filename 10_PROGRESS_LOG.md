@@ -267,6 +267,14 @@
 - Open issues: 実ブラウザで貼り付けグラフの非等方リサイズ見え方を継続確認。
 - Next action: ユーザー操作で回帰テスト（multi resize/rotate、graph line resize、text rotate）。
 
+### Step 33 - Recurrence fix for stroke-width inflation on move
+- Date: 2026-02-23
+- Owner: Builder
+- Decisions: 非平行移動transformを持つ要素は、drag終了時にBakeすると線幅が実値化して太るためBake対象から除外する。
+- Changes: `finishDrag`で`scale/rotate/shear`を含む要素のBakeを抑制。`g`線幅補正の基準値は属性優先に調整。
+- Open issues: 既存外部SVGで極端なネスト変換がある場合の見え方は継続監視。
+- Next action: 実データで「選択→移動→線幅変化なし」を回帰確認。
+
 ### Step 32 - Builder implementation (requested bug fixes)
 - Date: 2026-02-18
 - Owner: Builder

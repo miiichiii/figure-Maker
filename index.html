@@ -8201,8 +8201,10 @@
         const stroke = String(node.getAttribute("stroke") || cs?.stroke || "").trim().toLowerCase();
         if (!stroke || stroke === "none" || stroke === "transparent" || /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(stroke)) return;
         const widthAttr = Number(node.getAttribute("stroke-width") || "");
-        const widthComputed = Number.parseFloat(cs?.strokeWidth || "");
-        const width = Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : widthComputed;
+        const widthInline = Number.parseFloat(node.style?.strokeWidth || "");
+        const width = Number.isFinite(widthAttr) && widthAttr > 0
+          ? widthAttr
+          : (Number.isFinite(widthInline) && widthInline > 0 ? widthInline : 1);
         if (!Number.isFinite(width) || width <= 0) return;
         snapshot.set(id, width);
       });
@@ -8916,9 +8918,18 @@
       clearSmartGuides();
       if (it.moved) {
         const movedTargets = getTopSelectedElements();
-        // Avoid re-baking standalone text on drag-finish:
-        // text normalization stores stable transform/font metrics, and extra bake can re-inflate size.
-        const bakeTargets = movedTargets.filter((el) => !(el instanceof SVGElement && el.tagName === "text"));
+        // Drag should preserve visual stroke width.
+        // If element already has non-translation transform (scale/rotate/shear),
+        // baking on drag can "materialize" scaled stroke and make lines look thicker.
+        const bakeTargets = movedTargets.filter((el) => {
+          if (!(el instanceof SVGElement)) return false;
+          if (el.tagName === "text") return false;
+          const raw = String(el.getAttribute("transform") || "").trim();
+          if (!raw) return true;
+          const m = matrixFromTransformString(raw);
+          const hasLinear = Math.abs(m.a - 1) > 1e-6 || Math.abs(m.b) > 1e-6 || Math.abs(m.c) > 1e-6 || Math.abs(m.d - 1) > 1e-6;
+          return !hasLinear;
+        });
         if (bakeTargets.length) bakeTransformsAfterInteraction(bakeTargets);
       }
       if (it.fromRightCopy) {
