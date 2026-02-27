@@ -1207,8 +1207,8 @@
       </div>
       </div>
     </div>
-    <input id="openFileInput" type="file" accept=".svg,image/svg+xml" hidden />
-    <input id="importFileInput" type="file" accept=".svg,image/svg+xml" hidden />
+    <input id="openFileInput" type="file" accept=".svg,.ai,image/svg+xml,application/postscript,application/pdf" hidden />
+    <input id="importFileInput" type="file" accept=".svg,.ai,image/svg+xml,application/postscript,application/pdf" hidden />
     <div class="canvas-wrap" tabindex="0">
       <div id="floatingToolPalette" class="floating-tool-palette" role="group" aria-label="Tool palette">
         <div id="floatingToolPaletteHeader" class="floating-tool-palette-header" title="Drag to move palette">Tools</div>
@@ -5944,8 +5944,12 @@
           const handles = await window.showOpenFilePicker({
             multiple: false,
             types: [{
-              description: "SVG file",
-              accept: { "image/svg+xml": [".svg"] }
+              description: "SVG/AI file",
+              accept: {
+                "image/svg+xml": [".svg"],
+                "application/postscript": [".ai"],
+                "application/pdf": [".ai", ".pdf"]
+              }
             }]
           });
           const handle = handles?.[0];
@@ -5954,8 +5958,7 @@
             return false;
           }
           const file = await handle.getFile();
-          const text = await file.text();
-          const loaded = loadSvgText(text, { fileHandle: handle });
+          const loaded = await handlePickedImportFile(file, { source: "open", fileHandle: handle });
           if (!loaded) state.fileHandle = null;
           return loaded;
         } catch (err) {
@@ -6409,6 +6412,108 @@
       const t = String(file.type || "").toLowerCase();
       if (t.startsWith("image/")) return true;
       return /\.(png|jpe?g|gif|webp|bmp|svg|tiff?)$/i.test(String(file.name || ""));
+    }
+
+    function isSvgFile(file) {
+      if (!file) return false;
+      const t = String(file.type || "").toLowerCase();
+      if (t === "image/svg+xml") return true;
+      return /\.svg$/i.test(String(file.name || ""));
+    }
+
+    function isAiFile(file) {
+      if (!file) return false;
+      const t = String(file.type || "").toLowerCase();
+      if (t === "application/postscript" || t === "application/pdf" || t === "application/illustrator") return true;
+      return /\.ai$/i.test(String(file.name || ""));
+    }
+
+    let pdfJsLoadPromise = null;
+    async function ensurePdfJsLib() {
+      if (window.pdfjsLib) return window.pdfjsLib;
+      if (!pdfJsLoadPromise) {
+        pdfJsLoadPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+          script.async = true;
+          script.onload = () => {
+            try {
+              if (!window.pdfjsLib) {
+                reject(new Error("pdf.js failed to initialize."));
+                return;
+              }
+              const workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+              if (window.pdfjsLib?.GlobalWorkerOptions) {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+              }
+              resolve(window.pdfjsLib);
+            } catch (err) {
+              reject(err);
+            }
+          };
+          script.onerror = () => reject(new Error("Failed to load pdf.js."));
+          document.head.appendChild(script);
+        });
+      }
+      return pdfJsLoadPromise;
+    }
+
+    async function aiFileToSvgText(file) {
+      const pdfjsLib = await ensurePdfJsLib();
+      const data = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data });
+      const pdf = await loadingTask.promise;
+      if (!pdf || pdf.numPages < 1) throw new Error("No pages found in AI/PDF document.");
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.0 });
+      const opList = await page.getOperatorList();
+      if (typeof pdfjsLib.SVGGraphics !== "function") {
+        throw new Error("pdf.js SVG renderer is unavailable.");
+      }
+      const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+      const svgEl = await svgGfx.getSVG(opList, viewport);
+      if (!(svgEl instanceof SVGElement)) throw new Error("Failed to convert AI page to SVG.");
+      if (!svgEl.getAttribute("xmlns")) svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      return new XMLSerializer().serializeToString(svgEl);
+    }
+
+    async function importAiFile(file, options = {}) {
+      try {
+        setStatus("Importing AI file...");
+        const svgText = await aiFileToSvgText(file);
+        const imported = importSvgTextFitted(svgText);
+        if (!imported.length) {
+          setStatus("AI import failed: generated SVG was empty or invalid.");
+          return [];
+        }
+        if (options.source === "open") state.fileHandle = options.fileHandle || null;
+        setStatus(`Imported AI file (${imported.length} object(s)).`);
+        return imported;
+      } catch (err) {
+        setStatus("This .ai file could not be read. Use AI files saved with PDF compatibility.");
+        captureError("import-ai-file", err, { userMessage: "AI import failed." });
+        return [];
+      }
+    }
+
+    async function handlePickedImportFile(file, options = {}) {
+      if (!file) return false;
+      if (isAiFile(file)) {
+        const imported = await importAiFile(file, options);
+        return imported.length > 0;
+      }
+      if (isSvgFile(file)) {
+        const text = await file.text();
+        if (options.source === "open") {
+          const loaded = loadSvgText(text, { fileHandle: options.fileHandle || null });
+          if (!loaded) setStatus("Invalid SVG file.");
+          return loaded;
+        }
+        const imported = importSvgTextFitted(text);
+        if (!imported.length) setStatus("Import failed: invalid SVG.");
+        return imported.length > 0;
+      }
+      throw new Error("Unsupported file type.");
     }
 
     function isTiffFile(file) {
@@ -9333,11 +9438,9 @@
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-          const text = await file.text();
-          const loaded = loadSvgText(text, { fileHandle: null });
-          if (!loaded) setStatus("Invalid SVG file.");
+          await handlePickedImportFile(file, { source: "open", fileHandle: null });
         } catch (err) {
-          setStatus("File read failed. Please select a valid SVG file.");
+          setStatus("Open failed. Please select a valid SVG/AI file.");
           captureError("open-file-read", err, { userMessage: "File read failed." });
         }
         fileInput.value = "";
@@ -9346,31 +9449,32 @@
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-          const text = await file.text();
-          const imported = importSvgTextFitted(text);
-          if (!imported.length) setStatus("Import failed: invalid SVG.");
+          await handlePickedImportFile(file, { source: "import" });
         } catch (err) {
-          setStatus("Import failed. Please select a valid SVG file.");
-          captureError("import-file-read", err, { userMessage: "SVG import failed." });
+          setStatus("Import failed. Please select a valid SVG/AI file.");
+          captureError("import-file-read", err, { userMessage: "SVG/AI import failed." });
         }
         importInput.value = "";
       });
 
-      const hasDroppedImage = (dt) => {
+      const hasDroppedImportFile = (dt) => {
         if (!dt) return false;
         const files = Array.from(dt.files || []);
-        if (files.some((f) => isImageFile(f))) return true;
+        if (files.some((f) => isImageFile(f) || isSvgFile(f) || isAiFile(f))) return true;
         const items = Array.from(dt.items || []);
-        return items.some((it) => String(it.type || "").toLowerCase().startsWith("image/"));
+        return items.some((it) => {
+          const t = String(it.type || "").toLowerCase();
+          return t.startsWith("image/") || t === "image/svg+xml" || t === "application/postscript" || t === "application/pdf";
+        });
       };
       const clearDragOver = () => canvasWrapEl.classList.remove("drag-over");
       canvasWrapEl.addEventListener("dragenter", (e) => {
-        if (!hasDroppedImage(e.dataTransfer)) return;
+        if (!hasDroppedImportFile(e.dataTransfer)) return;
         e.preventDefault();
         canvasWrapEl.classList.add("drag-over");
       });
       canvasWrapEl.addEventListener("dragover", (e) => {
-        if (!hasDroppedImage(e.dataTransfer)) return;
+        if (!hasDroppedImportFile(e.dataTransfer)) return;
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
         canvasWrapEl.classList.add("drag-over");
@@ -9384,29 +9488,51 @@
           setStatus("Import is already running.");
           return;
         }
-        const files = Array.from(e.dataTransfer?.files || []).filter((f) => isImageFile(f));
+        const files = Array.from(e.dataTransfer?.files || []).filter((f) => isImageFile(f) || isSvgFile(f) || isAiFile(f));
         if (!files.length) return;
         e.preventDefault();
         state.isPasting = true;
         state.pasteLockAt = Date.now();
-        setStatus("Importing images...");
+        setStatus("Importing dropped files...");
         const ids = [];
+        let importedSvgOrAi = 0;
         try {
           for (const file of files.slice(0, 20)) {
             try {
+              if (isAiFile(file)) {
+                const aiIds = await importAiFile(file, { source: "drop" });
+                if (aiIds.length) {
+                  ids.push(...aiIds);
+                  importedSvgOrAi += 1;
+                }
+                continue;
+              }
+              if (isSvgFile(file)) {
+                const text = await file.text();
+                const imported = importSvgTextFitted(text);
+                if (imported.length) {
+                  ids.push(...imported);
+                  importedSvgOrAi += 1;
+                }
+                continue;
+              }
               const id = await importImageFile(file, { select: false, skipHistory: true });
               if (id) ids.push(id);
             } catch (err) {
-              captureError("drop-image-import", err, { userMessage: "Dropped image import failed." });
+              captureError("drop-file-import", err, { userMessage: "Dropped file import failed." });
             }
           }
           if (!ids.length) {
-            setStatus("Drop import failed: no supported image files.");
+            setStatus("Drop import failed: no supported files imported.");
             return;
           }
-          setSelection(ids);
-          pushHistory("drop-image-import");
-          setStatus(`Imported ${ids.length} image file(s) by drag & drop.`);
+          if (!importedSvgOrAi) {
+            setSelection(ids);
+            pushHistory("drop-image-import");
+            setStatus(`Imported ${ids.length} image file(s) by drag & drop.`);
+          } else {
+            setStatus(`Imported ${files.length} dropped file(s).`);
+          }
         } catch (err) {
           console.error(err);
           setStatus("Import error occurred.");
