@@ -59,6 +59,12 @@ async function aiFileToSvgText(file) {
       
       const opList = await page.getOperatorList();
       const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+
+      // SVGGraphics 側の画像デコーダ（SMask/inline image）でクラッシュしないよう、
+      // 画像描画だけを無効化してベクター/テキスト描画を継続させる。
+      // 画像はこの後の appendIndividualImagesToSVG で個別抽出して追加する。
+      svgGfx.paintInlineImageXObject = function () {};
+      svgGfx.paintImageXObject = function () {};
       
       // 1. ベースとなるSVG（パスや図形のみ）を生成
       const svgEl = await svgGfx.getSVG(opList, viewport);
