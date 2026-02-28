@@ -4863,7 +4863,11 @@
       const selectedIds = selectedEls
         .map((el) => String(el.dataset.id || ""))
         .filter(Boolean);
-      setSelection(selectedIds);
+
+      // Selecting all children after ungroup can create huge multi-selection states
+      // (especially imported AI figures) and make subsequent picking feel broken.
+      // Keep selection lightweight by selecting only the first child.
+      setSelection(selectedIds.length ? [selectedIds[0]] : []);
       pushHistory("ungroup");
     }
 
