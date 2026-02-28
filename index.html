@@ -9684,14 +9684,7 @@
         const pt = getSvgPoint(e.clientX, e.clientY);
         const raw = closestEditableTarget(e.target);
         const stack = getEditableTargetsAtPoint(e.clientX, e.clientY);
-        let fallbackTarget = null;
-        if (!raw && !stack.length) {
-          fallbackTarget = findEditableTargetByBBoxPoint(pt, effectiveTool === "direct");
-          if (!fallbackTarget) {
-            fallbackTarget = findNearestEditableTargetByPoint(pt, effectiveTool === "direct", 18, false);
-          }
-        }
-        const hasCanvasHit = !!raw || stack.length > 0 || !!fallbackTarget;
+        const hasCanvasHit = !!raw || stack.length > 0;
         if (!hasCanvasHit && !e.shiftKey && computeRotateHoverReady(e.clientX, e.clientY, e.target)) {
           const selectedElements = getTopSelectedElements();
           const started = selectedElements.length > 1
@@ -9709,7 +9702,7 @@
           let target = null;
           if (effectiveTool === "direct") {
             // Direct Selection (White Arrow): Prioritize what's exactly under the cursor
-            const directRaw = pickDirectTargetFromStack(stack) || raw || fallbackTarget || null;
+            const directRaw = pickDirectTargetFromStack(stack) || raw || null;
             target = resolveDirectTextLikeTarget(directRaw);
 
             // Only if we didn't hit a specific shape/text, look for nearby small labels
@@ -9718,13 +9711,8 @@
               if (labelNear) target = resolveDirectTextLikeTarget(labelNear.el);
             }
           } else {
-            // Selection (Black Arrow): fallback to bbox target when pointer-events miss.
-            const baseTarget = raw || stack[0] || fallbackTarget || null;
-            if (fallbackTarget && (fallbackTarget.tagName === "image" || fallbackTarget.tagName === "text" || fallbackTarget.tagName === "tspan")) {
-              target = resolveDirectTextLikeTarget(fallbackTarget);
-            } else {
-              target = resolveTargetByTool(baseTarget);
-            }
+            // Selection (Black Arrow): Select the outermost group
+            target = resolveTargetByTool(raw || stack[0]);
           }
 
           if (!target || !target.dataset.id) return;
