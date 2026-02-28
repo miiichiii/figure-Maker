@@ -47,6 +47,15 @@ async function aiFileToSvgText(file) {
       const page = await pdf.getPage(1);
       const viewport = page.getViewport({ scale: 1.0 });
       const opList = await page.getOperatorList();
+      
+      // ==========================================
+      // === Diagnostic logs for image extraction ===
+      // ==========================================
+      console.log("① 全コマンド数:", opList.fnArray.length);
+      console.log("② 直接配置された画像数:", opList.fnArray.filter(fn => fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject).length);
+      console.log("③ カプセル化(FormXObject)数:", opList.fnArray.filter(fn => fn === pdfjsLib.OPS.paintFormXObject).length);
+      // ==========================================
+
       if (typeof pdfjsLib.SVGGraphics !== "function") {
         throw new Error("pdf.js SVG renderer is unavailable.");
       }
