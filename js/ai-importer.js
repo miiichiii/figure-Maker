@@ -69,7 +69,10 @@ async function aiFileToSvgText(file) {
       const svgEl = await svgGfx.getSVG(opList, viewport);
       if (!(svgEl instanceof SVGElement)) throw new Error("Failed to convert AI page to SVG.");
       if (!svgEl.getAttribute("xmlns")) svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      return new XMLSerializer().serializeToString(svgEl);
+      let svgString = new XMLSerializer().serializeToString(svgEl);
+      // Force all font-families to sans-serif to rescue standard English text from mojibake
+      svgString = svgString.replace(/font-family="[^"]*"/g, 'font-family="sans-serif, Arial"');
+      return svgString;
     }
 
 async function aiFileToRasterImage(file, options = {}) {
