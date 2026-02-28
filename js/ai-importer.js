@@ -60,17 +60,9 @@ async function aiFileToSvgText(file) {
       const opList = await page.getOperatorList();
       const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
       
-      // 画像のエラーでSVGGraphicsが死なないように空の処理でモック化（画像抽出は自前でやるため）
-      svgGfx.paintInlineImageXObject = function () {};
-      svgGfx.paintImageXObject = function () {};
-      
       // 1. ベースとなるSVG（パスや図形のみ）を生成
       const svgEl = await svgGfx.getSVG(opList, viewport);
       if (!(svgEl instanceof SVGElement)) throw new Error("Failed to convert AI page to SVG.");
-      
-      // 不要な文字化けテキストを非表示
-      const badTexts = svgEl.querySelectorAll('text, tspan');
-      badTexts.forEach(el => el.setAttribute('display', 'none'));
       
       // 2. 独立型・個別画像エクストラクター（SMask等で飛ばされた画像も無理やり引っこ抜く）
       const appendIndividualImagesToSVG = async function(pdfPage, targetSvg, viewport) {
@@ -88,6 +80,7 @@ async function aiFileToSvgText(file) {
           const fn = ops.fnArray[i];
           const args = ops.argsArray[i];
           
+          // --- 座標（Transform）のトラッキング ---
           if (fn === pdfjsLib.OPS.save) {
             transformStack.push([...currentTransform]);
           } else if (fn === pdfjsLib.OPS.restore) {
@@ -96,33 +89,40 @@ async function aiFileToSvgText(file) {
             }
           } else if (fn === pdfjsLib.OPS.transform) {
             currentTransform = pdfjsLib.Util.transform(currentTransform, args);
-          } else if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintInlineImageXObject) {
+          } 
+          // --- 画像描画コマンドの検知 ---
+          else if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintInlineImageXObject) {
             try {
               let imgData;
               if (fn === pdfjsLib.OPS.paintImageXObject) {
+                // IDから画像実体を取得
                 imgData = pdfPage.objs.get(args[0]);
               } else {
+                // インライン画像はそのままデータ
                 imgData = args[0];
               }
               
               if (!imgData || !imgData.width || !imgData.height) continue;
               
+              // 1. Canvasのサイズを画像に合わせる
               canvas.width = imgData.width;
               canvas.height = imgData.height;
               ctx.clearRect(0, 0, canvas.width, canvas.height);
               
+              // 2. 画像データのデコード (RGB -> RGBAの補正含む)
               if (imgData.bitmap) {
                 ctx.drawImage(imgData.bitmap, 0, 0);
               } else if (imgData.data) {
                 let rgbaData;
                 const expectedLen = imgData.width * imgData.height * 4;
                 if (imgData.data.length === imgData.width * imgData.height * 3) {
+                  // RGB(3チャンネル) を RGBA(4チャンネル) に変換
                   rgbaData = new Uint8ClampedArray(expectedLen);
                   for (let k = 0, j = 0; k < imgData.data.length; k += 3, j += 4) {
                     rgbaData[j] = imgData.data[k];
                     rgbaData[j+1] = imgData.data[k+1];
                     rgbaData[j+2] = imgData.data[k+2];
-                    rgbaData[j+3] = 255;
+                    rgbaData[j+3] = 255; // Alpha
                   }
                 } else if (imgData.data.length === expectedLen) {
                   rgbaData = new Uint8ClampedArray(imgData.data);
@@ -135,17 +135,25 @@ async function aiFileToSvgText(file) {
                 continue;
               }
               
+              // 3. 高解像度を維持したままBase64 PNG化
               const base64 = canvas.toDataURL('image/png');
+              
+              // 4. SVG用の <image> タグを生成
               const svgImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
               svgImg.setAttribute('href', base64);
+              // PDFの仕様上、配置領域は 1x1 にしてTransformで引き伸ばす
               svgImg.setAttribute('width', '1');
               svgImg.setAttribute('height', '1');
               svgImg.setAttribute('preserveAspectRatio', 'none');
               
-              const finalMatrix = window.pdfjsLib.Util.transform(viewport.transform, currentTransform);
+              // 5. 座標系の合成
+              // PDF内部のローカル座標(currentTransform) と 画面全体のスケール(viewport.transform) を掛け合わせる
+              const finalMatrix = pdfjsLib.Util.transform(viewport.transform, currentTransform);
+              // 画像の上下反転を補正するマトリックス
               const imageLocalMatrix = [1, 0, 0, -1, 0, 1];
-              const appliedMatrix = window.pdfjsLib.Util.transform(finalMatrix, imageLocalMatrix);
+              const appliedMatrix = pdfjsLib.Util.transform(finalMatrix, imageLocalMatrix);
               
+              // マトリックスを適用して配置
               svgImg.setAttribute('transform', `matrix(${appliedMatrix.join(' ')})`);
               
               imageLayer.appendChild(svgImg);
@@ -155,50 +163,18 @@ async function aiFileToSvgText(file) {
           }
         }
         
-        if (imageLayer.childNodes.length > 0) {
-          targetSvg.insertBefore(imageLayer, targetSvg.firstChild); // Put images behind vectors
+        // 抽出した画像群を、ベースのSVGの「一番下（最背面）」に挿入する
+        if (targetSvg.firstChild) {
+          targetSvg.insertBefore(imageLayer, targetSvg.firstChild);
+        } else {
+          targetSvg.appendChild(imageLayer);
         }
       };
       
       await appendIndividualImagesToSVG(page, svgEl, viewport);
       
-      // 3. 【レイヤー3：テキスト】 編集可能なSVGテキストのオーバーレイ
-      const textContent = await page.getTextContent();
-      const textLayerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      textLayerGroup.setAttribute('id', 'figure-text-layer');
-      
-      textContent.items.forEach(item => {
-        if (!item.str || item.str.trim() === '') return;
-        
-        // viewport.transform を渡すことで、Canvas画像とテキストの位置が完璧に一致します
-        const tx = window.pdfjsLib.Util.transform(viewport.transform, item.transform);
-        const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3]) || Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-        const angle = Math.atan2(tx[1], tx[0]) * (180 / Math.PI);
-        const scaleX = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-        const scaleRatio = scaleX / fontSize;
-        
-        const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textEl.textContent = item.str;
-        textEl.setAttribute('xml:space', 'preserve');
-        textEl.setAttribute('x', tx[4]);
-        textEl.setAttribute('y', tx[5]);
-        textEl.setAttribute('font-size', `${fontSize}px`);
-        textEl.setAttribute('font-family', 'Arial, Helvetica, sans-serif');
-        textEl.setAttribute('fill', '#000000'); 
-        textEl.setAttribute('dominant-baseline', 'alphabetic');
-        
-        if (Math.abs(angle) > 0.1 || Math.abs(scaleRatio - 1.0) > 0.05) {
-          textEl.setAttribute('transform', `translate(${tx[4]}, ${tx[5]}) rotate(${angle}) scale(${scaleRatio}, 1) translate(${-tx[4]}, ${-tx[5]})`);
-        }
-        textLayerGroup.appendChild(textEl);
-      });
-      
-      svgEl.appendChild(textLayerGroup);
-      
-      let svgString = new XMLSerializer().serializeToString(svgEl);
-      // Force all font-families to sans-serif to rescue standard English text from mojibake
-      svgString = svgString.replace(/font-family="[^"]*"/g, 'font-family="sans-serif, Arial"');
-      return svgString;
+      if (!svgEl.getAttribute("xmlns")) svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      return new XMLSerializer().serializeToString(svgEl);
     }
 
 async function aiFileToRasterImage(file, options = {}) {
