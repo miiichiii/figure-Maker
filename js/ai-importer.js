@@ -54,47 +54,71 @@ async function aiFileToSvgText(file) {
       const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
       
       // ==========================================
-      // Canvas(PNG)経由での画像レスキュー実装
+      // 修正版：Canvas(PNG)経由での画像レスキュー実装
       // ==========================================
-      svgGfx.paintInlineImageXObject = function (imgData) {
-        if (!imgData || !imgData.data) return;
+      const renderImageToSVG = function(imgData, currentGroup) {
+        if (!imgData || (!imgData.bitmap && !imgData.data) || !imgData.width || !imgData.height) return;
+        
         try {
-          // 1. HTML5 Canvas をメモリ上に作成（これが最強のPNGデコーダーです）
           const canvas = document.createElement('canvas');
           canvas.width = imgData.width;
           canvas.height = imgData.height;
           const ctx = canvas.getContext('2d');
           
-          // 2. 生のピクセルデータをCanvasに流し込む
-          const imageDataObj = new ImageData(
-            new Uint8ClampedArray(imgData.data),
-            imgData.width,
-            imgData.height
-          );
-          ctx.putImageData(imageDataObj, 0, 0);
+          if (imgData.bitmap) {
+            ctx.drawImage(imgData.bitmap, 0, 0);
+          } else if (imgData.data) {
+            const expectedLength = imgData.width * imgData.height * 4;
+            let rgbaData;
+            
+            if (imgData.data.length === imgData.width * imgData.height * 3) {
+              rgbaData = new Uint8ClampedArray(expectedLength);
+              for (let i = 0, j = 0; i < imgData.data.length; i += 3, j += 4) {
+                rgbaData[j] = imgData.data[i];
+                rgbaData[j + 1] = imgData.data[i + 1];
+                rgbaData[j + 2] = imgData.data[i + 2];
+                rgbaData[j + 3] = 255;
+              }
+            } else if (imgData.data.length === expectedLength) {
+              rgbaData = new Uint8ClampedArray(imgData.data);
+            } else {
+              console.warn("未対応のチャンネル数のため、画像の抽出をスキップします。");
+              return;
+            }
+            
+            const imageDataObj = new ImageData(rgbaData, imgData.width, imgData.height);
+            ctx.putImageData(imageDataObj, 0, 0);
+          }
           
-          // 3. 確実なBase64 PNGを生成
           const base64Png = canvas.toDataURL('image/png');
           
-          // 4. SVGの <image> 要素を生成
           const svgImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
           svgImg.setAttribute('href', base64Png);
-          svgImg.setAttribute('width', imgData.width);
-          svgImg.setAttribute('height', imgData.height);
+          svgImg.setAttribute('width', '1');
+          svgImg.setAttribute('height', '1');
           
-          // 5. pdf.js 内部の座標系（Transform）を適用して配置
-          // ※ 内部API（this.current）にアクセスして現在のSVGグループにぶら下げます
-          if (this.current && this.current.element) {
-            // SVGの仕様に合わせて画像を上下反転（PDFは左下が原点のため）
-            svgImg.setAttribute('transform', `scale(1, -1) translate(0, -${imgData.height})`);
-            this.current.element.appendChild(svgImg);
+          if (currentGroup && currentGroup.element) {
+            svgImg.setAttribute('transform', 'matrix(1 0 0 -1 0 1)');
+            currentGroup.element.appendChild(svgImg);
           }
         } catch (e) {
-          console.error("🚫 PNGレスキュー処理も失敗しました:", e);
+          console.error("🚫 PNGレスキュー処理に失敗しました:", e);
         }
       };
+
+      svgGfx.paintInlineImageXObject = function (imgData) {
+        renderImageToSVG(imgData, this.current);
+      };
       
-      svgGfx.paintImageXObject = svgGfx.paintInlineImageXObject; // Handle both types the same way
+      svgGfx.paintImageXObject = function (objId) {
+        // paintImageXObject receives an ID, not the data directly. We must resolve it.
+        const imgData = page.objs.get(objId);
+        if (imgData) {
+          renderImageToSVG(imgData, this.current);
+        } else {
+          console.warn("Could not resolve image object ID:", objId);
+        }
+      };
       // ==========================================
 
       const svgEl = await svgGfx.getSVG(opList, viewport);
