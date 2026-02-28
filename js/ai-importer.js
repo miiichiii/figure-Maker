@@ -138,12 +138,15 @@ async function aiFileToSvgText(file) {
               const base64 = canvas.toDataURL('image/png');
               const svgImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
               svgImg.setAttribute('href', base64);
-              svgImg.setAttribute('width', imgData.width);
-              svgImg.setAttribute('height', imgData.height);
+              svgImg.setAttribute('width', '1');
+              svgImg.setAttribute('height', '1');
+              svgImg.setAttribute('preserveAspectRatio', 'none');
               
-              // Apply PDF coordinate transform (Y-axis flip compensation)
-              const [a, b, c, d, e, f] = currentTransform;
-              svgImg.setAttribute('transform', `matrix(${a} ${b} ${c} ${d} ${e} ${f}) scale(1, -1) translate(0, -${imgData.height})`);
+              const finalMatrix = window.pdfjsLib.Util.transform(viewport.transform, currentTransform);
+              const imageLocalMatrix = [1, 0, 0, -1, 0, 1];
+              const appliedMatrix = window.pdfjsLib.Util.transform(finalMatrix, imageLocalMatrix);
+              
+              svgImg.setAttribute('transform', `matrix(${appliedMatrix.join(' ')})`);
               
               imageLayer.appendChild(svgImg);
             } catch (err) {
