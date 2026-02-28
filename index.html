@@ -2536,7 +2536,18 @@
     function resolveTargetByTool(raw) {
       if (!raw) return null;
       const tool = getEffectiveTool();
-      return (tool === "select" || tool === "hand") ? resolveOuterGroup(raw) : resolveDirectTextLikeTarget(raw);
+      if (tool === "select" || tool === "hand") {
+        if (raw instanceof SVGElement) {
+          if (raw.tagName === "image") return raw;
+          const img = raw.closest("image");
+          if (img instanceof SVGElement) return img;
+          if (isTextLikeElement(raw) || raw.tagName === "text" || raw.tagName === "tspan") {
+            return resolveDirectTextLikeTarget(raw);
+          }
+        }
+        return resolveOuterGroup(raw);
+      }
+      return resolveDirectTextLikeTarget(raw);
     }
 
     function isTextLikeElement(el) {
