@@ -4840,7 +4840,7 @@
         setStatus("Ungroup needs selected group.");
         return;
       }
-      const selected = [];
+      const selectedEls = [];
       groups.forEach((g) => {
         const parent = g.parentNode;
         const children = Array.from(g.childNodes);
@@ -4852,11 +4852,18 @@
           const preserve = child instanceof SVGElement ? (child.getScreenCTM ? child.getScreenCTM() : null) : null;
           parent.insertBefore(child, g);
           reparentChildPreserveWorldTransform(child, parent, preserve);
-          if (child instanceof SVGElement && child.dataset.id) selected.push(child.dataset.id);
+          if (child instanceof SVGElement) selectedEls.push(child);
         });
         g.remove();
       });
-      setSelection(selected);
+
+      // Ungroup後は data-id の重複/ポインター設定の取りこぼしが起きやすいので再正規化する
+      assignIds();
+
+      const selectedIds = selectedEls
+        .map((el) => String(el.dataset.id || ""))
+        .filter(Boolean);
+      setSelection(selectedIds);
       pushHistory("ungroup");
     }
 
