@@ -107,6 +107,14 @@ async function aiFileToSvgText(file) {
       };
 
       svgGfx.paintInlineImageXObject = function (imgData) {
+        // === ここにプローブを仕込む ===
+        console.log("🔥 フックが発火しました！ imgData:", imgData);
+        if (imgData) console.log("📦 データの種類:", imgData.data ? "生配列あり" : (imgData.bitmap ? "Bitmapあり" : "データ不明"));
+        // ============================
+        if (!imgData || (!imgData.bitmap && !imgData.data)) {
+          console.log("⚠️ データがないためスキップされました");
+          return;
+        }
         renderImageToSVG(imgData, this.current);
       };
       
