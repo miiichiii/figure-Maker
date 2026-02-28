@@ -110,13 +110,14 @@ async function aiFileToSvgText(file) {
         renderImageToSVG(imgData, this.current);
       };
       
+      // 2. 通常の画像XObject用のフック（引数はID文字列）
       svgGfx.paintImageXObject = function (objId) {
-        // paintImageXObject receives an ID, not the data directly. We must resolve it.
-        const imgData = page.objs.get(objId);
-        if (imgData) {
+        try {
+          // page.objs からIDをキーにして実際の画像データを取得する
+          const imgData = page.objs.get(objId);
           renderImageToSVG(imgData, this.current);
-        } else {
-          console.warn("Could not resolve image object ID:", objId);
+        } catch (e) {
+          console.error(`🚫 画像[${objId}]の取得エラー:`, e);
         }
       };
       // ==========================================
