@@ -132,6 +132,20 @@ async function aiFileToSvgText(file) {
       const badTexts = svgEl.querySelectorAll('text, tspan');
       badTexts.forEach(el => el.setAttribute('display', 'none'));
       
+      // -- FIX: STRIP CLIP-PATHS FROM IMAGES --
+      // Illustrator clipping masks often break in pdf.js, making images invisible.
+      // We force-remove clip-paths from groups containing images so they at least appear.
+      const imageElements = svgEl.querySelectorAll('image');
+      imageElements.forEach(img => {
+        let parent = img.parentElement;
+        while (parent && parent !== svgEl) {
+          if (parent.hasAttribute('clip-path')) {
+            parent.removeAttribute('clip-path');
+          }
+          parent = parent.parentElement;
+        }
+      });
+      
       // 2. Extract clean text using getTextContent
       const textContent = await page.getTextContent();
       const textLayerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
