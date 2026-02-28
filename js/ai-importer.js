@@ -47,40 +47,119 @@ async function aiFileToSvgText(file) {
       const page = await pdf.getPage(1);
       
       // ==========================================
-      // 【完全ハイブリッド・アーキテクチャへの移行】
-      // Canvas背景 ＋ SVGテキスト の2レイヤー構造
+      // 【部分ハイブリッド・アーキテクチャへの回帰】
+      // ベクター図形 ＋ 個別画像エクストラクター ＋ SVGテキスト
       // ==========================================
-      const scale = 2.0; // 高解像度担保のために2倍でレンダリング
+      const scale = 1.0;
       const viewport = page.getViewport({ scale });
       
-      // 【レイヤー1：背景】 Canvasによる完璧な画像・図形描画
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext('2d');
+      if (typeof pdfjsLib.SVGGraphics !== "function") {
+        throw new Error("pdf.js SVG renderer is unavailable.");
+      }
       
-      // page.render は SMask や画像を完璧に処理します
-      await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-      // 描画された完璧な結果をロスレスのBase64 PNGへ変換
-      const bgBase64 = canvas.toDataURL('image/png');
+      const opList = await page.getOperatorList();
+      const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
       
-      // 【レイヤー2：コンテナ】 ベースとなるSVG要素の作成
-      const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      // CSS等での表示用に本来のサイズを設定
-      svgEl.setAttribute('width', viewport.width / scale);
-      svgEl.setAttribute('height', viewport.height / scale);
-      // 内部座標は高解像度Canvasに合わせる
-      svgEl.setAttribute('viewBox', `0 0 ${viewport.width} ${viewport.height}`);
+      // 画像のエラーでSVGGraphicsが死なないように空の処理でモック化（画像抽出は自前でやるため）
+      svgGfx.paintInlineImageXObject = function () {};
+      svgGfx.paintImageXObject = function () {};
       
-      // 背景画像をSVGの最背面に配置
-      const bgImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-      bgImage.setAttribute('href', bgBase64);
-      bgImage.setAttribute('width', viewport.width);
-      bgImage.setAttribute('height', viewport.height);
-      svgEl.appendChild(bgImage);
+      // 1. ベースとなるSVG（パスや図形のみ）を生成
+      const svgEl = await svgGfx.getSVG(opList, viewport);
+      if (!(svgEl instanceof SVGElement)) throw new Error("Failed to convert AI page to SVG.");
       
-      // 【レイヤー3：テキスト】 編集可能なSVGテキストのオーバーレイ
+      // 不要な文字化けテキストを非表示
+      const badTexts = svgEl.querySelectorAll('text, tspan');
+      badTexts.forEach(el => el.setAttribute('display', 'none'));
+      
+      // 2. 独立型・個別画像エクストラクター（SMask等で飛ばされた画像も無理やり引っこ抜く）
+      const appendIndividualImagesToSVG = async function(pdfPage, targetSvg, viewport) {
+        const ops = await pdfPage.getOperatorList();
+        const transformStack = [];
+        let currentTransform = [1, 0, 0, 1, 0, 0];
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const imageLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        imageLayer.setAttribute('id', 'extracted-individual-images');
+        
+        for (let i = 0; i < ops.fnArray.length; i++) {
+          const fn = ops.fnArray[i];
+          const args = ops.argsArray[i];
+          
+          if (fn === pdfjsLib.OPS.save) {
+            transformStack.push([...currentTransform]);
+          } else if (fn === pdfjsLib.OPS.restore) {
+            if (transformStack.length > 0) {
+              currentTransform = transformStack.pop();
+            }
+          } else if (fn === pdfjsLib.OPS.transform) {
+            currentTransform = pdfjsLib.Util.transform(currentTransform, args);
+          } else if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintInlineImageXObject) {
+            try {
+              let imgData;
+              if (fn === pdfjsLib.OPS.paintImageXObject) {
+                imgData = pdfPage.objs.get(args[0]);
+              } else {
+                imgData = args[0];
+              }
+              
+              if (!imgData || !imgData.width || !imgData.height) continue;
+              
+              canvas.width = imgData.width;
+              canvas.height = imgData.height;
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              
+              if (imgData.bitmap) {
+                ctx.drawImage(imgData.bitmap, 0, 0);
+              } else if (imgData.data) {
+                let rgbaData;
+                const expectedLen = imgData.width * imgData.height * 4;
+                if (imgData.data.length === imgData.width * imgData.height * 3) {
+                  rgbaData = new Uint8ClampedArray(expectedLen);
+                  for (let k = 0, j = 0; k < imgData.data.length; k += 3, j += 4) {
+                    rgbaData[j] = imgData.data[k];
+                    rgbaData[j+1] = imgData.data[k+1];
+                    rgbaData[j+2] = imgData.data[k+2];
+                    rgbaData[j+3] = 255;
+                  }
+                } else if (imgData.data.length === expectedLen) {
+                  rgbaData = new Uint8ClampedArray(imgData.data);
+                } else {
+                  continue; // Cannot handle other formats directly here
+                }
+                const idata = new ImageData(rgbaData, imgData.width, imgData.height);
+                ctx.putImageData(idata, 0, 0);
+              } else {
+                continue;
+              }
+              
+              const base64 = canvas.toDataURL('image/png');
+              const svgImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+              svgImg.setAttribute('href', base64);
+              svgImg.setAttribute('width', imgData.width);
+              svgImg.setAttribute('height', imgData.height);
+              
+              // Apply PDF coordinate transform (Y-axis flip compensation)
+              const [a, b, c, d, e, f] = currentTransform;
+              svgImg.setAttribute('transform', `matrix(${a} ${b} ${c} ${d} ${e} ${f}) scale(1, -1) translate(0, -${imgData.height})`);
+              
+              imageLayer.appendChild(svgImg);
+            } catch (err) {
+              console.warn("Failed to extract individual image:", err);
+            }
+          }
+        }
+        
+        if (imageLayer.childNodes.length > 0) {
+          targetSvg.insertBefore(imageLayer, targetSvg.firstChild); // Put images behind vectors
+        }
+      };
+      
+      await appendIndividualImagesToSVG(page, svgEl, viewport);
+      
+      // 3. 【レイヤー3：テキスト】 編集可能なSVGテキストのオーバーレイ
       const textContent = await page.getTextContent();
       const textLayerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       textLayerGroup.setAttribute('id', 'figure-text-layer');
