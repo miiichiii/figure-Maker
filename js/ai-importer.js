@@ -221,11 +221,6 @@ async function importAiFile(file, options = {}) {
       try {
         const svgText = await aiFileToSvgText(file);
         
-        // --- Plan A: Warn user if un-outlined text is detected ---
-        if (svgText.includes("<text") || svgText.includes("<tspan") || svgText.includes("font-family")) {
-          alert("⚠️ AIファイル内にアウトライン化されていないテキストが含まれています。\n正しく表示されない（文字化けする）可能性があるため、Illustrator等で「テキストのアウトラインを作成」してから保存し直すことをお勧めします。");
-        }
-
         const imported = importSvgTextFitted(svgText);
         if (!imported.length) {
           setStatus("AI import failed: generated SVG was empty or invalid.");
@@ -238,8 +233,6 @@ async function importAiFile(file, options = {}) {
         try {
           setStatus("AI vector conversion failed. Trying image fallback...");
           const raster = await aiFileToRasterImage(file);
-          
-          alert("⚠️ ベクター形式としての読み込みに失敗したため、画像（ラスタ）として読み込みました。\nクリッピングマスクや複雑な画像が含まれている場合、PDF.jsの制限により変換に失敗することがあります。\nベクターとして読み込む場合は、Illustratorで画像を「埋め込み」または「ラスタライズ」して保存し直してください。");
           
           const fallbackId = importDataUrlAsImageFitted(raster.dataUrl, raster.width, raster.height, {
             select: true,
