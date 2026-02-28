@@ -47,95 +47,59 @@ async function aiFileToSvgText(file) {
       const page = await pdf.getPage(1);
       const viewport = page.getViewport({ scale: 1.0 });
       const opList = await page.getOperatorList();
-      
-      // ==========================================
-      // === Diagnostic logs for image extraction ===
-      // ==========================================
-      console.log("① 全コマンド数:", opList.fnArray.length);
-      console.log("② 直接配置された画像数:", opList.fnArray.filter(fn => fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject).length);
-      console.log("③ カプセル化(FormXObject)数:", opList.fnArray.filter(fn => fn === pdfjsLib.OPS.paintFormXObject).length);
-      // ==========================================
 
       if (typeof pdfjsLib.SVGGraphics !== "function") {
         throw new Error("pdf.js SVG renderer is unavailable.");
       }
       const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
       
-      // Patch instance to prevent subarray/image-decode errors from crashing the whole SVG conversion
-      const origInline = svgGfx.paintInlineImageXObject;
-      if (typeof origInline === "function") {
-        svgGfx.paintInlineImageXObject = function(...args) {
-          try { return origInline.apply(this, args); } catch (e) { console.warn("Ignored inline image error:", e); }
-        };
-      }
-      const origImage = svgGfx.paintImageXObject;
-      if (typeof origImage === "function") {
-        svgGfx.paintImageXObject = function(...args) {
-          try { return origImage.apply(this, args); } catch (e) { console.warn("Ignored image error:", e); }
-        };
-      }
+      // ==========================================
+      // Canvas(PNG)経由での画像レスキュー実装
+      // ==========================================
+      svgGfx.paintInlineImageXObject = function (imgData) {
+        if (!imgData || !imgData.data) return;
+        try {
+          // 1. HTML5 Canvas をメモリ上に作成（これが最強のPNGデコーダーです）
+          const canvas = document.createElement('canvas');
+          canvas.width = imgData.width;
+          canvas.height = imgData.height;
+          const ctx = canvas.getContext('2d');
+          
+          // 2. 生のピクセルデータをCanvasに流し込む
+          const imageDataObj = new ImageData(
+            new Uint8ClampedArray(imgData.data),
+            imgData.width,
+            imgData.height
+          );
+          ctx.putImageData(imageDataObj, 0, 0);
+          
+          // 3. 確実なBase64 PNGを生成
+          const base64Png = canvas.toDataURL('image/png');
+          
+          // 4. SVGの <image> 要素を生成
+          const svgImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+          svgImg.setAttribute('href', base64Png);
+          svgImg.setAttribute('width', imgData.width);
+          svgImg.setAttribute('height', imgData.height);
+          
+          // 5. pdf.js 内部の座標系（Transform）を適用して配置
+          // ※ 内部API（this.current）にアクセスして現在のSVGグループにぶら下げます
+          if (this.current && this.current.element) {
+            // SVGの仕様に合わせて画像を上下反転（PDFは左下が原点のため）
+            svgImg.setAttribute('transform', `scale(1, -1) translate(0, -${imgData.height})`);
+            this.current.element.appendChild(svgImg);
+          }
+        } catch (e) {
+          console.error("🚫 PNGレスキュー処理も失敗しました:", e);
+        }
+      };
+      
+      svgGfx.paintImageXObject = svgGfx.paintInlineImageXObject; // Handle both types the same way
+      // ==========================================
 
       const svgEl = await svgGfx.getSVG(opList, viewport);
       if (!(svgEl instanceof SVGElement)) throw new Error("Failed to convert AI page to SVG.");
       
-      // -- HYBRID IMAGE LAYER SYNTHESIS --
-      const imageLayerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      imageLayerGroup.setAttribute('id', 'figure-image-layer');
-      
-      // Create a temporary canvas for converting pdf.js imgData to Base64
-      const tempCanvas = document.createElement("canvas");
-      const tempCtx = tempCanvas.getContext("2d");
-
-      for (let i = 0; i < opList.fnArray.length; i++) {
-        const fn = opList.fnArray[i];
-        if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject) {
-          const imageName = opList.argsArray[i][0];
-          try {
-            const imgData = await page.objs.get(imageName);
-            if (imgData && imgData.data && imgData.width && imgData.height) {
-              tempCanvas.width = imgData.width;
-              tempCanvas.height = imgData.height;
-              
-              // Handle different imgData formats
-              if (imgData.kind === "Image") {
-                  // Some pdf.js versions return ImageData-like objects directly, but they might need clamped array casting
-                  const imageData = new ImageData(new Uint8ClampedArray(imgData.data), imgData.width, imgData.height);
-                  tempCtx.putImageData(imageData, 0, 0);
-              } else {
-                  // Fallback: draw raw pixels if possible, or skip if too complex to decode manually
-                  // Often pdfjsLib.SVGGraphics fails precisely here.
-                  // For a quick rescue, we'll rely on the try-catch to fail gracefully.
-                  const imageData = new ImageData(new Uint8ClampedArray(imgData.data), imgData.width, imgData.height);
-                  tempCtx.putImageData(imageData, 0, 0);
-              }
-              
-              const base64Image = tempCanvas.toDataURL("image/png");
-              
-              const svgImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-              svgImage.setAttribute('href', base64Image);
-              
-              // We need the transform matrix to place it correctly.
-              // This requires looking backward in the operator list for transform (OPS.transform)
-              // This is complex and fragile in raw pdf.js.
-              // For now, we will append it. If transform is lost, it will appear at 0,0.
-              // A better approach is to render the page to a canvas, then extract only the raster regions, 
-              // or let the raster-fallback catch it.
-              
-              svgImage.setAttribute('width', imgData.width);
-              svgImage.setAttribute('height', imgData.height);
-              imageLayerGroup.appendChild(svgImage);
-            }
-          } catch (e) {
-            console.warn("Manual image extraction failed:", e);
-          }
-        }
-      }
-      
-      if (imageLayerGroup.childNodes.length > 0) {
-        // Insert behind vector layers
-        svgEl.insertBefore(imageLayerGroup, svgEl.firstChild);
-      }
-
       // -- HYBRID TEXT LAYER SYNTHESIS --
       // 1. Hide the original corrupted text elements generated by SVGGraphics
       const badTexts = svgEl.querySelectorAll('text, tspan');
