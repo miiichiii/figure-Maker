@@ -6175,17 +6175,27 @@
       const availH = Math.max(24, dims.height - margin * 2);
       
       let initial = null;
+      // Prefer safeBBox first; wrapper.getBBox() may include oversized hidden PDF/AI artifacts.
       try {
-        initial = wrapper.getBBox();
-      } catch (_) {
         initial = safeBBox(wrapper);
+      } catch (_) {
+        initial = null;
+      }
+      if (!initial) {
+        try {
+          initial = wrapper.getBBox();
+        } catch (_) {
+          initial = null;
+        }
       }
 
       if (!initial || initial.width <= 0 || initial.height <= 0) return false;
-      let scale = Math.min(1, availW / initial.width, availH / initial.height);
+      let scale = Math.min(availW / initial.width, availH / initial.height);
       if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+      const maxScale = Math.max(1, Number(options.maxScale || 12));
+      if (scale > maxScale) scale = maxScale;
       
-      if (scale < 0.9999) {
+      if (Math.abs(scale - 1) > 1e-4) {
         const cx = initial.x + initial.width / 2;
         const cy = initial.y + initial.height / 2;
         wrapper.dataset.baseTransform = `translate(${Number(cx.toFixed(4))},${Number(cy.toFixed(4))}) scale(${Number(scale.toFixed(6))}) translate(${Number((-cx).toFixed(4))},${Number((-cy).toFixed(4))})`;
