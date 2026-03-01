@@ -1430,8 +1430,16 @@
       return imagePoolRev.get(id) || ref;
     }
 
-    function processMarkupForRefs(markup) {
+    function normalizeSvgNamespaceTagPrefixes(markup) {
       const text = String(markup || "");
+      if (!text.includes("svg:")) return text;
+      return text
+        .replace(/<(\/?)svg:/gi, "<$1")
+        .replace(/\sxmlns:svg=(['"])[^'"]*\1/gi, "");
+    }
+
+    function processMarkupForRefs(markup) {
+      const text = normalizeSvgNamespaceTagPrefixes(markup);
       if (!text.includes("data:image/")) return text;
       const hrefPattern = /\b(xlink:href|href)\s*=\s*(['"])(data:image\/[^'"]+)\2/gi;
       let changed = false;
@@ -1445,7 +1453,7 @@
     }
 
     function restoreMarkupFromRefs(markup) {
-      const text = String(markup || "");
+      const text = normalizeSvgNamespaceTagPrefixes(markup);
       if (!text.includes("img-ref:")) return text;
       const hrefPattern = /\b(xlink:href|href)\s*=\s*(['"])(img-ref:[A-Za-z0-9_-]+)\2/gi;
       let changed = false;
@@ -1493,7 +1501,8 @@
 
     function applySnapshotMarkup(markup, imageRefs = null) {
       hydrateImageRefs(imageRefs);
-      const resolved = restoreMarkupFromRefs(String(markup || ""));
+      const normalized = normalizeSvgNamespaceTagPrefixes(String(markup || ""));
+      const resolved = restoreMarkupFromRefs(normalized);
       canvas.innerHTML = resolved;
       ensureArtboardLayer();
       updateArtboardVisual();
