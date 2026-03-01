@@ -2752,7 +2752,6 @@
       const er = el.getBoundingClientRect();
       const cr = canvas.getBoundingClientRect();
       if (cr.width <= 0 || cr.height <= 0) return null;
-      if (er.width <= 0 && er.height <= 0) return null;
       const vb = parseViewBoxString(canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX, parseViewBoxString(DEFAULT_VIEWBOX));
       const sx = vb.width / cr.width;
       const sy = vb.height / cr.height;
