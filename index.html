@@ -2738,15 +2738,22 @@
       if (!(el instanceof SVGElement) || !el.isConnected || typeof el.getBoundingClientRect !== "function") return null;
       const er = el.getBoundingClientRect();
       const cr = canvas.getBoundingClientRect();
-      if (cr.width <= 0 || cr.height <= 0 || er.width <= 0 || er.height <= 0) return null;
+      if (cr.width <= 0 || cr.height <= 0) return null;
+      if (er.width <= 0 && er.height <= 0) return null;
       const vb = parseViewBoxString(canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX, parseViewBoxString(DEFAULT_VIEWBOX));
       const sx = vb.width / cr.width;
       const sy = vb.height / cr.height;
+      const minW = Math.max(1e-6, sx);
+      const minH = Math.max(1e-6, sy);
+      const width = er.width > 0 ? er.width * sx : minW;
+      const height = er.height > 0 ? er.height * sy : minH;
+      const x = vb.minX + (er.left - cr.left) * sx - (er.width > 0 ? 0 : width / 2);
+      const y = vb.minY + (er.top - cr.top) * sy - (er.height > 0 ? 0 : height / 2);
       return {
-        x: vb.minX + (er.left - cr.left) * sx,
-        y: vb.minY + (er.top - cr.top) * sy,
-        width: Math.max(1e-6, er.width * sx),
-        height: Math.max(1e-6, er.height * sy)
+        x,
+        y,
+        width,
+        height
       };
     }
 
@@ -2766,6 +2773,8 @@
           }
           if (union) return union;
           if (rendered) return rendered;
+          const renderedFallback = getCanvasBoxFromClientRect(el);
+          if (renderedFallback) return renderedFallback;
           // Imported PDF/AI may contain page-sized invisible paths under groups.
           // Native getBBox() includes those paths and inflates selection bounds.
           // For groups, only trust editable child boxes.
@@ -2812,7 +2821,12 @@
         if (rendered) return rendered;
         const b = el.getBBox();
         const t = getTranslate(el);
-        return { x: b.x + t.x, y: b.y + t.y, width: b.width, height: b.height };
+        return {
+          x: b.x + t.x,
+          y: b.y + t.y,
+          width: Math.max(1e-6, Number(b.width || 0)),
+          height: Math.max(1e-6, Number(b.height || 0))
+        };
       } catch (_) {
         try {
           const rendered = getCanvasBoxFromClientRect(el);
