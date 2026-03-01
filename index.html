@@ -4767,8 +4767,9 @@
 
     function pushHistory(reason, options = {}) {
       const skipAutosave = options.skipAutosave === true;
+      const force = options.force === true;
       const snap = getSnapshot(reason, { useRefs: true });
-      if (Number(snap.sizeBytes || 0) > MAX_HISTORY_SNAPSHOT_BYTES) {
+      if (Number(snap.sizeBytes || 0) > MAX_HISTORY_SNAPSHOT_BYTES && !force) {
         if (!skipAutosave) scheduleLiveAutosave(reason || "history-too-large");
         if (!state.historySizeWarned) {
           state.historySizeWarned = true;
@@ -4796,10 +4797,15 @@
           return;
         }
       }
+      if (force && state.history.length > 1) {
+        // For very large imports, keep one previous checkpoint so Undo remains available.
+        state.history = [state.history[state.history.length - 1]];
+      }
       state.history.push(snap);
       if (state.history.length > state.maxHistory) state.history.shift();
       let totalBytes = state.history.reduce((sum, s) => sum + Number(s?.sizeBytes || estimateSnapshotBytes(s)), 0);
       while (state.history.length > 1 && totalBytes > MAX_HISTORY_TOTAL_BYTES) {
+        if (force && state.history.length <= 2) break;
         const removed = state.history.shift();
         totalBytes -= Number(removed?.sizeBytes || estimateSnapshotBytes(removed));
       }
@@ -6221,13 +6227,13 @@
       return true;
     }
 
-    function importSvgTextFitted(svgText) {
+    function importSvgTextFitted(svgText, options = {}) {
       const importedIds = importSvgText(svgText, { push: false, setMessage: false, select: false, wrap: true, offsetX: 0, offsetY: 0 });
       if (!importedIds.length) return [];
       const wrapper = getById(importedIds[0]);
       if (wrapper instanceof SVGElement) fitImportedWrapperToCanvas(wrapper, { margin: 28 });
       setSelection(importedIds);
-      pushHistory("import-svg");
+      pushHistory("import-svg", { force: options.forceHistory === true });
       setStatus("SVG imported and fitted to canvas.");
       return importedIds;
     }

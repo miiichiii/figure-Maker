@@ -267,7 +267,7 @@ function importDataUrlAsImageFitted(dataUrl, nativeWidth, nativeHeight, options 
         offsetX: nudge.x + Number(options.offsetX || 0),
         offsetY: nudge.y + Number(options.offsetY || 0)
       });
-      if (options.skipHistory !== true && id) pushHistory(options.historyReason || "import-image");
+      if (options.skipHistory !== true && id) pushHistory(options.historyReason || "import-image", options.historyOptions || {});
       return id;
     }
 
@@ -276,7 +276,7 @@ async function importAiFile(file, options = {}) {
       try {
         const svgText = await aiFileToSvgText(file);
         
-        const imported = importSvgTextFitted(svgText);
+        const imported = importSvgTextFitted(svgText, { forceHistory: true });
         if (!imported.length) {
           setStatus("AI import failed: generated SVG was empty or invalid.");
           return [];
@@ -292,7 +292,8 @@ async function importAiFile(file, options = {}) {
           const fallbackId = importDataUrlAsImageFitted(raster.dataUrl, raster.width, raster.height, {
             select: true,
             usePasteNudge: false,
-            historyReason: options.source === "open" ? "open-ai-raster" : "import-image"
+            historyReason: options.source === "open" ? "open-ai-raster" : "import-image",
+            historyOptions: { force: true }
           });
           if (fallbackId) {
             if (options.source === "open") state.fileHandle = options.fileHandle || null;
