@@ -2708,106 +2708,165 @@
       return a.x <= b.x + b.width && a.x + a.width >= b.x && a.y <= b.y + b.height && a.y + a.height >= b.y;
     }
 
+    function intersectBoxes(a, b) {
+      if (!a || !b) return null;
+      const left = Math.max(Number(a.x || 0), Number(b.x || 0));
+      const top = Math.max(Number(a.y || 0), Number(b.y || 0));
+      const right = Math.min(Number(a.x || 0) + Math.max(0, Number(a.width || 0)), Number(b.x || 0) + Math.max(0, Number(b.width || 0)));
+      const bottom = Math.min(Number(a.y || 0) + Math.max(0, Number(a.height || 0)), Number(b.y || 0) + Math.max(0, Number(b.height || 0)));
+      if (right <= left || bottom <= top) return null;
+      return { x: left, y: top, width: right - left, height: bottom - top };
+    }
+
+    function hasClipOrMask(el) {
+      if (!(el instanceof SVGElement)) return false;
+      let cur = el;
+      while (cur instanceof SVGElement) {
+        const clipPath = String(cur.getAttribute("clip-path") || "").trim().toLowerCase();
+        const mask = String(cur.getAttribute("mask") || "").trim().toLowerCase();
+        if (clipPath && clipPath !== "none") return true;
+        if (mask && mask !== "none") return true;
+        if (cur === canvas) break;
+        const parent = cur.parentNode;
+        if (!(parent instanceof SVGElement)) break;
+        cur = parent;
+      }
+      return false;
+    }
+
+    function getCanvasBoxFromClientRect(el) {
+      if (!(el instanceof SVGElement) || !el.isConnected || typeof el.getBoundingClientRect !== "function") return null;
+      const er = el.getBoundingClientRect();
+      const cr = canvas.getBoundingClientRect();
+      if (cr.width <= 0 || cr.height <= 0 || er.width <= 0 || er.height <= 0) return null;
+      const vb = parseViewBoxString(canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX, parseViewBoxString(DEFAULT_VIEWBOX));
+      const sx = vb.width / cr.width;
+      const sy = vb.height / cr.height;
+      return {
+        x: vb.minX + (er.left - cr.left) * sx,
+        y: vb.minY + (er.top - cr.top) * sy,
+        width: Math.max(1e-6, er.width * sx),
+        height: Math.max(1e-6, er.height * sy)
+      };
+    }
+
     function safeBBox(el) {
       try {
         const tag = svgTagName(el);
         if (tag === "g") {
           const childBoxes = getGroupContentBoxes(el);
-          if (childBoxes.length) {
-            const minX = Math.min(...childBoxes.map((b) => b.x));
-            const minY = Math.min(...childBoxes.map((b) => b.y));
-            const maxX = Math.max(...childBoxes.map((b) => b.x + b.width));
-            const maxY = Math.max(...childBoxes.map((b) => b.y + b.height));
-            return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+          const union = childBoxes.length ? combineBoxes(childBoxes) : null;
+          const rendered = hasClipOrMask(el) ? getCanvasBoxFromClientRect(el) : null;
+          if (union && rendered) {
+            const clipped = intersectBoxes(union, rendered);
+            if (clipped) return clipped;
+            const unionArea = Math.max(1e-6, union.width * union.height);
+            const renderedArea = Math.max(1e-6, rendered.width * rendered.height);
+            return renderedArea <= unionArea ? rendered : union;
           }
+          if (union) return union;
+          if (rendered) return rendered;
           // Imported PDF/AI may contain page-sized invisible paths under groups.
           // Native getBBox() includes those paths and inflates selection bounds.
           // For groups, only trust editable child boxes.
           return null;
         }
-        const local = el.getBBox();
-        const elScreen = el.getScreenCTM ? el.getScreenCTM() : null;
-        const canvasScreen = canvas.getScreenCTM ? canvas.getScreenCTM() : null;
-        let invCanvas = null;
-        if (canvasScreen) {
-          try {
-            invCanvas = canvasScreen.inverse();
-          } catch (_) {
-            invCanvas = null;
+        if (!hasClipOrMask(el)) {
+          const local = el.getBBox();
+          const elScreen = el.getScreenCTM ? el.getScreenCTM() : null;
+          const canvasScreen = canvas.getScreenCTM ? canvas.getScreenCTM() : null;
+          let invCanvas = null;
+          if (canvasScreen) {
+            try {
+              invCanvas = canvasScreen.inverse();
+            } catch (_) {
+              invCanvas = null;
+            }
           }
-        }
-        if (elScreen && invCanvas) {
-          const corners = [
-            { x: local.x, y: local.y },
-            { x: local.x + local.width, y: local.y },
-            { x: local.x, y: local.y + local.height },
-            { x: local.x + local.width, y: local.y + local.height }
-          ];
-          const mapped = corners.map((c) => {
-            const p = canvas.createSVGPoint();
-            p.x = c.x;
-            p.y = c.y;
-            return p.matrixTransform(elScreen).matrixTransform(invCanvas);
-          });
-          const minX = Math.min(...mapped.map((p) => p.x));
-          const minY = Math.min(...mapped.map((p) => p.y));
-          const maxX = Math.max(...mapped.map((p) => p.x));
-          const maxY = Math.max(...mapped.map((p) => p.y));
-          return {
-            x: minX,
-            y: minY,
-            width: Math.max(1, maxX - minX),
-            height: Math.max(1, maxY - minY)
-          };
-        }
-        if (el.isConnected && typeof el.getBoundingClientRect === "function") {
-          const er = el.getBoundingClientRect();
-          const cr = canvas.getBoundingClientRect();
-          if (cr.width > 0 && cr.height > 0) {
-            const vb = (canvas.getAttribute("viewBox") || DEFAULT_VIEWBOX).split(/\s+/).map(Number);
-            const minX = Number.isFinite(vb[0]) ? vb[0] : 0;
-            const minY = Number.isFinite(vb[1]) ? vb[1] : 0;
-            const vw = vb[2] || 1200;
-            const vh = vb[3] || 700;
-            const sx = vw / cr.width;
-            const sy = vh / cr.height;
+          if (elScreen && invCanvas) {
+            const corners = [
+              { x: local.x, y: local.y },
+              { x: local.x + local.width, y: local.y },
+              { x: local.x, y: local.y + local.height },
+              { x: local.x + local.width, y: local.y + local.height }
+            ];
+            const mapped = corners.map((c) => {
+              const p = canvas.createSVGPoint();
+              p.x = c.x;
+              p.y = c.y;
+              return p.matrixTransform(elScreen).matrixTransform(invCanvas);
+            });
+            const minX = Math.min(...mapped.map((p) => p.x));
+            const minY = Math.min(...mapped.map((p) => p.y));
+            const maxX = Math.max(...mapped.map((p) => p.x));
+            const maxY = Math.max(...mapped.map((p) => p.y));
             return {
-              x: minX + (er.left - cr.left) * sx,
-              y: minY + (er.top - cr.top) * sy,
-              width: er.width * sx,
-              height: er.height * sy
+              x: minX,
+              y: minY,
+              width: Math.max(1, maxX - minX),
+              height: Math.max(1, maxY - minY)
             };
           }
         }
+        const rendered = getCanvasBoxFromClientRect(el);
+        if (rendered) return rendered;
         const b = el.getBBox();
         const t = getTranslate(el);
         return { x: b.x + t.x, y: b.y + t.y, width: b.width, height: b.height };
       } catch (_) {
+        try {
+          const rendered = getCanvasBoxFromClientRect(el);
+          if (rendered) return rendered;
+        } catch (__ignored) {
+          // fall through
+        }
         return null;
       }
     }
 
     function getGroupContentBoxes(groupEl) {
       if (!(groupEl instanceof SVGElement) || svgTagName(groupEl) !== "g") return [];
-      return Array.from(groupEl.children)
+      const entries = Array.from(groupEl.children)
         .filter((child) => (
           child instanceof SVGElement
           && !isGroupLabel(child)
           && !isHelperElement(child)
           && isEditableElement(child)
         ))
-        .map((child) => safeBBox(child))
-        .filter(Boolean);
+        .map((child) => ({ child, box: safeBBox(child) }))
+        .filter((b) => (
+          !!b?.box
+          && Number.isFinite(b.box.width)
+          && Number.isFinite(b.box.height)
+          && b.box.width > 0
+          && b.box.height > 0
+        ));
+      if (entries.length < 3) return entries.map((e) => e.box);
+      const areas = entries.map((e) => e.box.width * e.box.height).filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+      if (!areas.length) return entries.map((e) => e.box);
+      const median = areas[Math.floor(areas.length / 2)] || 0;
+      if (!(median > 0)) return entries.map((e) => e.box);
+      const filtered = entries.filter((e) => {
+        const area = Math.max(1e-6, e.box.width * e.box.height);
+        if (area <= median * 2.5) return true;
+        const child = e.child;
+        if (!(child instanceof SVGElement) || svgTagName(child) !== "g") return true;
+        if (String(child.id || "").trim()) return true;
+        if (child.children.length < 80) return true;
+        const hasClipDesc = !!child.querySelector("[clip-path],[mask]");
+        // AI/PDF imports often contain a huge raw-vector layer with many clipped descendants.
+        // Excluding this outlier keeps wrapper bbox close to the visible figure content.
+        if (hasClipDesc) return false;
+        return true;
+      });
+      if (filtered.length >= 2 && filtered.length < entries.length) return filtered.map((e) => e.box);
+      return entries.map((e) => e.box);
     }
 
     function getGroupContentBBox(groupEl) {
       const boxes = getGroupContentBoxes(groupEl);
       if (!boxes.length) return null;
-      const minX = Math.min(...boxes.map((b) => b.x));
-      const minY = Math.min(...boxes.map((b) => b.y));
-      const maxX = Math.max(...boxes.map((b) => b.x + b.width));
-      const maxY = Math.max(...boxes.map((b) => b.y + b.height));
-      return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+      return combineBoxes(boxes);
     }
 
     function applyMarkLabelCompensation(labelEl) {
@@ -5416,7 +5475,8 @@
     function bakeGeometryByMatrix(el, matrix) {
       if (!(el instanceof SVGElement)) return false;
       if (isIdentityTransformMatrix(matrix)) return true;
-      if (el.tagName === "line") {
+      const tag = svgTagName(el);
+      if (tag === "line") {
         const x1 = getAttrNumber(el, "x1");
         const y1 = getAttrNumber(el, "y1");
         const x2 = getAttrNumber(el, "x2");
@@ -5429,14 +5489,14 @@
         el.setAttribute("y2", toNumString(p2.y));
         return true;
       }
-      if (el.tagName === "polygon" || el.tagName === "polyline") {
+      if (tag === "polygon" || tag === "polyline") {
         const points = parseSvgPoints(el.getAttribute("points"));
         if (!points.length) return true;
         const mapped = points.map((p) => transformPointByMatrix(matrix, p.x, p.y));
         el.setAttribute("points", formatSvgPoints(mapped));
         return true;
       }
-      if (el.tagName === "path") {
+      if (tag === "path") {
         const d = String(el.getAttribute("d") || "");
         if (!d) return true;
         const mappedD = transformPathDataByMatrix(d, matrix);
@@ -5444,7 +5504,7 @@
         el.setAttribute("d", mappedD);
         return true;
       }
-      if (el.tagName === "rect" || el.tagName === "image" || el.tagName === "foreignObject" || el.tagName === "use") {
+      if (tag === "rect" || tag === "image" || tag === "foreignobject" || tag === "use") {
         if (!isAxisAlignedTransformMatrix(matrix)) return false;
         const x = getAttrNumber(el, "x", 0);
         const y = getAttrNumber(el, "y", 0);
@@ -5464,7 +5524,7 @@
         el.setAttribute("y", toNumString(minY));
         el.setAttribute("width", toNumString(Math.max(1e-6, maxX - minX)));
         el.setAttribute("height", toNumString(Math.max(1e-6, maxY - minY)));
-        if (el.tagName === "rect") {
+        if (tag === "rect") {
           const sx = Math.max(1e-6, transformScaleX(matrix));
           const sy = Math.max(1e-6, transformScaleY(matrix));
           const rx = getAttrNumber(el, "rx", NaN);
@@ -5474,7 +5534,7 @@
         }
         return true;
       }
-      if (el.tagName === "ellipse") {
+      if (tag === "ellipse") {
         if (!isAxisAlignedTransformMatrix(matrix)) return false;
         const cx = getAttrNumber(el, "cx");
         const cy = getAttrNumber(el, "cy");
@@ -5489,7 +5549,7 @@
         el.setAttribute("ry", toNumString(Math.max(0.5, ry * sy)));
         return true;
       }
-      if (el.tagName === "circle") {
+      if (tag === "circle") {
         if (!isAxisAlignedTransformMatrix(matrix)) return false;
         const cx = getAttrNumber(el, "cx");
         const cy = getAttrNumber(el, "cy");
@@ -5503,7 +5563,7 @@
         el.setAttribute("r", toNumString(nr));
         return true;
       }
-      if (el.tagName === "text") {
+      if (tag === "text") {
         const x = getAttrNumber(el, "x");
         const y = getAttrNumber(el, "y");
         const p = transformPointByMatrix(matrix, x, y);
@@ -5538,7 +5598,7 @@
       const ownRaw = String(el.getAttribute("transform") || "").trim();
       const ownMatrix = ownRaw ? matrixFromTransformString(ownRaw) : identityTransformMatrix();
       const combined = multiplyTransformMatrices(parentMatrix, ownMatrix);
-      if (el.tagName === "g") {
+      if (svgTagName(el) === "g") {
         // Shallow bake for groups:
         // keep internal structure untouched and freeze only the group-level matrix.
         setElementMatrixTransform(el, combined);
@@ -6547,7 +6607,7 @@
     function getSingleSelectedImageElement() {
       if (state.selectedIds.length !== 1) return null;
       const el = getById(state.selectedIds[0]);
-      if (!(el instanceof SVGElement) || el.tagName !== "image") return null;
+      if (!(el instanceof SVGElement) || svgTagName(el) !== "image") return null;
       return el;
     }
 
@@ -7064,7 +7124,7 @@
         return;
       }
       const imgEl = getById(cm.targetId);
-      if (!(imgEl instanceof SVGElement) || imgEl.tagName !== "image") {
+      if (!(imgEl instanceof SVGElement) || svgTagName(imgEl) !== "image") {
         cancelImageCropMode({ silent: true });
         setStatus("Crop target not found.");
         return;
@@ -7073,7 +7133,7 @@
       const yAttr = Number(imgEl.getAttribute("y") || 0);
       const wAttr = Number(imgEl.getAttribute("width") || 0);
       const hAttr = Number(imgEl.getAttribute("height") || 0);
-      if (wAttr < 2 || hAttr < 2) {
+      if (!Number.isFinite(wAttr) || !Number.isFinite(hAttr) || wAttr <= 0 || hAttr <= 0) {
         setStatus("Image size is invalid for crop.");
         return;
       }
@@ -7085,7 +7145,9 @@
       const bottomLocal = Math.max(yAttr, Math.min(yAttr + hAttr, Math.max(p1.y, p2.y)));
       const cropW = rightLocal - leftLocal;
       const cropH = bottomLocal - topLocal;
-      if (cropW < 2 || cropH < 2) {
+      const minLocalW = Math.max(1e-4, (2 / Math.max(1, Number(cm.imageBox?.width || 0))) * wAttr);
+      const minLocalH = Math.max(1e-4, (2 / Math.max(1, Number(cm.imageBox?.height || 0))) * hAttr);
+      if (cropW < minLocalW || cropH < minLocalH) {
         setStatus("Crop area too small.");
         return;
       }
@@ -7125,7 +7187,9 @@
           densityNote = `resolution increased to ${Math.max(1, Math.round(ratio * 100))}%`;
         }
         if (cropped.limitedByCanvas) densityNote += " (canvas limit applied)";
-        setStatus(`Image cropped: ${Math.round(cropW)}x${Math.round(cropH)} | data ${cropped.outputWidth}x${cropped.outputHeight} | ${densityNote}`);
+        const previewW = Math.max(1, Math.round(Number(cm.draftRect?.width || 0)));
+        const previewH = Math.max(1, Math.round(Number(cm.draftRect?.height || 0)));
+        setStatus(`Image cropped: ${previewW}x${previewH} | data ${cropped.outputWidth}x${cropped.outputHeight} | ${densityNote}`);
       } catch (err) {
         setStatus("Image crop failed.");
         captureError("image-crop", err, { userMessage: "Image crop failed." });
@@ -7138,13 +7202,13 @@
         return;
       }
       const imgEl = getById(state.selectedIds[0]);
-      if (!(imgEl instanceof SVGElement) || imgEl.tagName !== "image") {
+      if (!(imgEl instanceof SVGElement) || svgTagName(imgEl) !== "image") {
         setStatus("Crop requires one selected image.");
         return;
       }
       const width = Number(imgEl.getAttribute("width") || 0);
       const height = Number(imgEl.getAttribute("height") || 0);
-      if (!Number.isFinite(width) || !Number.isFinite(height) || width < 2 || height < 2) {
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
         setStatus("Image size is invalid for crop.");
         return;
       }
@@ -7195,7 +7259,7 @@
         fileToDataUrl(source).then((dataUrl) => {
           if (!id || !dataUrl) return;
           const el = getById(id);
-          if (el instanceof SVGElement && el.tagName === "image") {
+          if (el instanceof SVGElement && svgTagName(el) === "image") {
             el.setAttributeNS(XLINK_NS, "href", dataUrl);
             el.setAttribute("href", dataUrl);
           }
@@ -7206,7 +7270,7 @@
       getImageSize(displaySrc).then((size) => {
         if (id) {
           const el = getById(id);
-          if (el instanceof SVGElement && el.tagName === "image") {
+          if (el instanceof SVGElement && svgTagName(el) === "image") {
             const x = Number(el.getAttribute("x") || 0);
             const y = Number(el.getAttribute("y") || 0);
             const w = Number(el.getAttribute("width") || provisionalW);
@@ -8643,11 +8707,12 @@
     }
 
     function scaleSingleElement(el, oldBox, newBox, parentOffset = { x: 0, y: 0 }) {
-      if (el.tagName !== "line" && shouldUseTransformResize(el)) {
+      const tag = svgTagName(el);
+      if (tag !== "line" && shouldUseTransformResize(el)) {
         if (applyResizeByTransform(el, oldBox, newBox)) return;
       }
       const t = getTranslate(el);
-      if (el.tagName === "rect" || el.tagName === "image") {
+      if (tag === "rect" || tag === "image") {
         const x = Number(el.getAttribute("x") || 0) + t.x + parentOffset.x;
         const y = Number(el.getAttribute("y") || 0) + t.y + parentOffset.y;
         const x2 = x + Number(el.getAttribute("width") || 0);
@@ -8662,7 +8727,7 @@
         el.setAttribute("height", String(Math.max(1, ny2 - ny)));
         return;
       }
-      if (el.tagName === "ellipse") {
+      if (tag === "ellipse") {
         const cx = Number(el.getAttribute("cx") || 0) + t.x + parentOffset.x;
         const cy = Number(el.getAttribute("cy") || 0) + t.y + parentOffset.y;
         const rx = Number(el.getAttribute("rx") || 0);
@@ -8683,7 +8748,7 @@
         el.setAttribute("ry", String(Math.max(0.5, (ny2 - ny1) / 2)));
         return;
       }
-      if (el.tagName === "circle") {
+      if (tag === "circle") {
         const cx = Number(el.getAttribute("cx") || 0) + t.x + parentOffset.x;
         const cy = Number(el.getAttribute("cy") || 0) + t.y + parentOffset.y;
         const r = Number(el.getAttribute("r") || 0);
@@ -8703,7 +8768,7 @@
         el.setAttribute("r", String(nr));
         return;
       }
-      if (el.tagName === "line") {
+      if (tag === "line") {
         const x1 = Number(el.getAttribute("x1") || 0) + t.x + parentOffset.x;
         const y1 = Number(el.getAttribute("y1") || 0) + t.y + parentOffset.y;
         const x2 = Number(el.getAttribute("x2") || 0) + t.x + parentOffset.x;
@@ -8714,7 +8779,7 @@
         el.setAttribute("y2", String(mapY(y2, oldBox, newBox) - t.y - parentOffset.y));
         return;
       }
-      if (el.tagName === "polygon" || el.tagName === "polyline") {
+      if (tag === "polygon" || tag === "polyline") {
         const pts = String(el.getAttribute("points") || "").trim();
         if (!pts) return;
         const mapped = pts.split(/\s+/).map((pair) => {
@@ -8731,14 +8796,14 @@
         el.setAttribute("points", mapped.join(" "));
         return;
       }
-      if (el.tagName === "path") {
+      if (tag === "path") {
         const d = String(el.getAttribute("d") || "");
         if (!d) return;
         const mappedD = scalePathD(d, oldBox, newBox, { x: t.x + parentOffset.x, y: t.y + parentOffset.y });
         if (mappedD) el.setAttribute("d", mappedD);
         return;
       }
-      if (el.tagName === "text") {
+      if (tag === "text") {
         const x = Number(el.getAttribute("x") || 0) + t.x + parentOffset.x;
         const y = Number(el.getAttribute("y") || 0) + t.y + parentOffset.y;
         const sx = Math.max(newBox.width / Math.max(oldBox.width, 1e-6), 0.05);
@@ -8750,7 +8815,7 @@
         el.setAttribute("font-size", String(Math.max(6, fs * scale)));
         return;
       }
-      if (el.tagName === "g") {
+      if (tag === "g") {
         const nextOffset = { x: parentOffset.x + t.x, y: parentOffset.y + t.y };
         Array.from(el.children).forEach((child) => {
           if (!(child instanceof SVGElement)) return;
