@@ -42,6 +42,7 @@ function appendTextLayerToSvg(page, viewport, svgEl, pdfjsLib) {
       return page.getTextContent().then((textContent) => {
         const textLayerGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
         textLayerGroup.setAttribute("id", "figure-text-layer");
+        textLayerGroup.setAttribute("data-fm-ai-root-layer", "1");
         textContent.items.forEach((item) => {
           if (!item.str || item.str.trim() === "") return;
           const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
@@ -81,6 +82,7 @@ async function appendIndividualImagesToSvg(page, svgEl, viewport, pdfjsLib) {
       if (!ctx) return;
       const imageLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
       imageLayer.setAttribute("id", "extracted-individual-images");
+      imageLayer.setAttribute("data-fm-ai-root-layer", "1");
       for (let i = 0; i < ops.fnArray.length; i += 1) {
         const fn = ops.fnArray[i];
         const args = ops.argsArray[i];
@@ -144,6 +146,16 @@ async function appendIndividualImagesToSvg(page, svgEl, viewport, pdfjsLib) {
       if (imageLayer.childNodes.length > 0) svgEl.insertBefore(imageLayer, svgEl.firstChild);
     }
 
+function markAiRootGroups(svgEl) {
+      if (!(svgEl instanceof SVGElement)) return;
+      Array.from(svgEl.children).forEach((child) => {
+        if (!(child instanceof SVGElement)) return;
+        const tag = String(child.localName || child.tagName || "").toLowerCase().replace(/^svg:/, "");
+        if (tag !== "g") return;
+        child.setAttribute("data-fm-ai-root-layer", "1");
+      });
+    }
+
 async function aiFileToSvgTextStructured(file) {
       const pdfjsLib = await ensurePdfJsLib();
       const data = await file.arrayBuffer();
@@ -162,6 +174,7 @@ async function aiFileToSvgTextStructured(file) {
       svgEl.querySelectorAll("text, tspan").forEach((el) => el.setAttribute("display", "none"));
       await appendIndividualImagesToSvg(page, svgEl, viewport, pdfjsLib);
       await appendTextLayerToSvg(page, viewport, svgEl, pdfjsLib);
+      markAiRootGroups(svgEl);
       let svgString = new XMLSerializer().serializeToString(svgEl);
       svgString = svgString.replace(/font-family="[^"]*"/g, 'font-family="sans-serif, Arial"');
       return svgString;
@@ -194,6 +207,7 @@ async function aiFileToSvgTextHybrid(file) {
       bgImage.setAttribute("height", viewport.height);
       svgEl.appendChild(bgImage);
       await appendTextLayerToSvg(page, viewport, svgEl, pdfjsLib);
+      markAiRootGroups(svgEl);
       let svgString = new XMLSerializer().serializeToString(svgEl);
       svgString = svgString.replace(/font-family="[^"]*"/g, 'font-family="sans-serif, Arial"');
       return svgString;

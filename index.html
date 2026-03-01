@@ -1899,7 +1899,7 @@
     }
 
     function isMarkText(el) {
-      if (!(el instanceof SVGElement) || el.tagName !== "text") return false;
+      if (!(el instanceof SVGElement) || svgTagName(el) !== "text") return false;
       if (el.getAttribute("data-fm-mark") === "1") return true;
       return isGroupLabel(el);
     }
@@ -2010,6 +2010,11 @@
         return;
       }
       if (tag === "g") {
+        if (el.getAttribute("data-fm-ai-root-layer") === "1") {
+          el.setAttribute("pointer-events", "none");
+          el.style.setProperty("pointer-events", "none", "important");
+          return;
+        }
         el.setAttribute("pointer-events", "visiblePainted");
         el.style.setProperty("pointer-events", "visiblePainted", "important");
         return;
@@ -2086,7 +2091,10 @@
       if (display === "none" || visibility === "hidden") return false;
       const supported = ["rect", "line", "ellipse", "circle", "text", "path", "polygon", "polyline", "image", "g", "use", "foreignobject"];
       if (!supported.includes(tag)) return false;
-      if (tag === "g") return true;
+      if (tag === "g") {
+        if (el.getAttribute("data-fm-ai-root-layer") === "1") return false;
+        return true;
+      }
       if (tag === "image" || tag === "text" || tag === "use" || tag === "foreignobject") return true;
       const cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
       const fillRaw = String(el.getAttribute("fill") || cs?.fill || "").trim().toLowerCase();
@@ -2206,7 +2214,7 @@
 
       if (elements.length === 1) {
         elements.forEach((el) => {
-          if (el.tagName === "line") return;
+          if (svgTagName(el) === "line") return;
           const b = getSelectionRenderBox(el) || safeBBox(el);
           if (!b || b.width <= 0 || b.height <= 0) return;
           const rect = document.createElementNS(SVG_NS, "rect");
@@ -2225,7 +2233,7 @@
           const b = getSelectionRenderBox(el) || safeBBox(el);
           if (!b || b.width <= 0 || b.height <= 0) return;
           // Skip drawing box for line, just draw handles? No handles for multi-child.
-          if (el.tagName === "line") return; 
+          if (svgTagName(el) === "line") return; 
           
           const rect = document.createElementNS(SVG_NS, "rect");
           rect.setAttribute("class", "selection-outline");
@@ -2359,7 +2367,7 @@
 
     function getCustomResizeHandles(target) {
       if (!(target instanceof SVGElement)) return [];
-      if (target.tagName === "line") {
+      if (svgTagName(target) === "line") {
         const x1 = Number(target.getAttribute("x1") || 0);
         const y1 = Number(target.getAttribute("y1") || 0);
         const x2 = Number(target.getAttribute("x2") || 0);
@@ -2371,7 +2379,7 @@
           { name: "line-end", x: p2.x, y: p2.y }
         ];
       }
-      if (target.tagName === "polygon") {
+      if (svgTagName(target) === "polygon") {
         const pts = parseSvgPoints(target.getAttribute("points"));
         if (pts.length === 3) {
           return pts.map((p, idx) => {
@@ -2512,11 +2520,20 @@
       return null;
     }
 
+    function isAutoPickGroupContainer(el) {
+      if (!(el instanceof SVGElement)) return false;
+      if (svgTagName(el) !== "g") return false;
+      if (!el.dataset?.id) return false;
+      if (!isEditableElement(el)) return false;
+      if (el.getAttribute("data-fm-ai-root-layer") === "1") return false;
+      return el.getAttribute("data-fm-user-group") === "1" || el.getAttribute("data-fm-import-wrapper") === "1";
+    }
+
     function resolveOuterGroup(el) {
       let cur = el;
       let outer = null;
       while (cur && cur !== canvas) {
-        if (cur.tagName === "g") outer = cur;
+        if (isAutoPickGroupContainer(cur)) outer = cur;
         cur = cur.parentNode;
       }
       return outer || el;
@@ -2524,16 +2541,18 @@
 
     function resolveDirectTextLikeTarget(el) {
       if (!(el instanceof SVGElement)) return el;
-      if (el.tagName === "text") return el;
-      if (el.tagName === "tspan") {
+      const ownTag = svgTagName(el);
+      if (ownTag === "text") return el;
+      if (ownTag === "tspan") {
         const t = el.closest("text");
         if (t instanceof SVGElement) return t;
       }
       let cur = el;
       while (cur && cur !== canvas) {
         if (!(cur instanceof SVGElement)) break;
-        if (cur.tagName === "text") return cur;
-        if (cur.tagName === "tspan") {
+        const tag = svgTagName(cur);
+        if (tag === "text") return cur;
+        if (tag === "tspan") {
           const t = cur.closest("text");
           if (t instanceof SVGElement) return t;
         }
@@ -2550,7 +2569,8 @@
 
     function isTextLikeElement(el) {
       if (!(el instanceof SVGElement)) return false;
-      return el.tagName === "text" || el.tagName === "tspan" || el.tagName === "use" || el.tagName === "foreignObject";
+      const tag = svgTagName(el);
+      return tag === "text" || tag === "tspan" || tag === "use" || tag === "foreignobject";
     }
 
     function hasLabelHint(el, depth = 4) {
@@ -2690,9 +2710,9 @@
         normalized.push(n);
       });
       if (!normalized.length) return null;
-      const textFirst = normalized.find((el) => el.tagName === "text");
+      const textFirst = normalized.find((el) => svgTagName(el) === "text");
       if (textFirst) return textFirst;
-      const nonGroup = normalized.find((el) => el.tagName !== "g");
+      const nonGroup = normalized.find((el) => svgTagName(el) !== "g");
       return nonGroup || normalized[0];
     }
 
@@ -2720,17 +2740,10 @@
 
     function hasClipOrMask(el) {
       if (!(el instanceof SVGElement)) return false;
-      let cur = el;
-      while (cur instanceof SVGElement) {
-        const clipPath = String(cur.getAttribute("clip-path") || "").trim().toLowerCase();
-        const mask = String(cur.getAttribute("mask") || "").trim().toLowerCase();
-        if (clipPath && clipPath !== "none") return true;
-        if (mask && mask !== "none") return true;
-        if (cur === canvas) break;
-        const parent = cur.parentNode;
-        if (!(parent instanceof SVGElement)) break;
-        cur = parent;
-      }
+      const clipPath = String(el.getAttribute("clip-path") || "").trim().toLowerCase();
+      const mask = String(el.getAttribute("mask") || "").trim().toLowerCase();
+      if (clipPath && clipPath !== "none") return true;
+      if (mask && mask !== "none") return true;
       return false;
     }
 
@@ -2840,13 +2853,7 @@
 
     function getGroupContentBoxes(groupEl) {
       if (!(groupEl instanceof SVGElement) || svgTagName(groupEl) !== "g") return [];
-      const entries = Array.from(groupEl.children)
-        .filter((child) => (
-          child instanceof SVGElement
-          && !isGroupLabel(child)
-          && !isHelperElement(child)
-          && isEditableElement(child)
-        ))
+      const toEntries = (list) => (list || [])
         .map((child) => ({ child, box: safeBBox(child) }))
         .filter((b) => (
           !!b?.box
@@ -2855,6 +2862,27 @@
           && b.box.width > 0
           && b.box.height > 0
         ));
+      const children = Array.from(groupEl.children);
+      const primaryChildren = children
+        .filter((child) => (
+          child instanceof SVGElement
+          && !isGroupLabel(child)
+          && !isHelperElement(child)
+          && isEditableElement(child)
+        ));
+      let entries = toEntries(primaryChildren);
+      if (!entries.length) {
+        const fallbackChildren = children.filter((child) => (
+          child instanceof SVGElement
+          && !isGroupLabel(child)
+          && !isHelperElement(child)
+          && !child.closest("defs,clipPath,mask,marker,symbol,pattern,metadata")
+          && String(child.getAttribute("display") || "").trim().toLowerCase() !== "none"
+          && String(child.getAttribute("visibility") || "").trim().toLowerCase() !== "hidden"
+        ));
+        entries = toEntries(fallbackChildren);
+      }
+      if (!entries.length) return [];
       if (entries.length < 3) return entries.map((e) => e.box);
       const areas = entries.map((e) => e.box.width * e.box.height).filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
       if (!areas.length) return entries.map((e) => e.box);
@@ -2954,7 +2982,7 @@
     }
 
     function normalizeTextTransformNoDistortion(textEl, options = {}) {
-      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return false;
+      if (!(textEl instanceof SVGElement) || svgTagName(textEl) !== "text") return false;
       const parent = textEl.parentNode instanceof SVGElement ? textEl.parentNode : canvas;
       const parentLinear = getElementLinearMatrix(parent);
       const invParent = invertLinearMatrix(parentLinear);
@@ -3023,7 +3051,7 @@
       labels.forEach((label) => {
         label.removeAttribute("data-fm-group-label");
         label.classList.remove("fm-group-label");
-        if (label.tagName === "text" && !label.getAttribute("data-fm-mark")) label.setAttribute("data-fm-mark", "1");
+        if (svgTagName(label) === "text" && !label.getAttribute("data-fm-mark")) label.setAttribute("data-fm-mark", "1");
         if (label.dataset?.id) delete state.markLabelComp[label.dataset.id];
       });
     }
@@ -3127,7 +3155,7 @@
 
     function getStrokeWidthForControl(el) {
       if (!(el instanceof SVGElement)) return null;
-      const fallback = el.tagName === "line" ? 3 : 2;
+      const fallback = svgTagName(el) === "line" ? 3 : 2;
       const widthAttr = Number(el.getAttribute("stroke-width") || "");
       const widthInline = Number.parseFloat(el.style?.strokeWidth || "");
       const rawWidth = Number.isFinite(widthAttr) && widthAttr > 0
@@ -3141,7 +3169,7 @@
       const input = document.getElementById("lineStrokeWidthInput");
       if (!(input instanceof HTMLInputElement)) return;
       const targets = collectSelectedShapeElements().filter((el) =>
-        ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)
+        ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(svgTagName(el))
       );
       if (!targets.length) {
         input.disabled = true;
@@ -3181,17 +3209,18 @@
         return false;
       }
       const targets = collectSelectedShapeElements().filter((el) =>
-        ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)
+        ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(svgTagName(el))
       );
       if (!targets.length) {
         if (withStatus) setStatus("Select stroked object(s) first.");
         return false;
       }
       targets.forEach((el) => {
+        const tag = svgTagName(el);
         if (!el.getAttribute("stroke-width")) {
-          el.setAttribute("stroke-width", el.tagName === "line" ? "3" : "2");
+          el.setAttribute("stroke-width", tag === "line" ? "3" : "2");
         }
-        if (el.tagName === "line") {
+        if (tag === "line") {
           applyLineStyle(el, stroke);
           if (el.dataset.arrow === "1") applyArrowStyle(el);
         } else {
@@ -3309,7 +3338,7 @@
       const out = [];
       const seen = new Set();
       const push = (el) => {
-        if (!(el instanceof SVGElement) || el.tagName !== "line") return;
+        if (!(el instanceof SVGElement) || svgTagName(el) !== "line") return;
         ensureId(el);
         const id = el.dataset.id || "";
         if (!id || seen.has(id)) return;
@@ -3319,7 +3348,7 @@
       getTopSelectedElements().forEach((el) => {
         if (!(el instanceof SVGElement)) return;
         push(el);
-        if (el.tagName === "g") el.querySelectorAll("line").forEach((n) => push(n));
+        if (svgTagName(el) === "g") el.querySelectorAll("line").forEach((n) => push(n));
       });
       return out;
     }
@@ -3356,7 +3385,7 @@
       const seen = new Set();
       const push = (node) => {
         if (!(node instanceof SVGElement)) return;
-        if (node.tagName !== "text") return;
+        if (svgTagName(node) !== "text") return;
         if (!node.dataset.id) ensureId(node);
         const id = node.dataset.id || "";
         if (!id || seen.has(id)) return;
@@ -3367,7 +3396,7 @@
       getTopSelectedElements().forEach((el) => {
         if (!(el instanceof SVGElement)) return;
         push(el);
-        if (el.tagName === "g") {
+        if (svgTagName(el) === "g") {
           el.querySelectorAll("text").forEach((n) => push(n));
         }
       });
@@ -3476,7 +3505,7 @@
         // Limit precision to avoid messy floats
         const size = Number(rawSize.toFixed(4));
 
-        const directTspans = Array.from(el.children).filter((n) => n instanceof SVGElement && n.tagName === "tspan");
+        const directTspans = Array.from(el.children).filter((n) => n instanceof SVGElement && svgTagName(n) === "tspan");
         if (directTspans.length) {
           el.setAttribute("font-size", String(size));
           el.style.setProperty("font-size", `${size}px`);
@@ -3528,7 +3557,7 @@
       }
       let fixed = 0;
       targets.forEach((textEl) => {
-        if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return;
+        if (!(textEl instanceof SVGElement) || svgTagName(textEl) !== "text") return;
         const worldLinear = getElementLinearMatrix(textEl);
         const x = Number(textEl.getAttribute("x") || 0);
         const y = Number(textEl.getAttribute("y") || 0);
@@ -3584,7 +3613,7 @@
       };
       getTopSelectedElements().forEach((el) => {
         if (!(el instanceof SVGElement)) return;
-        if (el.tagName === "g") {
+        if (svgTagName(el) === "g") {
           el.querySelectorAll("rect,ellipse,circle,path,polygon,polyline,line").forEach((n) => push(n));
         } else {
           push(el);
@@ -3600,8 +3629,8 @@
       if (!(fillInput instanceof HTMLInputElement) || !(strokeInput instanceof HTMLInputElement)) return;
       const targets = collectSelectedShapeElements();
       if (!targets.length) return;
-      const fillEl = targets.find((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline"].includes(el.tagName)) || targets[0];
-      const strokeEl = targets.find((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(el.tagName)) || targets[0];
+      const fillEl = targets.find((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline"].includes(svgTagName(el))) || targets[0];
+      const strokeEl = targets.find((el) => ["rect", "ellipse", "circle", "path", "polygon", "polyline", "line"].includes(svgTagName(el))) || targets[0];
       fillInput.value = normalizeCssColorToHex(fillEl.getAttribute("fill"), "#dbeafe");
       strokeInput.value = normalizeCssColorToHex(strokeEl.getAttribute("stroke"), "#1e3a8a");
       if (strokeToggleEl instanceof HTMLInputElement) {
@@ -3795,7 +3824,7 @@
     }
 
     function extractTextRunsForEditing(textEl) {
-      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") {
+      if (!(textEl instanceof SVGElement) || svgTagName(textEl) !== "text") {
         return { text: "", runs: [] };
       }
       const chunks = [];
@@ -3817,7 +3846,7 @@
           pushChunk(node.textContent || "", textEl.getAttribute("data-fm-script"));
           return;
         }
-        if (node instanceof SVGElement && node.tagName === "tspan") {
+        if (node instanceof SVGElement && svgTagName(node) === "tspan") {
           pushChunk(node.textContent || "", node.getAttribute("baseline-shift") || node.getAttribute("data-fm-script"));
           return;
         }
@@ -3834,7 +3863,7 @@
     }
 
     function applyTextRunsToElement(textEl, text, runs, options = {}) {
-      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text") return;
+      if (!(textEl instanceof SVGElement) || svgTagName(textEl) !== "text") return;
       const rawText = String(text || "");
       const currentSizeAttr = Number(textEl.getAttribute("font-size") || "");
       const currentSizeCss = Number.parseFloat(window.getComputedStyle(textEl).fontSize || "");
@@ -3897,7 +3926,7 @@
       const targetMode = mode === "sub" ? "sub" : "super";
       if (state.textEdit) {
         const target = getById(state.textEdit.targetId || "");
-        if (!(target instanceof SVGElement) || target.tagName !== "text") {
+        if (!(target instanceof SVGElement) || svgTagName(target) !== "text") {
           setStatus("Text editing target not found.");
           return;
         }
@@ -4058,7 +4087,7 @@
       const select = options.select === true;
       const push = options.push === true;
       let title = canvas.querySelector('[data-fm-figure-title="1"], .fm-figure-title');
-      if (!(title instanceof SVGElement) || title.tagName !== "text") {
+      if (!(title instanceof SVGElement) || svgTagName(title) !== "text") {
         const dims = getCanvasDimensions();
         title = document.createElementNS(SVG_NS, "text");
         title.setAttribute("x", String(Number((dims.minX + 24).toFixed(2))));
@@ -4895,6 +4924,7 @@
         return;
       }
       const g = document.createElementNS(SVG_NS, "g");
+      g.setAttribute("data-fm-user-group", "1");
       ensureId(g);
       setTranslate(g, 0, 0);
       parent.insertBefore(g, elements[0]);
@@ -4927,7 +4957,7 @@
     }
 
     function ungroupSelected() {
-      const groups = getTopSelectedElements().filter((el) => el.tagName === "g");
+      const groups = getTopSelectedElements().filter((el) => svgTagName(el) === "g");
       if (!groups.length) {
         setStatus("Ungroup needs selected group.");
         return;
@@ -4956,10 +4986,26 @@
         .map((el) => String(el.dataset.id || ""))
         .filter(Boolean);
 
-      // Selecting all children after ungroup can create huge multi-selection states
-      // (especially imported AI figures) and make subsequent picking feel broken.
-      // Keep selection lightweight by selecting only the first child.
-      setSelection(selectedIds.length ? [selectedIds[0]] : []);
+      let nextSelectionId = "";
+      for (const id of selectedIds) {
+        const el = getById(id);
+        if (el instanceof SVGElement && isEditableElement(el)) {
+          nextSelectionId = id;
+          break;
+        }
+      }
+      if (!nextSelectionId) {
+        for (const el of selectedEls) {
+          if (!(el instanceof SVGElement)) continue;
+          const descendants = Array.from(el.querySelectorAll("[data-id]")).filter((n) => n instanceof SVGElement);
+          const editable = descendants.find((n) => n.dataset?.id && isEditableElement(n));
+          if (editable instanceof SVGElement && editable.dataset.id) {
+            nextSelectionId = editable.dataset.id;
+            break;
+          }
+        }
+      }
+      setSelection(nextSelectionId ? [nextSelectionId] : []);
       pushHistory("ungroup");
     }
 
@@ -5051,7 +5097,7 @@
     function resolvePasteParent(parentId) {
       if (!parentId) return canvas;
       const parent = getById(parentId);
-      if (parent instanceof SVGElement && (parent === canvas || parent.tagName === "g")) return parent;
+      if (parent instanceof SVGElement && (parent === canvas || svgTagName(parent) === "g")) return parent;
       return canvas;
     }
 
@@ -5137,7 +5183,7 @@
 
     function shouldUseTransformResize(el) {
       if (!(el instanceof SVGElement) || el === canvas) return false;
-      if (el.tagName === "g") return true;
+      if (svgTagName(el) === "g") return true;
       const base = String(el.dataset.baseTransform || "").trim();
       if (base) return true;
       const raw = String(el.getAttribute("transform") || "").trim();
@@ -5698,7 +5744,7 @@
       const withStatus = options.withStatus !== false;
       const size = getMarkFontSizeValue();
       const labels = Array.from(canvas.querySelectorAll('[data-fm-mark="1"], [data-fm-group-label="1"], .fm-group-label'))
-        .filter((n) => n instanceof SVGElement && n.tagName === "text");
+        .filter((n) => n instanceof SVGElement && svgTagName(n) === "text");
       labels.forEach((label) => {
         label.removeAttribute("data-fm-group-label");
         label.classList.remove("fm-group-label");
@@ -5717,7 +5763,7 @@
       const id = targetEl.dataset.id;
       const byLinked = canvas.querySelector(`:scope > text[data-fm-mark-target-id="${CSS.escape(id)}"]`);
       if (byLinked instanceof SVGElement) return byLinked;
-      if (targetEl.tagName === "g") {
+      if (svgTagName(targetEl) === "g") {
         const legacy = targetEl.querySelector(':scope > text[data-fm-mark-target-id], :scope > [data-fm-group-label="1"]');
         if (legacy instanceof SVGElement) return legacy;
       }
@@ -5872,7 +5918,7 @@
       state.contextGroupId = options.groupId || "";
       state.contextTargetId = options.targetId || "";
       const hasSelection = state.selectedIds.length > 0;
-      const hasGroupSelection = getTopSelectedElements().some((el) => el && el.tagName === "g");
+      const hasGroupSelection = getTopSelectedElements().some((el) => el && svgTagName(el) === "g");
       const singleSelectedImage = getSingleSelectedImageElement();
       const canRasterizeImage = !!singleSelectedImage;
       const contextNode = getById(state.contextTargetId || "");
@@ -7731,14 +7777,14 @@
     function closeInlineTextEditor(commit) {
       if (!state.textEdit) return;
       const target = getById(state.textEdit.targetId);
-      if (commit && target && target.tagName === "text") {
+      if (commit && target && svgTagName(target) === "text") {
         const text = String(textEditorInput.value || "");
         const runs = normalizeScriptRuns(text.length, state.textEdit.runs);
         applyTextRunsToElement(target, text, runs);
         setSelection([target.dataset.id]);
         pushHistory("edit-text");
         setStatus("Text updated.");
-      } else if (!commit && target && target.tagName === "text") {
+      } else if (!commit && target && svgTagName(target) === "text") {
         applyTextRunsToElement(target, state.textEdit.originalText || "", state.textEdit.originalRuns || []);
         requestSelectionVisualRefresh();
       }
@@ -7747,7 +7793,7 @@
     }
 
     function openInlineTextEditor(textEl) {
-      if (!(textEl instanceof SVGElement) || textEl.tagName !== "text" || !textEl.dataset.id) return;
+      if (!(textEl instanceof SVGElement) || svgTagName(textEl) !== "text" || !textEl.dataset.id) return;
       const box = textEl.getBoundingClientRect();
       const wrap = canvasWrapEl.getBoundingClientRect();
       const extracted = extractTextRunsForEditing(textEl);
@@ -7801,6 +7847,7 @@
         ensureTransformState(imported);
         if (wrap && !wrapper) {
           wrapper = document.createElementNS(SVG_NS, "g");
+          wrapper.setAttribute("data-fm-import-wrapper", "1");
           ensureId(wrapper);
           applyPointerEventPolicy(wrapper);
           setTranslate(wrapper, 0, 0);
@@ -8180,7 +8227,7 @@
           if (!(el instanceof SVGElement) || !isEditableElement(el)) return;
           if (isGroupLabel(el)) return;
           // In Direct Select mode, ignore group containers during marquee to select contents directly
-          if (effectiveTool === "direct" && el.tagName === "g") return;
+          if (effectiveTool === "direct" && svgTagName(el) === "g") return;
           const b = safeBBox(el);
           if (b && intersects(area, b)) hit.push(el.dataset.id);
         });
@@ -8415,7 +8462,7 @@
 
     function captureGroupStrokeSnapshot(groupEl) {
       const snapshot = new Map();
-      if (!(groupEl instanceof SVGElement) || groupEl.tagName !== "g") return snapshot;
+      if (!(groupEl instanceof SVGElement) || svgTagName(groupEl) !== "g") return snapshot;
       const targets = groupEl.querySelectorAll("line,path,polyline,polygon,rect,ellipse,circle");
       targets.forEach((node) => {
         if (!(node instanceof SVGElement)) return;
@@ -8467,7 +8514,7 @@
           id: el.dataset.id,
           baseBox: safeBBox(el),
           baseTransformRaw: String(el.getAttribute("transform") || "").trim(),
-          groupStrokeSnapshot: el.tagName === "g" ? captureGroupStrokeSnapshot(el) : null,
+          groupStrokeSnapshot: svgTagName(el) === "g" ? captureGroupStrokeSnapshot(el) : null,
           // For shapes we might need geometry snapshot if we use geometry resize, 
           // but scaleSingleElement reads current attrs. 
           // To support undo/redo properly during interaction, we rely on the fact 
@@ -8502,8 +8549,8 @@
       // ... (existing single logic) ...
       const aspect = b.height > 0 ? b.width / b.height : 1;
       const snapTargets = buildDragSnapTargets([targetEl]);
-      const groupLinearStart = targetEl.tagName === "g" ? getElementLinearMatrix(targetEl) : null;
-      const groupLabelCompensations = targetEl.tagName === "g"
+      const groupLinearStart = svgTagName(targetEl) === "g" ? getElementLinearMatrix(targetEl) : null;
+      const groupLabelCompensations = svgTagName(targetEl) === "g"
         ? Array.from(targetEl.querySelectorAll(':scope > [data-fm-group-label="1"]'))
           .filter((n) => n instanceof SVGElement && n.dataset?.id)
           .map((label) => {
@@ -8540,13 +8587,13 @@
         liveBox: b,
         snapTargets,
         groupLinearStart,
-        groupStrokeSnapshot: targetEl.tagName === "g" ? captureGroupStrokeSnapshot(targetEl) : null,
+        groupStrokeSnapshot: svgTagName(targetEl) === "g" ? captureGroupStrokeSnapshot(targetEl) : null,
         groupLabelCompensations,
         aspect,
         moved: false,
         pointerId: null
       };
-      if (targetEl.tagName === "line") {
+      if (svgTagName(targetEl) === "line") {
         const rawStroke = Number(targetEl.getAttribute("stroke-width") || "");
         if (Number.isFinite(rawStroke) && rawStroke > 0) {
           state.interaction.lineStrokeWidth = rawStroke;
@@ -8599,9 +8646,9 @@
           const targets = (Array.isArray(it.itemIds) ? it.itemIds : [])
             .map((id) => getById(id))
             .filter((el) => el instanceof SVGElement);
-          const textTargets = targets.filter((el) => el.tagName === "text");
+          const textTargets = targets.filter((el) => svgTagName(el) === "text");
           textTargets.forEach((textEl) => normalizeTextTransformNoDistortion(textEl));
-          const bakeTargets = targets.filter((el) => el.tagName !== "text");
+          const bakeTargets = targets.filter((el) => svgTagName(el) !== "text");
           if (bakeTargets.length) bakeTransformsAfterInteraction(bakeTargets);
           pushHistory("rotate");
           state.interaction = null;
@@ -8609,7 +8656,7 @@
         }
         const target = getById(it.targetId);
         if (target instanceof SVGElement) {
-          if (target.tagName === "text") {
+          if (svgTagName(target) === "text") {
             // Keep text rotation stable around its own anchor.
             // Using selection-center as anchor can cause position jumps on finalize.
             normalizeTextTransformNoDistortion(target);
@@ -9019,17 +9066,17 @@
           const target = getById(item.id);
           if (!(target instanceof SVGElement)) return;
           applyResizeByTransform(target, ob, it.liveBox, item.baseTransformRaw || "");
-          if (target.tagName === "g" && item.groupStrokeSnapshot instanceof Map) {
+          if (svgTagName(target) === "g" && item.groupStrokeSnapshot instanceof Map) {
             applyGroupStrokeCompensation(item.groupStrokeSnapshot, sx, sy);
           }
         });
       } else {
         applyResizeByTransform(el, ob, it.liveBox, it.baseTransformRaw || "");
       }
-      if (!isMulti && el.tagName === "g" && it.groupStrokeSnapshot instanceof Map) {
+      if (!isMulti && svgTagName(el) === "g" && it.groupStrokeSnapshot instanceof Map) {
         applyGroupStrokeCompensation(it.groupStrokeSnapshot, sx, sy);
       }
-      if (!isMulti && el.tagName === "g" && Array.isArray(it.groupLabelCompensations) && it.groupLabelCompensations.length) {
+      if (!isMulti && svgTagName(el) === "g" && Array.isArray(it.groupLabelCompensations) && it.groupLabelCompensations.length) {
         const startLinear = it.groupLinearStart || { a: 1, b: 0, c: 0, d: 1 };
         const currentLinear = getElementLinearMatrix(el);
         const invCurrent = invertLinearMatrix(currentLinear);
@@ -9075,11 +9122,11 @@
         } else {
           const target = getById(it.targetId);
           if (target instanceof SVGElement) {
-            if (target.tagName === "line" && Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
+            if (svgTagName(target) === "line" && Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
               target.setAttribute("stroke-width", String(Number(it.lineStrokeWidth.toFixed(4))));
             }
             bakeTransformsAfterInteraction([target]);
-            if (target.tagName === "line" && Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
+            if (svgTagName(target) === "line" && Number.isFinite(it.lineStrokeWidth) && it.lineStrokeWidth > 0) {
               target.setAttribute("stroke-width", String(Number(it.lineStrokeWidth.toFixed(4))));
             }
           }
@@ -9149,7 +9196,7 @@
         // baking on drag can "materialize" scaled stroke and make lines look thicker.
         const bakeTargets = movedTargets.filter((el) => {
           if (!(el instanceof SVGElement)) return false;
-          if (el.tagName === "text") return false;
+          if (svgTagName(el) === "text") return false;
           const raw = String(el.getAttribute("transform") || "").trim();
           if (!raw) return true;
           const m = matrixFromTransformString(raw);
@@ -9648,12 +9695,12 @@
         }
         let group = null;
         if (target) {
-          group = target.tagName === "g" ? target : resolveOuterGroup(target);
+          group = svgTagName(target) === "g" ? target : resolveOuterGroup(target);
         } else if (state.selectedIds.length === 1) {
           const selected = getById(state.selectedIds[0]);
-          if (selected) group = selected.tagName === "g" ? selected : resolveOuterGroup(selected);
+          if (selected) group = svgTagName(selected) === "g" ? selected : resolveOuterGroup(selected);
         }
-        const groupId = group && group.tagName === "g" ? group.dataset.id || "" : "";
+        const groupId = group && svgTagName(group) === "g" ? group.dataset.id || "" : "";
         openContextMenu(e.clientX, e.clientY, { groupId, targetId: target?.dataset?.id || "" });
       });
 
@@ -9815,7 +9862,7 @@
             target = resolveDirectTextLikeTarget(directRaw);
 
             // Only if we didn't hit a specific shape/text, look for nearby small labels
-            if (!target || target.tagName === "g") {
+            if (!target || svgTagName(target) === "g") {
               const labelNear = findNearestLabelLikeTargetByPoint(pt, 20); // Reduced radius from 44 to 20
               if (labelNear) target = resolveDirectTextLikeTarget(labelNear.el);
             }
@@ -9861,12 +9908,12 @@
         }
         if (!textEl) {
           const stack = getEditableTargetsAtPoint(e.clientX, e.clientY);
-          const t = stack.find((node) => node instanceof SVGElement && node.tagName === "text" && !isGroupLabel(node));
+          const t = stack.find((node) => node instanceof SVGElement && svgTagName(node) === "text" && !isGroupLabel(node));
           if (t instanceof SVGElement) textEl = t;
         }
         if (!textEl && state.selectedIds.length === 1) {
           const selected = getById(state.selectedIds[0]);
-          if (selected instanceof SVGElement && selected.tagName === "text" && !isGroupLabel(selected)) {
+          if (selected instanceof SVGElement && svgTagName(selected) === "text" && !isGroupLabel(selected)) {
             textEl = selected;
           }
         }
@@ -10123,7 +10170,7 @@
         if ((e.key === "Enter" || e.key === "F2") && !e.ctrlKey && !e.metaKey && !e.altKey) {
           if (state.selectedIds.length !== 1) return;
           const selected = getById(state.selectedIds[0]);
-          if (!(selected instanceof SVGElement) || selected.tagName !== "text" || isGroupLabel(selected)) return;
+          if (!(selected instanceof SVGElement) || svgTagName(selected) !== "text" || isGroupLabel(selected)) return;
           e.preventDefault();
           openInlineTextEditor(selected);
           return;
