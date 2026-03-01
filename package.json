@@ -1,0 +1,25 @@
+{
+  "name": "figure-maker",
+  "version": "1.0.0",
+  "description": "以下をそのまま埋めて送ってください。",
+  "main": "index.js",
+  "scripts": {
+    "verify:ai-import": "node scripts/verify-ai-import.cjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/miiichiii/figure-Maker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/miiichiii/figure-Maker/issues"
+  },
+  "homepage": "https://github.com/miiichiii/figure-Maker#readme",
+  "devDependencies": {
+    "playwright": "^1.58.2"
+  }
+}

@@ -2710,7 +2710,8 @@
 
     function safeBBox(el) {
       try {
-        if (el.tagName === "g") {
+        const tag = svgTagName(el);
+        if (tag === "g") {
           const childBoxes = getGroupContentBoxes(el);
           if (childBoxes.length) {
             const minX = Math.min(...childBoxes.map((b) => b.x));
@@ -2719,6 +2720,10 @@
             const maxY = Math.max(...childBoxes.map((b) => b.y + b.height));
             return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
           }
+          // Imported PDF/AI may contain page-sized invisible paths under groups.
+          // Native getBBox() includes those paths and inflates selection bounds.
+          // For groups, only trust editable child boxes.
+          return null;
         }
         const local = el.getBBox();
         const elScreen = el.getScreenCTM ? el.getScreenCTM() : null;
@@ -2783,9 +2788,14 @@
     }
 
     function getGroupContentBoxes(groupEl) {
-      if (!(groupEl instanceof SVGElement) || groupEl.tagName !== "g") return [];
+      if (!(groupEl instanceof SVGElement) || svgTagName(groupEl) !== "g") return [];
       return Array.from(groupEl.children)
-        .filter((child) => child instanceof SVGElement && !isGroupLabel(child) && !isHelperElement(child))
+        .filter((child) => (
+          child instanceof SVGElement
+          && !isGroupLabel(child)
+          && !isHelperElement(child)
+          && isEditableElement(child)
+        ))
         .map((child) => safeBBox(child))
         .filter(Boolean);
     }
@@ -2919,7 +2929,7 @@
 
     function getMarkTargetBox(targetEl) {
       if (!(targetEl instanceof SVGElement)) return null;
-      if (targetEl.tagName === "g") return getGroupContentBBox(targetEl) || safeBBox(targetEl);
+      if (svgTagName(targetEl) === "g") return getGroupContentBBox(targetEl) || safeBBox(targetEl);
       return safeBBox(targetEl);
     }
 

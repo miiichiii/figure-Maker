@@ -41,3 +41,9 @@
 - 詳細ログ: `index.html?debug=1`
 
 `debug=1` のとき、エラー出力に詳細フィールド（event history など）を含みます。
+
+## AI import 自動検証
+- 依存インストール: `npm install`
+- 指定AI 1件を検証:  
+  `npm run verify:ai-import -- --file "/absolute/path/to/file.ai"`
+- 結果JSON: `reports/ai-import-verify-YYYYMMDD-HHMMSS.json`
