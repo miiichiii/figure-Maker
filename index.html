@@ -1908,6 +1908,13 @@
       return !!el && el instanceof SVGElement && (el.getAttribute("data-fm-figure-title") === "1" || el.classList.contains("fm-figure-title"));
     }
 
+    function svgTagName(el) {
+      if (!(el instanceof SVGElement)) return "";
+      const local = String(el.localName || "").toLowerCase();
+      if (local) return local;
+      return String(el.tagName || "").toLowerCase().replace(/^svg:/, "");
+    }
+
     function ensureId(el) {
       if (!el || !(el instanceof SVGElement)) return;
       if (el === canvas) return;
@@ -1983,6 +1990,7 @@
 
     function applyPointerEventPolicy(el) {
       if (!(el instanceof SVGElement) || el === canvas) return;
+      const tag = svgTagName(el);
       try {
         el.removeAttribute("pointer-events");
         el.style.removeProperty("pointer-events");
@@ -1991,22 +1999,22 @@
       // (non-scaling-stroke caused zoom rendering artifacts)
       el.removeAttribute("vector-effect");
       el.style.removeProperty("vector-effect");
-      if (el.tagName === "line" || el.tagName === "polyline") {
+      if (tag === "line" || tag === "polyline") {
         el.setAttribute("pointer-events", "stroke");
         el.style.setProperty("pointer-events", "stroke", "important");
         return;
       }
-      if (el.tagName === "path" || el.tagName === "text" || el.tagName === "tspan" || el.tagName === "rect" || el.tagName === "ellipse" || el.tagName === "circle" || el.tagName === "polygon") {
+      if (tag === "path" || tag === "text" || tag === "tspan" || tag === "rect" || tag === "ellipse" || tag === "circle" || tag === "polygon") {
         el.setAttribute("pointer-events", "visiblePainted");
         el.style.setProperty("pointer-events", "visiblePainted", "important");
         return;
       }
-      if (el.tagName === "g") {
+      if (tag === "g") {
         el.setAttribute("pointer-events", "visiblePainted");
         el.style.setProperty("pointer-events", "visiblePainted", "important");
         return;
       }
-      if (el.tagName !== "g") {
+      if (tag !== "g") {
         el.setAttribute("pointer-events", "visiblePainted");
         el.style.setProperty("pointer-events", "visiblePainted", "important");
       }
@@ -2072,20 +2080,21 @@
       if (isHelperElement(el)) return false;
       if (isGroupLabel(el)) return true;
       if (el.closest("defs,clipPath,mask,marker,symbol,pattern,metadata")) return false;
+      const tag = svgTagName(el);
       const display = String(el.getAttribute("display") || "").trim().toLowerCase();
       const visibility = String(el.getAttribute("visibility") || "").trim().toLowerCase();
       if (display === "none" || visibility === "hidden") return false;
-      const supported = ["rect", "line", "ellipse", "circle", "text", "path", "polygon", "polyline", "image", "g", "use", "foreignObject"];
-      if (!supported.includes(el.tagName)) return false;
-      if (el.tagName === "g") return true;
-      if (el.tagName === "image" || el.tagName === "text" || el.tagName === "use" || el.tagName === "foreignObject") return true;
+      const supported = ["rect", "line", "ellipse", "circle", "text", "path", "polygon", "polyline", "image", "g", "use", "foreignobject"];
+      if (!supported.includes(tag)) return false;
+      if (tag === "g") return true;
+      if (tag === "image" || tag === "text" || tag === "use" || tag === "foreignobject") return true;
       const cs = window.getComputedStyle ? window.getComputedStyle(el) : null;
       const fillRaw = String(el.getAttribute("fill") || cs?.fill || "").trim().toLowerCase();
       const strokeRaw = String(el.getAttribute("stroke") || cs?.stroke || "").trim().toLowerCase();
       const transparentLike = (v) => v === "none" || v === "transparent" || /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(v);
       const hasFill = fillRaw ? !transparentLike(fillRaw) : true;
       const hasStroke = strokeRaw ? !transparentLike(strokeRaw) : false;
-      if (el.tagName === "line" || el.tagName === "polyline") return hasStroke;
+      if (tag === "line" || tag === "polyline") return hasStroke;
       return hasFill || hasStroke;
     }
 
