@@ -2179,6 +2179,24 @@
       });
     }
 
+    function normalizeSelectionRenderBox(box, displayScale = 1) {
+      if (!box || !Number.isFinite(box.x) || !Number.isFinite(box.y) || !Number.isFinite(box.width) || !Number.isFinite(box.height)) return null;
+      let width = Math.max(1e-6, Number(box.width || 0));
+      let height = Math.max(1e-6, Number(box.height || 0));
+      let x = Number(box.x || 0);
+      let y = Number(box.y || 0);
+      const minVisible = Math.max(2, 8 / Math.max(1e-6, Number(displayScale || 1)));
+      if (width < minVisible) {
+        x -= (minVisible - width) / 2;
+        width = minVisible;
+      }
+      if (height < minVisible) {
+        y -= (minVisible - height) / 2;
+        height = minVisible;
+      }
+      return { x, y, width, height };
+    }
+
     function renderSelectionOutlines() {
       canvas.querySelectorAll(".selection-outline,.selection-handle").forEach((el) => el.remove());
       const elements = getTopSelectedElements();
@@ -2213,28 +2231,26 @@
       }
 
       if (elements.length === 1) {
-        elements.forEach((el) => {
-          if (svgTagName(el) === "line") return;
-          const b = getSelectionRenderBox(el) || safeBBox(el);
-          if (!b || b.width <= 0 || b.height <= 0) return;
-          const rect = document.createElementNS(SVG_NS, "rect");
-          rect.setAttribute("class", "selection-outline");
-          rect.setAttribute("stroke-width", String(outlineStroke));
-          rect.setAttribute("x", String(b.x));
-          rect.setAttribute("y", String(b.y));
-          rect.setAttribute("width", String(b.width));
-          rect.setAttribute("height", String(b.height));
-          canvas.appendChild(rect);
-        });
-        renderResizeHandles(elements, displayScale);
+        const el = elements[0];
+        const raw = getSelectionRenderBox(el) || safeBBox(el) || getCanvasBoxFromClientRect(el);
+        const b = normalizeSelectionRenderBox(raw, displayScale);
+        if (!b || b.width <= 0 || b.height <= 0) return;
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("class", "selection-outline");
+        rect.setAttribute("stroke-width", String(outlineStroke));
+        rect.setAttribute("x", String(b.x));
+        rect.setAttribute("y", String(b.y));
+        rect.setAttribute("width", String(b.width));
+        rect.setAttribute("height", String(b.height));
+        canvas.appendChild(rect);
+        renderResizeHandles(elements, displayScale, b);
       } else {
         // Multi-selection: Draw individual faint outlines first
         elements.forEach((el) => {
-          const b = getSelectionRenderBox(el) || safeBBox(el);
+          const raw = getSelectionRenderBox(el) || safeBBox(el) || getCanvasBoxFromClientRect(el);
+          const b = normalizeSelectionRenderBox(raw, displayScale);
           if (!b || b.width <= 0 || b.height <= 0) return;
-          // Skip drawing box for line, just draw handles? No handles for multi-child.
-          if (svgTagName(el) === "line") return; 
-          
+
           const rect = document.createElementNS(SVG_NS, "rect");
           rect.setAttribute("class", "selection-outline");
           rect.setAttribute("stroke-width", String(outlineStroke * 0.8));
