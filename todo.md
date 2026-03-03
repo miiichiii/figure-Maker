@@ -16,3 +16,24 @@
 - [x] Step 7: デバッグ強化（console + blob診断）
   - `?debug=1` で paste payload の `type/size/magic` を `console.debug` 出力。
   - 壊れたラスタ payload は `Route: error` に落として診断情報を Paste Report に残す。
+
+## Text Font Dropdown TODO (2026-03-03)
+
+- [x] Step 1: 現状調査と仕様固定
+  - Text tab の既存UI/イベント/履歴処理を確認。
+  - 対象フォントを `Arial / Times New Roman / Symbol` に固定。
+  - 既存テキスト（他フォント混在）選択時はプルダウンを `mixed/other` 表示にして、ユーザーが明示選択した時だけ上書きする。
+- [x] Step 2: UI実装
+  - Text tab に `font` プルダウンを追加。
+  - `mixed/other` を壊さない表示状態（プレースホルダ項目）を追加。
+- [x] Step 3: ロジック実装
+  - 選択中テキストへのフォント適用関数を追加。
+  - `syncTextControlsFromSelection()` にフォント同期を追加。
+  - 履歴 (`pushHistory`) とステータスメッセージを既存パターンに合わせる。
+- [x] Step 4: 既存機能との整合確認
+  - `addText`, inline text edit, script(super/sub), copy/paste と矛盾しないことを確認。
+  - 図タイトル・Markラベル（対象外）が壊れないことを確認。
+- [x] Step 5: デバッグ/検証
+  - 構文チェック。
+  - 可能な範囲で自動デバッグ（Playwright）で操作確認。
+  - 差分レビューして完了記録。

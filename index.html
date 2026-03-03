@@ -1243,6 +1243,13 @@
         <button id="textItalicBtn" title="Italic"><em>I</em></button>
         <button id="textSuperBtn" title="Superscript">X<sup>2</sup></button>
         <button id="textSubBtn" title="Subscript">X<sub>2</sub></button>
+        <label for="textFontFamilySelect">Font</label>
+        <select id="textFontFamilySelect" style="width:160px">
+          <option value="">(Mixed / Other)</option>
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Symbol">Symbol</option>
+        </select>
         <label for="textFontSizeInput">Text size</label>
         <input id="textFontSizeInput" type="number" min="6" max="240" step="1" value="28" style="width:64px" />
         <button id="textResetScaleBtn" title="Normalize text shape (remove distortion, keep orientation)">Normalize Text</button>
@@ -1403,6 +1410,7 @@
     const MAX_HISTORY_ENTRIES_DEFAULT = 30;
     const MAX_HISTORY_SNAPSHOT_BYTES = 512 * 1024 * 1024; // Increased to 512MB for >100MB images
     const MAX_HISTORY_TOTAL_BYTES = 1024 * 1024 * 1024; // Increased to 1GB total
+    const FILE_AUTOSAVE_INTERVAL_MS = 60 * 1000;
     const DEFAULT_VIEWBOX = "0 0 794 1123";
     const WORKSPACE_SIZE = 8000;
     const WORKSPACE_VIEWBOX = `0 0 ${WORKSPACE_SIZE} ${WORKSPACE_SIZE}`;
@@ -1709,11 +1717,14 @@
       maxHistory: MAX_HISTORY_ENTRIES_DEFAULT,
       interaction: null,
       autosaveTimer: null,
+      autosaveCatchupTimer: null,
       fileAutosaveTimer: null,
+      fileAutosaveCatchupTimer: null,
       fileAutosaveRunning: false,
       fileAutosaveWarned: false,
       autosaveIntervalMs: 0,
       lastTimedAutosaveAt: 0,
+      lastFileAutosaveAt: 0,
       timedAutosaveRunning: false,
       liveAutosaveTimer: 0,
       contextGroupId: null,
@@ -3492,6 +3503,32 @@
       return Math.round(size);
     }
 
+    function normalizeTextFontFamilyChoice(raw) {
+      const rawText = String(raw || "").trim();
+      if (!rawText) return "";
+      const first = rawText.split(",")[0].trim().replace(/^['"]+|['"]+$/g, "").toLowerCase();
+      if (first === "arial") return "Arial";
+      if (first === "times new roman") return "Times New Roman";
+      if (first === "symbol") return "Symbol";
+      return "";
+    }
+
+    function getTextElementFontFamilyChoice(el) {
+      if (!(el instanceof SVGElement) || svgTagName(el) !== "text") return "";
+      const attrChoice = normalizeTextFontFamilyChoice(el.getAttribute("font-family"));
+      if (attrChoice) return attrChoice;
+      const styleChoice = normalizeTextFontFamilyChoice(el.style?.fontFamily || "");
+      if (styleChoice) return styleChoice;
+      const computedChoice = normalizeTextFontFamilyChoice(window.getComputedStyle(el).fontFamily || "");
+      return computedChoice;
+    }
+
+    function getSelectedTextFontFamilyChoice() {
+      const sel = document.getElementById("textFontFamilySelect");
+      if (!(sel instanceof HTMLSelectElement)) return "";
+      return normalizeTextFontFamilyChoice(sel.value || "");
+    }
+
     function normalizeTextScriptMode(raw) {
       const s = String(raw || "").trim().toLowerCase();
       if (s === "super" || s === "superscript") return "super";
@@ -3514,6 +3551,7 @@
 
     function syncTextControlsFromSelection() {
       const textSizeEl = document.getElementById("textFontSizeInput");
+      const textFontSel = document.getElementById("textFontFamilySelect");
       if (!(textSizeEl instanceof HTMLInputElement)) return;
       const texts = getNormalSelectedTextElements();
       if (!texts.length) {
@@ -3521,9 +3559,27 @@
         textSizeEl.value = "";
         textSizeEl.placeholder = "";
         textSizeEl.dataset.mixed = "0";
+        if (textFontSel instanceof HTMLSelectElement) {
+          textFontSel.disabled = true;
+          textFontSel.value = "";
+          textFontSel.dataset.mixed = "0";
+        }
         return;
       }
       textSizeEl.disabled = false;
+      if (textFontSel instanceof HTMLSelectElement) {
+        textFontSel.disabled = false;
+        const fonts = texts.map((el) => getTextElementFontFamilyChoice(el));
+        const firstFont = fonts[0] || "";
+        const mixedFont = fonts.some((font) => font !== firstFont);
+        if (mixedFont) {
+          textFontSel.value = "";
+          textFontSel.dataset.mixed = "1";
+        } else {
+          textFontSel.value = firstFont || "";
+          textFontSel.dataset.mixed = firstFont ? "0" : "1";
+        }
+      }
       const effectiveSizes = texts.map((el) => {
         const baseScript = Number(el.getAttribute("data-fm-script-base-size") || "");
         const attr = Number(el.getAttribute("font-size") || "");
@@ -3557,6 +3613,31 @@
       if (colorInput instanceof HTMLInputElement) {
         colorInput.value = normalizeCssColorToHex(texts[0].getAttribute("fill"), "#111827");
       }
+    }
+
+    function applyTextFontFamilyToSelection(options = {}) {
+      const push = options.push !== false;
+      const withStatus = options.withStatus !== false;
+      const fontFamily = getSelectedTextFontFamilyChoice();
+      if (!fontFamily) {
+        if (withStatus) setStatus("Choose a font from the Font dropdown.");
+        return false;
+      }
+      const targets = getNormalSelectedTextElements();
+      if (!targets.length) {
+        if (withStatus) setStatus("Select text object(s) to change font.");
+        return false;
+      }
+      targets.forEach((el) => {
+        el.setAttribute("font-family", fontFamily);
+        const tspans = Array.from(el.children).filter((n) => n instanceof SVGElement && svgTagName(n) === "tspan");
+        tspans.forEach((span) => span.setAttribute("font-family", fontFamily));
+      });
+      if (push) pushHistory("text-font-family");
+      requestSelectionVisualRefresh();
+      syncTextControlsFromSelection();
+      if (withStatus) setStatus(`Text font set: ${fontFamily}`);
+      return true;
     }
 
     function applyTextFontSizeToSelection(options = {}) {
@@ -6713,7 +6794,7 @@
       if (!state.fileHandle || !handleName.endsWith(".svg")) {
         if (!state.fileAutosaveWarned) {
           state.fileAutosaveWarned = true;
-          setStatus("Time Machine file save skipped: choose a target with Save As (.svg).");
+          setStatus("Autosave file save skipped: choose a target with Save As (.svg).");
         }
         return false;
       }
@@ -6751,7 +6832,6 @@
       state.timedAutosaveRunning = true;
       state.lastTimedAutosaveAt = now;
       try {
-        await saveTimeMachineSvgFile();
         await saveAutosave();
         return true;
       } finally {
@@ -6766,6 +6846,22 @@
       const now = Date.now();
       if (state.lastTimedAutosaveAt > 0 && now - state.lastTimedAutosaveAt < intervalMs) return false;
       return runTimedAutosaveTick(trigger, { force: true });
+    }
+
+    async function runFileAutosaveTick(trigger = "file-timer", options = {}) {
+      const force = options && options.force === true;
+      const intervalMs = FILE_AUTOSAVE_INTERVAL_MS;
+      const now = Date.now();
+      if (!force && state.lastFileAutosaveAt > 0 && now - state.lastFileAutosaveAt < Math.max(1000, intervalMs - 750)) return false;
+      state.lastFileAutosaveAt = now;
+      return saveTimeMachineSvgFile();
+    }
+
+    async function runFileAutosaveCatchup(trigger = "file-catchup") {
+      if (document.hidden) return false;
+      const now = Date.now();
+      if (state.lastFileAutosaveAt > 0 && now - state.lastFileAutosaveAt < FILE_AUTOSAVE_INTERVAL_MS) return false;
+      return runFileAutosaveTick(trigger, { force: true });
     }
 
     async function refreshRestoreList() {
@@ -6849,9 +6945,17 @@
         clearInterval(state.autosaveTimer);
         state.autosaveTimer = null;
       }
+      if (state.autosaveCatchupTimer) {
+        clearInterval(state.autosaveCatchupTimer);
+        state.autosaveCatchupTimer = null;
+      }
       if (state.fileAutosaveTimer) {
         clearInterval(state.fileAutosaveTimer);
         state.fileAutosaveTimer = null;
+      }
+      if (state.fileAutosaveCatchupTimer) {
+        clearInterval(state.fileAutosaveCatchupTimer);
+        state.fileAutosaveCatchupTimer = null;
       }
       state.fileAutosaveWarned = false;
       const sel = document.getElementById("autosaveSelect");
@@ -6859,13 +6963,16 @@
       localStorage.setItem(AUTOSAVE_INTERVAL_KEY, val);
       state.autosaveIntervalMs = val === "off" ? 0 : getTimedAutosaveIntervalMs();
       state.lastTimedAutosaveAt = Date.now();
+      state.lastFileAutosaveAt = Date.now();
       state.timedAutosaveRunning = false;
       if (state.autosaveIntervalMs > 0) {
         state.autosaveTimer = setInterval(() => { void runTimedAutosaveTick("timer"); }, state.autosaveIntervalMs);
-        state.fileAutosaveTimer = setInterval(() => { void runTimedAutosaveCatchup("timer-catchup"); }, Math.min(15000, state.autosaveIntervalMs));
+        state.autosaveCatchupTimer = setInterval(() => { void runTimedAutosaveCatchup("timer-catchup"); }, Math.min(15000, state.autosaveIntervalMs));
       }
-      if (val === "off") setStatus("Time Machine off. Live restore snapshot remains available.");
-      else setStatus(`Time Machine set: ${val} min (snapshot + SVG file auto-save).`);
+      state.fileAutosaveTimer = setInterval(() => { void runFileAutosaveTick("file-timer"); }, FILE_AUTOSAVE_INTERVAL_MS);
+      state.fileAutosaveCatchupTimer = setInterval(() => { void runFileAutosaveCatchup("file-timer-catchup"); }, Math.min(15000, FILE_AUTOSAVE_INTERVAL_MS));
+      if (val === "off") setStatus("Time Machine off. Autosave file save runs every 1 min.");
+      else setStatus(`Time Machine set: ${val} min. Autosave file save runs every 1 min.`);
     }
 
     function consumePasteNudgeStep() {
@@ -8378,6 +8485,8 @@
       const effectiveScale = getElementEffectiveScale(textEl);
       const zoom = state.viewScale || 1;
       const visualSize = rawSize * effectiveScale * zoom;
+      const fontFamily = textEl.getAttribute("font-family") || window.getComputedStyle(textEl).fontFamily || "Arial";
+      textEditorInput.style.fontFamily = fontFamily;
       textEditorInput.style.fontSize = `${Math.max(10, Math.round(visualSize))}px`;
       
       textEditorInput.style.display = "block";
@@ -10091,6 +10200,12 @@
       document.getElementById("markFontSizeInput").addEventListener("input", () => {
         applyGlobalMarkFontSize({ push: false, withStatus: false });
       });
+      const textFontFamilySelect = document.getElementById("textFontFamilySelect");
+      if (textFontFamilySelect instanceof HTMLSelectElement) {
+        textFontFamilySelect.addEventListener("change", () => {
+          applyTextFontFamilyToSelection({ push: true, withStatus: true });
+        });
+      }
       const textFontSizeInput = document.getElementById("textFontSizeInput");
       textFontSizeInput.addEventListener("focus", () => {
         state.textSizeInputSelectionSig = getSelectionSignature();
@@ -10913,12 +11028,18 @@
       if (pasteSinkEl) pasteSinkEl.addEventListener("paste", handlePaste);
       // window.addEventListener("focus", focusPasteSink);
       window.addEventListener("resize", renderStatus);
-      window.addEventListener("focus", () => { void runTimedAutosaveCatchup("focus"); });
+      window.addEventListener("focus", () => {
+        void runTimedAutosaveCatchup("focus");
+        void runFileAutosaveCatchup("focus");
+      });
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) void runTimedAutosaveCatchup("visible");
+        if (document.hidden) return;
+        void runTimedAutosaveCatchup("visible");
+        void runFileAutosaveCatchup("visible");
       });
       window.addEventListener("beforeunload", () => {
         void writeLiveAutosave("beforeunload");
+        void runFileAutosaveTick("beforeunload", { force: true });
         if (document.getElementById("autosaveSelect").value !== "off") {
           void runTimedAutosaveTick("beforeunload", { force: true });
         }
