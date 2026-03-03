@@ -6617,16 +6617,119 @@
       });
     }
 
+    function probeImageSize(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ ok: true, width: Math.max(1, img.width || 1), height: Math.max(1, img.height || 1) });
+        img.onerror = () => resolve({ ok: false, width: 0, height: 0 });
+        img.src = src;
+      });
+    }
+
+    function normalizeMimeType(type) {
+      return String(type || "").split(";")[0].trim().toLowerCase();
+    }
+
+    function debugLog(...args) {
+      if (!DEBUG_MODE) return;
+      console.debug("[FigureMakerDebug]", ...args);
+    }
+
+    function bytesToHex(bytes) {
+      if (!(bytes instanceof Uint8Array) || !bytes.length) return "";
+      return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function readBlobMagicBytes(blob, maxBytes = 16) {
+      if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") return new Uint8Array();
+      const len = Math.max(1, Number(maxBytes || 16));
+      const head = blob.slice(0, len);
+      const buf = await head.arrayBuffer();
+      return new Uint8Array(buf);
+    }
+
+    function detectMimeFromMagicBytes(bytes) {
+      if (!(bytes instanceof Uint8Array) || !bytes.length) return "";
+      if (bytes.length >= 8 &&
+        bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+        bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+        return "image/png";
+      }
+      if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+      if (bytes.length >= 4 &&
+        ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+          (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a))) {
+        return "image/tiff";
+      }
+      if (bytes.length >= 6 &&
+        bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
+        bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61) {
+        return "image/gif";
+      }
+      if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) return "image/bmp";
+      if (bytes.length >= 12 &&
+        bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+        bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+        return "image/webp";
+      }
+      if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) return "application/pdf";
+      return "";
+    }
+
+    async function collectBlobDiagnostics(blob) {
+      const declaredMime = normalizeMimeType(blob?.type);
+      const size = Number(blob?.size || 0);
+      let magicBytes = new Uint8Array();
+      try {
+        magicBytes = await readBlobMagicBytes(blob, 16);
+      } catch (_) {
+        magicBytes = new Uint8Array();
+      }
+      return {
+        size,
+        declaredMime,
+        detectedMime: detectMimeFromMagicBytes(magicBytes),
+        magicHex: bytesToHex(magicBytes)
+      };
+    }
+
+    function formatBlobDiagnosticNote(diag) {
+      if (!diag || typeof diag !== "object") return "";
+      const parts = [];
+      if (Number.isFinite(diag.size)) parts.push(`bytes=${Math.max(0, Math.floor(diag.size))}`);
+      if (diag.declaredMime) parts.push(`declared=${diag.declaredMime}`);
+      if (diag.detectedMime) parts.push(`magic=${diag.detectedMime}`);
+      else if (diag.magicHex) parts.push(`magic=0x${diag.magicHex.slice(0, 16)}`);
+      return parts.length ? ` | ${parts.join(",")}` : "";
+    }
+
+    function isClipboardFilesToken(type) {
+      return normalizeMimeType(type) === "files";
+    }
+
+    function isRasterClipboardMime(type) {
+      const t = normalizeMimeType(type);
+      if (!t || t === "image/svg+xml") return false;
+      if (t.startsWith("image/")) return true;
+      if (t === "public.tiff" || t === "public.png" || t === "public.jpeg") return true;
+      return false;
+    }
+
+    function isTiffMime(type) {
+      const t = normalizeMimeType(type);
+      return t === "image/tiff" || t === "image/tif" || t === "image/x-tiff" || t === "public.tiff";
+    }
+
     function isImageFile(file) {
       if (!file) return false;
-      const t = String(file.type || "").toLowerCase();
+      const t = normalizeMimeType(file.type);
       if (t.startsWith("image/")) return true;
       return /\.(png|jpe?g|gif|webp|bmp|svg|tiff?)$/i.test(String(file.name || ""));
     }
 
     function isSvgFile(file) {
       if (!file) return false;
-      const t = String(file.type || "").toLowerCase();
+      const t = normalizeMimeType(file.type);
       if (t === "image/svg+xml") return true;
       return /\.svg$/i.test(String(file.name || ""));
     }
@@ -6659,14 +6762,15 @@
 
     function isTiffFile(file) {
       if (!file) return false;
-      const t = String(file.type || "").toLowerCase();
-      if (t === "image/tiff" || t === "image/tif") return true;
+      const t = normalizeMimeType(file.type);
+      if (isTiffMime(t)) return true;
       return /\.(tiff?)$/i.test(String(file.name || ""));
     }
 
-    async function convertTiffToPngDataUrl(file) {
+    async function convertTiffToPngDataUrl(fileOrBlob) {
       if (!window.UTIF) throw new Error("UTIF library missing.");
-      const buffer = await file.arrayBuffer();
+      if (!fileOrBlob || typeof fileOrBlob.arrayBuffer !== "function") throw new Error("TIFF source missing.");
+      const buffer = await fileOrBlob.arrayBuffer();
       const ifds = window.UTIF.decode(buffer);
       if (!ifds || !ifds.length) throw new Error("Invalid TIFF structure.");
       const first = ifds[0];
@@ -6676,6 +6780,7 @@
       canvas.width = first.width;
       canvas.height = first.height;
       const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas context unavailable.");
       const imgData = ctx.createImageData(canvas.width, canvas.height);
       imgData.data.set(rgba);
       ctx.putImageData(imgData, 0, 0);
@@ -7370,43 +7475,87 @@
       const nudge = getPasteNudgeOffset();
       const id = insertImageElement(displaySrc, provisionalW, provisionalH, 0, { select: false, offsetX: nudge.x, offsetY: nudge.y });
       if (id) setSelection([id]);
-      // pushHistory(historyReason);
       setLastPasteReport(route, types, `${mime}:pending${noteTail}`);
-      setStatus(`${statusPrefix}. Resolving size...`);
+      setStatus(`${statusPrefix}. Resolving image data...`);
+
+      const applySizeByCenter = (size) => {
+        if (!id) return;
+        const el = getById(id);
+        if (!(el instanceof SVGElement) || svgTagName(el) !== "image") return;
+        const x = Number(el.getAttribute("x") || 0);
+        const y = Number(el.getAttribute("y") || 0);
+        const w = Number(el.getAttribute("width") || provisionalW);
+        const h = Number(el.getAttribute("height") || provisionalH);
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        el.setAttribute("width", String(size.width));
+        el.setAttribute("height", String(size.height));
+        el.setAttribute("x", String(cx - size.width / 2));
+        el.setAttribute("y", String(cy - size.height / 2));
+        if (state.selectedIds.includes(id)) requestSelectionVisualRefresh();
+      };
+
+      const finalizeRasterPaste = (size, finalMime = mime, extraNote = "") => {
+        const hint = getPasteQualityHint(size.width, size.height);
+        setLastPasteReport(route, types, `${finalMime}:${size.width}x${size.height}${hint ? ` | ${hint}` : ""}${noteTail}${extraNote}`);
+        setStatus(`${statusPrefix} ${size.width}x${size.height}. ${hint || ""}`);
+        pushHistory(historyReason);
+      };
+
+      const removeInsertedImage = () => {
+        const el = id ? getById(id) : null;
+        if (el instanceof SVGElement && svgTagName(el) === "image") el.remove();
+      };
 
       if (isBlob) {
-        fileToDataUrl(source).then((dataUrl) => {
-          if (!id || !dataUrl) return;
+        let blobDiag = null;
+        let effectiveMime = normalizeMimeType(mime || source.type || "image/unknown");
+        collectBlobDiagnostics(source).then((diag) => {
+          blobDiag = diag;
+          if (diag.detectedMime) effectiveMime = diag.detectedMime;
+          const tiffLike = isTiffMime(effectiveMime) || isTiffMime(diag.declaredMime);
+          const dataUrlPromise = tiffLike ? convertTiffToPngDataUrl(source) : fileToDataUrl(source);
+          debugLog("paste blob diagnostics", {
+            route,
+            types,
+            mimeInput: mime,
+            effectiveMime,
+            diag
+          });
+          return dataUrlPromise.then((dataUrl) => ({ dataUrl, tiffLike }));
+        }).then(async ({ dataUrl, tiffLike }) => {
+          if (!id || !dataUrl) throw new Error("Raster data URL missing.");
           const el = getById(id);
-          if (el instanceof SVGElement && svgTagName(el) === "image") {
-            el.setAttributeNS(XLINK_NS, "href", dataUrl);
-            el.setAttribute("href", dataUrl);
-          }
+          if (!(el instanceof SVGElement) || svgTagName(el) !== "image") throw new Error("Raster target missing.");
+          el.setAttributeNS(XLINK_NS, "href", dataUrl);
+          el.setAttribute("href", dataUrl);
+          const probe = await probeImageSize(dataUrl);
+          if (!probe.ok) throw new Error("Raster decode failed.");
+          applySizeByCenter(probe);
+          const finalMime = tiffLike ? "image/png" : effectiveMime;
+          const extra = `${formatBlobDiagnosticNote(blobDiag)}${tiffLike ? " | converted-from-tiff" : ""}`;
+          finalizeRasterPaste(probe, finalMime || mime, extra);
+        }).catch((err) => {
+          removeInsertedImage();
+          const detail = `${effectiveMime || mime}:decode-failed${noteTail}${formatBlobDiagnosticNote(blobDiag)}`;
+          setLastPasteReport("error", types, detail);
+          setStatus("Paste failed: raster payload decode failed.");
+          captureError("paste-raster-decode", err, {
+            userMessage: "Raster paste decode failed.",
+            route,
+            mime,
+            effectiveMime,
+            blobDiag
+          });
+        }).finally(() => {
           try { URL.revokeObjectURL(displaySrc); } catch (_) {}
-        }).catch(() => {});
+        });
+        return id;
       }
 
       getImageSize(displaySrc).then((size) => {
-        if (id) {
-          const el = getById(id);
-          if (el instanceof SVGElement && svgTagName(el) === "image") {
-            const x = Number(el.getAttribute("x") || 0);
-            const y = Number(el.getAttribute("y") || 0);
-            const w = Number(el.getAttribute("width") || provisionalW);
-            const h = Number(el.getAttribute("height") || provisionalH);
-            const cx = x + w / 2;
-            const cy = y + h / 2;
-            el.setAttribute("width", String(size.width));
-            el.setAttribute("height", String(size.height));
-            el.setAttribute("x", String(cx - size.width / 2));
-            el.setAttribute("y", String(cy - size.height / 2));
-            if (state.selectedIds.includes(id)) requestSelectionVisualRefresh();
-          }
-        }
-        const hint = getPasteQualityHint(size.width, size.height);
-        setLastPasteReport(route, types, `${mime}:${size.width}x${size.height}${hint ? ` | ${hint}` : ""}${noteTail}`);
-        setStatus(`${statusPrefix} ${size.width}x${size.height}. ${hint || ""}`);
-        pushHistory(historyReason);
+        applySizeByCenter(size);
+        finalizeRasterPaste(size, mime);
       }).catch(() => {
         setStatus(statusPrefix);
       });
@@ -7445,8 +7594,7 @@
 
     function findRasterFileFromClipboard(ev, items) {
       const fileItem = (items || []).find((it) => {
-        const t = String(it?.type || "").toLowerCase();
-        return t === "image/png" || t === "image/jpeg";
+        return isRasterClipboardMime(it?.type);
       });
       if (fileItem) {
         const f = fileItem.getAsFile?.();
@@ -7455,14 +7603,13 @@
       const genericFileItem = (items || []).find((it) => String(it?.kind || "").toLowerCase() === "file");
       if (genericFileItem) {
         const f = genericFileItem.getAsFile?.();
-        const t = String(f?.type || "").toLowerCase();
-        if (f && (t === "image/png" || t === "image/jpeg")) return f;
+        const t = normalizeMimeType(f?.type);
+        if (f && isRasterClipboardMime(t)) return f;
         if (f && (!t || t === "application/octet-stream")) return f;
       }
       const files = Array.from(ev?.clipboardData?.files || []);
       const direct = files.find((f) => {
-        const t = String(f?.type || "").toLowerCase();
-        return t === "image/png" || t === "image/jpeg";
+        return isRasterClipboardMime(f?.type);
       });
       if (direct) return direct;
       const unknown = files.find((f) => !!f);
@@ -7518,9 +7665,15 @@
         if (!Array.isArray(cItems) || !cItems.length) return false;
         for (const cItem of cItems) {
           const cTypes = Array.from(cItem.types || []);
-          const imageType = cTypes.find((t) => /^image\/(png|jpeg)$/i.test(String(t || "")));
+          debugLog("clipboard.read item types", cTypes);
+          const imageType = cTypes.find((t) => isRasterClipboardMime(t));
           if (!imageType) continue;
           const blob = await cItem.getType(imageType);
+          debugLog("clipboard.read selected image blob", {
+            imageType,
+            size: Number(blob?.size || 0),
+            type: String(blob?.type || "")
+          });
           const id = pasteRasterImageQuick(blob, {
             mime: imageType,
             types: [...new Set([...(types || []), ...cTypes])],
@@ -7538,10 +7691,10 @@
     }
 
     function shouldPreferRasterPath(primaryTypes, mergedTypes) {
-      const pTypes = (primaryTypes || []).map((t) => String(t || "").toLowerCase());
-      const mTypes = (mergedTypes || []).map((t) => String(t || "").toLowerCase());
-      const hasRasterType = pTypes.some((t) => t === "files" || t === "image/png" || t === "image/jpeg") ||
-        (!pTypes.length && mTypes.some((t) => t === "files" || t === "image/png" || t === "image/jpeg"));
+      const pTypes = (primaryTypes || []).map((t) => normalizeMimeType(t));
+      const mTypes = (mergedTypes || []).map((t) => normalizeMimeType(t));
+      const hasRasterType = pTypes.some((t) => isClipboardFilesToken(t) || isRasterClipboardMime(t)) ||
+        (!pTypes.length && mTypes.some((t) => isClipboardFilesToken(t) || isRasterClipboardMime(t)));
       if (!hasRasterType) return false;
       const hasVectorType = pTypes.some((t) => t === "text/plain" || t === "text/html" || t === "image/svg+xml");
       if (hasVectorType) return false;
@@ -7678,10 +7831,10 @@
       if (route === "html-svg" || route === "image-svg+xml" || route === "item-image-svg+xml" || route === "plain-svg" || route === "item-string-svg" || route === "item-html-svg") {
         return "Vector pasted (editable SVG elements).";
       }
-      if (route === "image-raster" || route === "html-image") {
+      if (route === "image-raster" || route === "html-image" || route === "clipboard-api-image" || route === "clipboard-api-image-fallback") {
         return "Raster image pasted (not vector-editable).";
       }
-      if (route === "unsupported") return "Clipboard did not include supported SVG/PNG/JPEG payload.";
+      if (route === "unsupported") return "Clipboard did not include supported SVG/raster payload.";
       if (route === "error") return "Paste processing failed.";
       return "Paste route recorded.";
     }
@@ -7963,10 +8116,20 @@
       const rawTypes = Array.from(ev.clipboardData?.types || []);
       const items = Array.from(ev.clipboardData?.items || []).filter((it) => !!it);
       const types = listClipboardTypes(ev.clipboardData);
+      const files = Array.from(ev.clipboardData?.files || []);
       const hasPayload = items.length > 0 ||
-        Array.from(ev.clipboardData?.files || []).length > 0 ||
-        types.some((t) => /^(files|image\/png|image\/jpeg|image\/svg\+xml|text\/html|text\/plain)$/i.test(String(t || "")));
+        files.length > 0 ||
+        types.some((t) => {
+          const tt = normalizeMimeType(t);
+          return isClipboardFilesToken(tt) || isRasterClipboardMime(tt) || tt === "image/svg+xml" || tt === "text/html" || tt === "text/plain";
+        });
       if (!hasPayload) return;
+      debugLog("paste event payload", {
+        rawTypes,
+        mergedTypes: types,
+        items: items.map((it) => ({ kind: String(it?.kind || ""), type: String(it?.type || "") })),
+        files: files.map((f) => ({ name: String(f?.name || ""), type: String(f?.type || ""), size: Number(f?.size || 0) }))
+      });
       state.lastExternalPasteAt = Date.now();
       state.isPasting = true;
       state.pasteLockAt = Date.now();
@@ -7981,6 +8144,11 @@
         if (shouldPreferRasterPath(rawTypes, types)) {
           const rasterFileFirst = findRasterFileFromClipboard(ev, items);
           if (rasterFileFirst) {
+            debugLog("paste route: raster fastpath file", {
+              type: String(rasterFileFirst.type || ""),
+              size: Number(rasterFileFirst.size || 0),
+              name: String(rasterFileFirst.name || "")
+            });
             ev.preventDefault();
             const mime = String(rasterFileFirst.type || "image/unknown");
             pasteRasterImageQuick(rasterFileFirst, { mime, types, route: "image-raster", historyReason: "paste-image", statusPrefix: "Pasted raster image", noteTail: "fastpath" });
@@ -7988,6 +8156,7 @@
           }
           const apiFast = await pasteImageFromClipboardApi(types);
           if (apiFast) {
+            debugLog("paste route: raster fastpath clipboard API");
             ev.preventDefault();
             return;
           }
@@ -8057,13 +8226,18 @@
 
         const rasterFile = findRasterFileFromClipboard(ev, items);
         if (rasterFile) {
+          debugLog("paste route: raster file fallback", {
+            type: String(rasterFile.type || ""),
+            size: Number(rasterFile.size || 0),
+            name: String(rasterFile.name || "")
+          });
           ev.preventDefault();
           const mime = String(rasterFile.type || "image/unknown");
           pasteRasterImageQuick(rasterFile, { mime, types, route: "image-raster", historyReason: "paste-image", statusPrefix: "Pasted raster image" });
           return;
         }
 
-        if (types.some((t) => /^(files|image\/png|image\/jpeg)$/i.test(String(t || "")))) {
+        if (types.some((t) => isClipboardFilesToken(t) || isRasterClipboardMime(t))) {
           const apiOk = await pasteImageFromClipboardApi(types);
           if (apiOk) {
             ev.preventDefault();
@@ -8096,7 +8270,7 @@
 
         setLastPasteReport("unsupported", types, "no supported payload found");
         const suffix = types.length ? ` Types: ${types.join(", ")}` : "";
-        setStatus(`Paste unsupported: use SVG/HTML or PNG/JPEG.${suffix}`);
+        setStatus(`Paste unsupported: use SVG/HTML or raster image payload.${suffix}`);
       } catch (err) {
         setLastPasteReport("error", types, String(err.message || err));
         setStatus("Paste failed. Please try another source format.");
@@ -8119,6 +8293,7 @@
             if (Array.isArray(cItems) && cItems.length) {
               for (const cItem of cItems) {
                 const cTypes = Array.from(cItem.types || []);
+                debugLog("clipboard.read fallback item types", cTypes);
                 if (cTypes.includes("image/svg+xml")) {
                   const blob = await cItem.getType("image/svg+xml");
                   const raw = await blob.text();
@@ -8166,10 +8341,15 @@
                     return true;
                   }
                 }
-                const imageType = cTypes.find((t) => t === "image/png" || t === "image/jpeg");
+                const imageType = cTypes.find((t) => isRasterClipboardMime(t));
                 if (imageType) {
                   const blob = await cItem.getType(imageType);
-                  const dataUrl = await fileToDataUrl(blob);
+                  debugLog("clipboard.read fallback selected image blob", {
+                    imageType,
+                    size: Number(blob?.size || 0),
+                    type: String(blob?.type || "")
+                  });
+                  const dataUrl = isTiffMime(imageType) ? await convertTiffToPngDataUrl(blob) : await fileToDataUrl(blob);
                   const size = await getImageSize(dataUrl);
                   const nudge = getPasteNudgeOffset();
                   const id = insertImageElement(dataUrl, size.width, size.height, 0, {
@@ -8181,7 +8361,9 @@
                     setSelection([id]);
                     pushHistory("paste-clipboard-api-image");
                     const hint = getPasteQualityHint(size.width, size.height);
-                    setLastPasteReport("clipboard-api-image", cTypes, `${imageType}:${size.width}x${size.height}${hint ? ` | ${hint}` : ""}`);
+                    const fmt = isTiffMime(imageType) ? "image/png" : imageType;
+                    const extra = isTiffMime(imageType) ? " | converted-from-tiff" : "";
+                    setLastPasteReport("clipboard-api-image", cTypes, `${fmt}:${size.width}x${size.height}${hint ? ` | ${hint}` : ""}${extra}`);
                     setStatus(`Pasted image via clipboard API ${size.width}x${size.height}. ${hint || ""}`);
                     return true;
                   }
