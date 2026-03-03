@@ -284,6 +284,17 @@
       flex-wrap: wrap;
       gap: 2px;
     }
+    .toolbar-align-dropdown {
+      position: relative;
+      display: inline-flex;
+    }
+    .toolbar-align-dropdown .tool-dropdown-panel {
+      top: calc(100% + 4px);
+      left: 0;
+      margin-left: 0;
+      width: 120px;
+      z-index: 45;
+    }
     .tool-dropdown-panel.show {
       display: flex;
     }
@@ -830,6 +841,9 @@
     body[data-active-tab="object"] .group .align-icon-btn svg {
       stroke: currentColor;
     }
+    body[data-active-tab="object"] .toolbar-align-dropdown .tool-dropdown-panel .align-icon-btn {
+      color: var(--ink);
+    }
     
     /* Collapsed Toolbar State */
     body.toolbar-collapsed .menu-bar {
@@ -1168,50 +1182,60 @@
         <input id="objectStrokeToggle" type="checkbox" checked />
       </div>
       <div class="group" data-toolbar-tab="object">
-        <button class="align-icon-btn" data-align="left" title="Align Left" aria-label="Align Left">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 2V14M4 5H12M4 9H10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-align="hcenter" title="Align Center" aria-label="Align Center">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M8 2V14M2 5H14M4 9H12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-align="right" title="Align Right" aria-label="Align Right">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M14 2V14M4 5H12M6 9H12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-align="top" title="Align Top" aria-label="Align Top">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 2H14M4 4V12M9 4V10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-align="vcenter" title="Align Middle" aria-label="Align Middle">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 8H14M4 3V13M9 5V11" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-align="bottom" title="Align Bottom" aria-label="Align Bottom">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 14H14M4 4V12M9 6V12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-distribute="h" title="Distribute Horizontal" aria-label="Distribute Horizontal">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 2V14M14 2V14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <rect x="4.5" y="5" width="2" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="9.5" y="5" width="2" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
-          </svg>
-        </button>
-        <button class="align-icon-btn" data-distribute="v" title="Distribute Vertical" aria-label="Distribute Vertical">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M2 2H14M2 14H14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <rect x="5" y="4.5" width="6" height="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="5" y="9.5" width="6" height="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
-          </svg>
-        </button>
+        <div class="toolbar-align-dropdown">
+          <button id="objectAlignTrigger" class="tool-icon-btn" title="Align Tools" aria-label="Align Tools" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M2 3V13M5 5H13M5 8H11M5 11H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            <span class="sr-only">Object Align Tools</span>
+          </button>
+          <div id="objectAlignMenu" class="tool-dropdown-panel" role="menu" aria-label="Object align and distribute">
+            <button class="align-icon-btn" data-align="left" title="Align Left" aria-label="Align Left">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 2V14M4 5H12M4 9H10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-align="hcenter" title="Align Center" aria-label="Align Center">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 2V14M2 5H14M4 9H12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-align="right" title="Align Right" aria-label="Align Right">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M14 2V14M4 5H12M6 9H12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-align="top" title="Align Top" aria-label="Align Top">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 2H14M4 4V12M9 4V10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-align="vcenter" title="Align Middle" aria-label="Align Middle">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 8H14M4 3V13M9 5V11" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-align="bottom" title="Align Bottom" aria-label="Align Bottom">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 14H14M4 4V12M9 6V12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-distribute="h" title="Distribute Horizontal" aria-label="Distribute Horizontal">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 2V14M14 2V14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                <rect x="4.5" y="5" width="2" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="9.5" y="5" width="2" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+            </button>
+            <button class="align-icon-btn" data-distribute="v" title="Distribute Vertical" aria-label="Distribute Vertical">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2 2H14M2 14H14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                <rect x="5" y="4.5" width="6" height="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="5" y="9.5" width="6" height="2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
       <div class="group" data-toolbar-tab="text">
         <button id="addText">Text</button>
@@ -1388,6 +1412,7 @@
     const MIN_VIEW_SCALE = 0.05;
     const MAX_VIEW_SCALE = 10;
     const PASTE_LOCK_TIMEOUT_MS = 900;
+    const FILE_PICKER_ID = "figureMaker-files";
     const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
     const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
     const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ff1493' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
@@ -1715,6 +1740,7 @@
       toolbarTab: "tool",
       cropMode: null,
       fileHandle: null,
+      lastPickerHandle: null,
       autosaveQuotaWarned: false,
       liveAutosaveQuotaWarned: false,
       historySizeWarned: false,
@@ -4267,6 +4293,33 @@
       return { minX, minY, width, height };
     }
 
+    function getVisibleWorkspaceCenter() {
+      const art = getCanvasDimensions();
+      const fallback = {
+        x: art.minX + art.width / 2,
+        y: art.minY + art.height / 2
+      };
+      if (!(canvasWrapEl instanceof HTMLElement) || !(canvas instanceof SVGElement)) return fallback;
+      const wrapRect = canvasWrapEl.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      if (!(canvasRect.width > 0) || !(canvasRect.height > 0)) return fallback;
+      const workspace = getWorkspaceDimensions();
+      const clientX = wrapRect.left + canvasWrapEl.clientWidth / 2;
+      const clientY = wrapRect.top + canvasWrapEl.clientHeight / 2;
+      const rx = (clientX - canvasRect.left) / canvasRect.width;
+      const ry = (clientY - canvasRect.top) / canvasRect.height;
+      let x = workspace.minX + rx * workspace.width;
+      let y = workspace.minY + ry * workspace.height;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return fallback;
+      const minX = workspace.minX;
+      const minY = workspace.minY;
+      const maxX = workspace.minX + workspace.width;
+      const maxY = workspace.minY + workspace.height;
+      x = Math.max(minX, Math.min(maxX, x));
+      y = Math.max(minY, Math.min(maxY, y));
+      return { x, y };
+    }
+
     function getCanvasDisplayScale() {
       const rect = canvas.getBoundingClientRect();
       const { width, height } = getWorkspaceDimensions();
@@ -4449,6 +4502,40 @@
       }
     }
 
+    function setupAlignDropdown(triggerId, menuId) {
+      const trigger = document.getElementById(triggerId);
+      const menu = document.getElementById(menuId);
+      if (!(trigger instanceof HTMLElement) || !(menu instanceof HTMLElement)) return;
+      const closeMenu = () => {
+        menu.classList.remove("show");
+        trigger.setAttribute("aria-expanded", "false");
+      };
+      trigger.setAttribute("aria-haspopup", "true");
+      trigger.setAttribute("aria-expanded", "false");
+      trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const willOpen = !menu.classList.contains("show");
+        document.querySelectorAll("#toolAlignTrigger,#objectAlignTrigger").forEach((btn) => {
+          if (btn instanceof HTMLElement) btn.setAttribute("aria-expanded", "false");
+        });
+        document.querySelectorAll(".tool-dropdown-panel.show").forEach((openMenu) => {
+          openMenu.classList.remove("show");
+        });
+        menu.classList.toggle("show", willOpen);
+        trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      });
+      document.addEventListener("pointerdown", (e) => {
+        const target = e.target;
+        if (!trigger.contains(target) && !menu.contains(target)) {
+          closeMenu();
+        }
+      });
+      menu.addEventListener("click", (e) => {
+        const target = e.target instanceof Element ? e.target.closest("[data-align],[data-distribute]") : null;
+        if (target) closeMenu();
+      });
+    }
+
     function setupFloatingToolPalette() {
       const palette = document.getElementById("floatingToolPalette");
       const header = document.getElementById("floatingToolPaletteHeader");
@@ -4507,31 +4594,8 @@
         setFloatingToolPalettePosition(state.floatingToolPalette.x, state.floatingToolPalette.y, { save: false });
       });
 
-      const alignTrigger = document.getElementById("toolAlignTrigger");
-      const alignMenu = document.getElementById("toolAlignMenu");
-      if (alignTrigger && alignMenu) {
-        alignTrigger.addEventListener("click", (e) => {
-          e.stopPropagation();
-          alignMenu.classList.toggle("show");
-        });
-        document.addEventListener("pointerdown", (e) => {
-          if (!alignTrigger.contains(e.target) && !alignMenu.contains(e.target)) {
-            alignMenu.classList.remove("show");
-          }
-        });
-        alignMenu.querySelectorAll("[data-align]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            alignSelected(btn.dataset.align);
-            alignMenu.classList.remove("show");
-          });
-        });
-        alignMenu.querySelectorAll("[data-distribute]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            distributeSelected(btn.dataset.distribute);
-            alignMenu.classList.remove("show");
-          });
-        });
-      }
+      setupAlignDropdown("toolAlignTrigger", "toolAlignMenu");
+      setupAlignDropdown("objectAlignTrigger", "objectAlignMenu");
     }
 
     function syncZoomControls() {
@@ -4737,11 +4801,7 @@
       if (!action) return;
       if (action === "file.new") return newCanvas();
       if (action === "file.open") return void openSvgFile();
-      if (action === "file.import") {
-        const fileInput = document.getElementById("importFileInput");
-        if (fileInput) fileInput.click();
-        return;
-      }
+      if (action === "file.import") return void importSvgFile();
       if (action === "file.save") return void saveSvg();
       if (action === "file.saveAs") return void saveSvg({ saveAs: true });
       if (action === "file.pdf") return exportPdf();
@@ -5762,19 +5822,51 @@
       return imported.dataset.id || "";
     }
 
+    function recenterElementsByIds(ids, targetCenter, extraOffset = null) {
+      if (!Array.isArray(ids) || !ids.length) return false;
+      const cx = Number(targetCenter?.x);
+      const cy = Number(targetCenter?.y);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) return false;
+      const extraX = Number(extraOffset?.x || 0);
+      const extraY = Number(extraOffset?.y || 0);
+      const elements = [];
+      const seen = new Set();
+      ids.forEach((id) => {
+        const el = getById(id);
+        if (!(el instanceof SVGElement) || !el.isConnected || seen.has(el)) return;
+        seen.add(el);
+        elements.push(el);
+      });
+      if (!elements.length) return false;
+      const boxes = elements.map((el) => safeBBox(el)).filter((b) =>
+        b && Number.isFinite(b.x) && Number.isFinite(b.y) && Number.isFinite(b.width) && Number.isFinite(b.height)
+      );
+      if (!boxes.length) return false;
+      const minX = Math.min(...boxes.map((b) => b.x));
+      const minY = Math.min(...boxes.map((b) => b.y));
+      const maxX = Math.max(...boxes.map((b) => b.x + b.width));
+      const maxY = Math.max(...boxes.map((b) => b.y + b.height));
+      const dx = cx + extraX - (minX + maxX) / 2;
+      const dy = cy + extraY - (minY + maxY) / 2;
+      elements.forEach((el) => {
+        const t = getTranslate(el);
+        setTranslate(el, t.x + dx, t.y + dy);
+      });
+      return true;
+    }
+
     function pasteInternalClipboard() {
       const items = state.clipboardItems || [];
       if (!items.length) {
         setStatus("Clipboard is empty.");
         return false;
       }
-      const baseNudge = getPasteNudgeOffset();
       const inserted = [];
-      items.forEach((item, idx) => {
+      items.forEach((item) => {
         const id = importMarkupFragment(
           item.markup,
-          baseNudge.x + 24 * (idx + 1),
-          baseNudge.y + 24 * (idx + 1),
+          0,
+          0,
           item.parentId || ""
         );
         if (id) inserted.push(id);
@@ -5782,6 +5874,17 @@
       if (!inserted.length) {
         setStatus("Clipboard paste failed.");
         return false;
+      }
+      const baseNudge = getPasteNudgeOffset();
+      const center = getVisibleWorkspaceCenter();
+      const recentered = recenterElementsByIds(inserted, center, baseNudge);
+      if (!recentered && (baseNudge.x || baseNudge.y)) {
+        inserted.forEach((id) => {
+          const el = getById(id);
+          if (!(el instanceof SVGElement)) return;
+          const t = getTranslate(el);
+          setTranslate(el, t.x + baseNudge.x, t.y + baseNudge.y);
+        });
       }
       setSelection(inserted);
       pushHistory("paste-internal");
@@ -6024,6 +6127,83 @@
       return typeof window.showOpenFilePicker === "function";
     }
 
+    function isFileSystemHandleLike(handle) {
+      return !!handle && typeof handle === "object" &&
+        (typeof handle.name === "string" || typeof handle.kind === "string");
+    }
+
+    function rememberLastPickerHandle(handle) {
+      if (!isFileSystemHandleLike(handle)) return;
+      state.lastPickerHandle = handle;
+    }
+
+    function getPreferredPickerStartIn() {
+      if (isFileSystemHandleLike(state.fileHandle)) return state.fileHandle;
+      if (isFileSystemHandleLike(state.lastPickerHandle)) return state.lastPickerHandle;
+      return undefined;
+    }
+
+    function isPickerOptionCompatibilityError(err) {
+      const name = String(err?.name || "");
+      const msg = String(err?.message || "").toLowerCase();
+      if (name === "TypeError") return true;
+      if (msg.includes("startin") || msg.includes("id")) return true;
+      return false;
+    }
+
+    function buildVectorPickerTypes() {
+      return [{
+        description: "SVG/AI/PDF file",
+        accept: {
+          "image/svg+xml": [".svg"],
+          "application/postscript": [".ai"],
+          "application/pdf": [".ai", ".pdf"]
+        }
+      }];
+    }
+
+    function triggerOpenFileInput() {
+      const fileInput = document.getElementById("openFileInput");
+      if (fileInput) fileInput.click();
+      return !!fileInput;
+    }
+
+    function triggerImportFileInput() {
+      const importInput = document.getElementById("importFileInput");
+      if (importInput) importInput.click();
+      return !!importInput;
+    }
+
+    async function showOpenFilePickerWithHistory(baseOptions = {}) {
+      const preferredStartIn = getPreferredPickerStartIn();
+      const hinted = {
+        ...baseOptions,
+        id: FILE_PICKER_ID
+      };
+      if (preferredStartIn) hinted.startIn = preferredStartIn;
+      try {
+        return await window.showOpenFilePicker(hinted);
+      } catch (err) {
+        if (!isPickerOptionCompatibilityError(err)) throw err;
+        return await window.showOpenFilePicker(baseOptions);
+      }
+    }
+
+    async function showSaveFilePickerWithHistory(baseOptions = {}) {
+      const preferredStartIn = getPreferredPickerStartIn();
+      const hinted = {
+        ...baseOptions,
+        id: FILE_PICKER_ID
+      };
+      if (preferredStartIn) hinted.startIn = preferredStartIn;
+      try {
+        return await window.showSaveFilePicker(hinted);
+      } catch (err) {
+        if (!isPickerOptionCompatibilityError(err)) throw err;
+        return await window.showSaveFilePicker(baseOptions);
+      }
+    }
+
     function getDefaultSvgFileName() {
       const handleName = String(state.fileHandle?.name || "").trim();
       if (handleName) return handleName.toLowerCase().endsWith(".svg") ? handleName : `${handleName}.svg`;
@@ -6058,7 +6238,7 @@
         if (handle && !String(handle.name || "").toLowerCase().endsWith(".svg")) handle = null;
         if (requireExistingHandle && !handle) return false;
         if (!handle) {
-          handle = await window.showSaveFilePicker({
+          handle = await showSaveFilePickerWithHistory({
             suggestedName,
             types: [{
               description: "SVG file",
@@ -6074,6 +6254,7 @@
         await writable.write(markup);
         await writable.close();
         state.fileHandle = handle;
+        rememberLastPickerHandle(handle);
         if (!silent) setStatus(saveAs ? "SVG saved as new file." : "SVG saved.");
         return true;
       } catch (err) {
@@ -6160,22 +6341,16 @@
     async function openSvgFile() {
       if (supportsFileSystemOpenApi()) {
         try {
-          const handles = await window.showOpenFilePicker({
+          const handles = await showOpenFilePickerWithHistory({
             multiple: false,
-            types: [{
-              description: "SVG/AI/PDF file",
-              accept: {
-                "image/svg+xml": [".svg"],
-                "application/postscript": [".ai"],
-                "application/pdf": [".ai", ".pdf"]
-              }
-            }]
+            types: buildVectorPickerTypes()
           });
           const handle = handles?.[0];
           if (!handle) {
             setStatus("Open canceled.");
             return false;
           }
+          rememberLastPickerHandle(handle);
           const file = await handle.getFile();
           const loaded = await handlePickedImportFile(file, { source: "open", fileHandle: handle });
           if (!loaded) state.fileHandle = null;
@@ -6186,9 +6361,7 @@
             return false;
           }
           captureError("open-svg-picker", err, { userMessage: "Open SVG/AI/PDF failed." });
-          const fileInput = document.getElementById("openFileInput");
-          if (fileInput) {
-            fileInput.click();
+          if (triggerOpenFileInput()) {
             setStatus("Open picker failed. Switched to file input.");
             return false;
           }
@@ -6196,8 +6369,42 @@
           return false;
         }
       }
-      const fileInput = document.getElementById("openFileInput");
-      if (fileInput) fileInput.click();
+      triggerOpenFileInput();
+      return false;
+    }
+
+    async function importSvgFile() {
+      if (supportsFileSystemOpenApi()) {
+        try {
+          const handles = await showOpenFilePickerWithHistory({
+            multiple: false,
+            types: buildVectorPickerTypes()
+          });
+          const handle = handles?.[0];
+          if (!handle) {
+            setStatus("Import canceled.");
+            return false;
+          }
+          rememberLastPickerHandle(handle);
+          const file = await handle.getFile();
+          const loaded = await handlePickedImportFile(file, { source: "import", fileHandle: handle });
+          if (!loaded) setStatus("Import failed.");
+          return loaded;
+        } catch (err) {
+          if (String(err?.name || "") === "AbortError") {
+            setStatus("Import canceled.");
+            return false;
+          }
+          captureError("import-svg-picker", err, { userMessage: "Import SVG/AI/PDF failed." });
+          if (triggerImportFileInput()) {
+            setStatus("Import picker failed. Switched to file input.");
+            return false;
+          }
+          setStatus("Import failed.");
+          return false;
+        }
+      }
+      triggerImportFileInput();
       return false;
     }
 
@@ -6249,8 +6456,10 @@
       
       if (!fitted) fitted = initial; // Fallback (might be off if scaled, but better than crash)
 
-      const targetCx = dims.minX + dims.width / 2;
-      const targetCy = dims.minY + dims.height / 2;
+      const targetCxOption = Number(options.targetCenter?.x);
+      const targetCyOption = Number(options.targetCenter?.y);
+      const targetCx = Number.isFinite(targetCxOption) ? targetCxOption : (dims.minX + dims.width / 2);
+      const targetCy = Number.isFinite(targetCyOption) ? targetCyOption : (dims.minY + dims.height / 2);
       const currentCx = fitted.x + fitted.width / 2;
       const currentCy = fitted.y + fitted.height / 2;
       const t = getTranslate(wrapper);
@@ -6674,9 +6883,13 @@
       const step = 24;
       const extraX = Number(options.offsetX || 0);
       const extraY = Number(options.offsetY || 0);
+      const centerXOpt = Number(options.centerAt?.x);
+      const centerYOpt = Number(options.centerAt?.y);
       const dims = getCanvasDimensions();
-      const baseX = dims.minX + dims.width / 2 - width / 2;
-      const baseY = dims.minY + dims.height / 2 - height / 2;
+      const baseCenterX = Number.isFinite(centerXOpt) ? centerXOpt : (dims.minX + dims.width / 2);
+      const baseCenterY = Number.isFinite(centerYOpt) ? centerYOpt : (dims.minY + dims.height / 2);
+      const baseX = baseCenterX - width / 2;
+      const baseY = baseCenterY - height / 2;
       const x = baseX + offsetIndex * step + extraX;
       const y = baseY + offsetIndex * step + extraY;
       const el = document.createElementNS(SVG_NS, "image");
@@ -7602,7 +7815,13 @@
       const displaySrc = isBlob ? URL.createObjectURL(source) : String(source || "");
       if (!displaySrc) return "";
       const nudge = getPasteNudgeOffset();
-      const id = insertImageElement(displaySrc, provisionalW, provisionalH, 0, { select: false, offsetX: nudge.x, offsetY: nudge.y });
+      const pasteCenter = getVisibleWorkspaceCenter();
+      const id = insertImageElement(displaySrc, provisionalW, provisionalH, 0, {
+        select: false,
+        centerAt: pasteCenter,
+        offsetX: nudge.x,
+        offsetY: nudge.y
+      });
       if (id) setSelection([id]);
       setLastPasteReport(route, types, `${mime}:pending${noteTail}`);
       setStatus(`${statusPrefix}. Resolving image data...`);
@@ -7866,6 +8085,7 @@
           const htmlSvgs = extractSvgFromHtml(raw);
           if (htmlSvgs.length) {
             const nudge = getPasteNudgeOffset();
+            const fitCenter = getVisibleWorkspaceCenter();
             let count = 0;
             const allIds = [];
             htmlSvgs.forEach((svgText, idx) => {
@@ -7875,6 +8095,7 @@
                 select: false,
                 fitToCanvas: true,
                 fitAllowUpscale: false,
+                fitCenter,
                 offsetX: nudge.x + idx * 24,
                 offsetY: nudge.y + idx * 24
               });
@@ -8179,6 +8400,7 @@
       const fitMaxScale = Number.isFinite(fitMaxScaleOption) && fitMaxScaleOption > 0
         ? fitMaxScaleOption
         : (fitAllowUpscale ? 12 : 1);
+      const fitCenter = options.fitCenter || null;
       const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
       if (doc.querySelector("parsererror")) return [];
       const root = doc.querySelector("svg");
@@ -8219,7 +8441,8 @@
           fitImportedWrapperToCanvas(wrapper, {
             margin: fitMargin,
             allowUpscale: fitAllowUpscale,
-            maxScale: fitMaxScale
+            maxScale: fitMaxScale,
+            targetCenter: fitCenter
           });
         }
         if (offsetX || offsetY) {
@@ -8237,10 +8460,12 @@
 
     function importSvgTextWithPasteNudge(svgText, options = {}) {
       const nudge = getPasteNudgeOffset();
+      const fitCenter = options.fitCenter || getVisibleWorkspaceCenter();
       return importSvgText(svgText, {
         ...options,
         fitToCanvas: options.fitToCanvas !== false,
         fitAllowUpscale: options.fitAllowUpscale === true,
+        fitCenter,
         offsetX: Number(options.offsetX || 0) + nudge.x,
         offsetY: Number(options.offsetY || 0) + nudge.y
       });
@@ -8265,15 +8490,25 @@
       }
       if (internalPayload) {
         const nudge = getPasteNudgeOffset();
+        const fitCenter = getVisibleWorkspaceCenter();
         const ids = importSvgText(text, {
           push: false,
           setMessage: false,
           select: true,
           wrap: false,
           fitToCanvas: false,
-          offsetX: nudge.x,
-          offsetY: nudge.y
+          offsetX: 0,
+          offsetY: 0
         });
+        const recentered = recenterElementsByIds(ids, fitCenter, nudge);
+        if (!recentered && (nudge.x || nudge.y)) {
+          ids.forEach((id) => {
+            const el = getById(id);
+            if (!(el instanceof SVGElement)) return;
+            const t = getTranslate(el);
+            setTranslate(el, t.x + nudge.x, t.y + nudge.y);
+          });
+        }
         const ok = ids.length > 0;
         setLastPasteReport(`${route}-internal`, types, ok ? `objects=${ids.length}` : "parse failed");
         if (ok) {
@@ -8383,6 +8618,7 @@
         if (htmlSvgs.length) {
           ev.preventDefault();
           const nudge = getPasteNudgeOffset();
+          const fitCenter = getVisibleWorkspaceCenter();
           let count = 0;
           const allIds = [];
           htmlSvgs.forEach((svgText, idx) => {
@@ -8392,6 +8628,7 @@
               select: false,
               fitToCanvas: true,
               fitAllowUpscale: false,
+              fitCenter,
               offsetX: nudge.x + idx * 24,
               offsetY: nudge.y + idx * 24
             });
@@ -8432,12 +8669,14 @@
         if (htmlImgSrcs.length) {
           ev.preventDefault();
           const nudge = getPasteNudgeOffset();
+          const pasteCenter = getVisibleWorkspaceCenter();
           let inserted = 0;
           const allIds = [];
           for (const [idx, src] of htmlImgSrcs.slice(0, 20).entries()) {
             const size = await getImageSize(src);
             const id = insertImageElement(src, size.width, size.height, idx, {
               select: false,
+              centerAt: pasteCenter,
               offsetX: nudge.x,
               offsetY: nudge.y
             });
@@ -8492,6 +8731,7 @@
                   const htmlSvgs = extractSvgFromHtml(html);
                   if (htmlSvgs.length) {
                     const nudge = getPasteNudgeOffset();
+                    const fitCenter = getVisibleWorkspaceCenter();
                     let count = 0;
                     const allIds = [];
                     htmlSvgs.forEach((svgText, idx) => {
@@ -8501,6 +8741,7 @@
                         select: false,
                         fitToCanvas: true,
                         fitAllowUpscale: false,
+                        fitCenter,
                         offsetX: nudge.x + idx * 24,
                         offsetY: nudge.y + idx * 24
                       });
@@ -8536,8 +8777,10 @@
                   const dataUrl = isTiffMime(imageType) ? await convertTiffToPngDataUrl(blob) : await fileToDataUrl(blob);
                   const size = await getImageSize(dataUrl);
                   const nudge = getPasteNudgeOffset();
+                  const pasteCenter = getVisibleWorkspaceCenter();
                   const id = insertImageElement(dataUrl, size.width, size.height, 0, {
                     select: false,
+                    centerAt: pasteCenter,
                     offsetX: nudge.x,
                     offsetY: nudge.y
                   });
@@ -9945,7 +10188,7 @@
       const importInput = document.getElementById("importFileInput");
       bindClick("openSvg", () => { void openSvgFile(); });
       bindClick("importSvgBtn", () => {
-        if (importInput) importInput.click();
+        void importSvgFile();
       });
       if (fileInput) fileInput.addEventListener("change", async (e) => {
         const file = e.target.files?.[0];
