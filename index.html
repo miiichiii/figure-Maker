@@ -1374,6 +1374,8 @@
     const AUTOSAVE_META_STORE = "autosaveMeta";
     const AUTOSAVE_META_LIVE_KEY = "liveSnapshot";
     const AUTOSAVE_MAX_RECORDS = 8;
+    const INTERNAL_SVG_CLIPBOARD_ATTR = "data-fm-clipboard";
+    const INTERNAL_SVG_CLIPBOARD_VALUE = "1";
     const MAX_HISTORY_ENTRIES_DEFAULT = 30;
     const MAX_HISTORY_SNAPSHOT_BYTES = 512 * 1024 * 1024; // Increased to 512MB for >100MB images
     const MAX_HISTORY_TOTAL_BYTES = 1024 * 1024 * 1024; // Increased to 1GB total
@@ -1685,6 +1687,9 @@
       fileAutosaveTimer: null,
       fileAutosaveRunning: false,
       fileAutosaveWarned: false,
+      autosaveIntervalMs: 0,
+      lastTimedAutosaveAt: 0,
+      timedAutosaveRunning: false,
       liveAutosaveTimer: 0,
       contextGroupId: null,
       contextTargetId: null,
@@ -5097,14 +5102,14 @@
           }
         });
       }
-      return clone.outerHTML;
+      return normalizeSvgNamespaceTagPrefixes(clone.outerHTML);
     }
 
     function buildSelectedSvgClipboardText(items) {
       if (!items || !items.length) return "";
       const { minX, minY, width, height } = getCanvasDimensions();
       const body = items.map((it) => String(it.markup || "")).join("");
-      return `<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${body}</svg>`;
+      return `<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}" ${INTERNAL_SVG_CLIPBOARD_ATTR}="${INTERNAL_SVG_CLIPBOARD_VALUE}" viewBox="${minX} ${minY} ${width} ${height}" width="${width}" height="${height}">${body}</svg>`;
     }
 
     async function copySelectedToSystemClipboard(items) {
@@ -5737,7 +5742,8 @@
     }
 
     function importMarkupFragment(markup, offsetX = 0, offsetY = 0, parentId = "") {
-      const parserDoc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${markup}</svg>`, "image/svg+xml");
+      const normalizedMarkup = normalizeSvgNamespaceTagPrefixes(markup);
+      const parserDoc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${normalizedMarkup}</svg>`, "image/svg+xml");
       if (parserDoc.querySelector("parsererror")) return "";
       const tempRoot = parserDoc.querySelector("svg");
       const node = tempRoot?.firstElementChild;
@@ -5746,13 +5752,12 @@
       sanitizeSvgTree(imported);
       imported.removeAttribute("data-id");
       imported.querySelectorAll("[data-id]").forEach((n) => n.removeAttribute("data-id"));
+      const pasteParent = resolvePasteParent(parentId);
+      pasteParent.appendChild(imported);
       ensureId(imported);
       ensureTransformState(imported);
-      const pasteParent = resolvePasteParent(parentId);
-      const delta = toParentLocalDelta(pasteParent, offsetX, offsetY);
       const t = getTranslate(imported);
-      setTranslate(imported, t.x + delta.dx, t.y + delta.dy);
-      pasteParent.appendChild(imported);
+      setTranslate(imported, t.x + offsetX, t.y + offsetY);
       assignIds(imported);
       return imported.dataset.id || "";
     }
@@ -6515,6 +6520,42 @@
       }
     }
 
+    function getTimedAutosaveIntervalMs() {
+      const sel = document.getElementById("autosaveSelect");
+      if (!(sel instanceof HTMLSelectElement)) return 0;
+      if (sel.value === "off") return 0;
+      const mins = Math.max(1, Number(sel.value || 0));
+      if (!Number.isFinite(mins)) return 0;
+      return mins * 60 * 1000;
+    }
+
+    async function runTimedAutosaveTick(trigger = "timer", options = {}) {
+      const force = options && options.force === true;
+      const intervalMs = Number(state.autosaveIntervalMs || 0);
+      if (!force && intervalMs <= 0) return false;
+      if (state.timedAutosaveRunning) return false;
+      const now = Date.now();
+      if (!force && state.lastTimedAutosaveAt > 0 && now - state.lastTimedAutosaveAt < Math.max(1000, intervalMs - 750)) return false;
+      state.timedAutosaveRunning = true;
+      state.lastTimedAutosaveAt = now;
+      try {
+        await saveTimeMachineSvgFile();
+        await saveAutosave();
+        return true;
+      } finally {
+        state.timedAutosaveRunning = false;
+      }
+    }
+
+    async function runTimedAutosaveCatchup(trigger = "catchup") {
+      const intervalMs = Number(state.autosaveIntervalMs || 0);
+      if (intervalMs <= 0) return false;
+      if (document.hidden) return false;
+      const now = Date.now();
+      if (state.lastTimedAutosaveAt > 0 && now - state.lastTimedAutosaveAt < intervalMs) return false;
+      return runTimedAutosaveTick(trigger, { force: true });
+    }
+
     async function refreshRestoreList() {
       const records = await getAutosaveRecords();
       const live = await getLiveAutosaveRecord();
@@ -6601,12 +6642,15 @@
         state.fileAutosaveTimer = null;
       }
       state.fileAutosaveWarned = false;
-      const val = document.getElementById("autosaveSelect").value;
+      const sel = document.getElementById("autosaveSelect");
+      const val = sel ? sel.value : "off";
       localStorage.setItem(AUTOSAVE_INTERVAL_KEY, val);
-      if (val !== "off") {
-        const intervalMs = Math.max(1, Number(val)) * 60 * 1000;
-        state.autosaveTimer = setInterval(() => { void saveAutosave(); }, intervalMs);
-        state.fileAutosaveTimer = setInterval(() => { void saveTimeMachineSvgFile(); }, intervalMs);
+      state.autosaveIntervalMs = val === "off" ? 0 : getTimedAutosaveIntervalMs();
+      state.lastTimedAutosaveAt = Date.now();
+      state.timedAutosaveRunning = false;
+      if (state.autosaveIntervalMs > 0) {
+        state.autosaveTimer = setInterval(() => { void runTimedAutosaveTick("timer"); }, state.autosaveIntervalMs);
+        state.fileAutosaveTimer = setInterval(() => { void runTimedAutosaveCatchup("timer-catchup"); }, Math.min(15000, state.autosaveIntervalMs));
       }
       if (val === "off") setStatus("Time Machine off. Live restore snapshot remains available.");
       else setStatus(`Time Machine set: ${val} min (snapshot + SVG file auto-save).`);
@@ -6781,6 +6825,35 @@
       return /\.svg$/i.test(String(file.name || ""));
     }
 
+    function isValidSvgHandle(handle) {
+      if (!handle) return false;
+      return String(handle?.name || "").toLowerCase().endsWith(".svg");
+    }
+
+    function looksLikeSvgMarkup(text) {
+      const head = String(text || "").replace(/^\uFEFF/, "").trimStart();
+      if (!head) return false;
+      const lower = head.slice(0, 1024).toLowerCase();
+      if (lower.startsWith("<svg")) return true;
+      if (lower.startsWith("<?xml")) return lower.includes("<svg");
+      if (lower.startsWith("<!doctype svg")) return true;
+      return false;
+    }
+
+    async function detectPickedFileMime(file) {
+      if (!file || typeof file.slice !== "function") return "";
+      try {
+        const magicBytes = await readBlobMagicBytes(file, 32);
+        const detected = detectMimeFromMagicBytes(magicBytes);
+        if (detected) return detected;
+      } catch (_) {}
+      try {
+        const textHead = await file.slice(0, 2048).text();
+        if (looksLikeSvgMarkup(textHead)) return "image/svg+xml";
+      } catch (_) {}
+      return "";
+    }
+
 
 
 
@@ -6789,20 +6862,25 @@
 
     async function handlePickedImportFile(file, options = {}) {
       if (!file) return false;
-      if (isAiFile(file)) {
-        const imported = await importAiFile(file, options);
-        if (options.source === "open") state.fileHandle = null;
-        return imported.length > 0;
-      }
-      if (isSvgFile(file)) {
+      const sniffedMime = await detectPickedFileMime(file);
+      const treatAsSvg = sniffedMime === "image/svg+xml" || (sniffedMime !== "application/pdf" && isSvgFile(file));
+      if (treatAsSvg) {
         const text = await file.text();
         if (options.source === "open") {
-          const loaded = loadSvgText(text, { fileHandle: options.fileHandle || null });
+          const svgHandle = isValidSvgHandle(options.fileHandle) ? options.fileHandle : null;
+          const loaded = loadSvgText(text, { fileHandle: svgHandle });
           if (!loaded) setStatus("Invalid SVG file.");
+          if (!svgHandle) state.fileHandle = null;
           return loaded;
         }
         const imported = importSvgTextFitted(text);
         if (!imported.length) setStatus("Import failed: invalid SVG.");
+        return imported.length > 0;
+      }
+      const treatAsAi = sniffedMime === "application/pdf" || isAiFile(file);
+      if (treatAsAi) {
+        const imported = await importAiFile(file, options);
+        if (options.source === "open") state.fileHandle = null;
         return imported.length > 0;
       }
       throw new Error("Unsupported file type.");
@@ -8152,6 +8230,48 @@
       });
     }
 
+    function isInternalSvgClipboardPayload(svgText) {
+      const head = String(svgText || "").slice(0, 1024);
+      const re = new RegExp(`\\b${INTERNAL_SVG_CLIPBOARD_ATTR}\\s*=\\s*["']${INTERNAL_SVG_CLIPBOARD_VALUE}["']`, "i");
+      return re.test(head);
+    }
+
+    function importSvgFromClipboardPayload(svgText, types = [], route = "plain-svg") {
+      const text = String(svgText || "");
+      if (!text.trim()) return false;
+      const internalPayload = isInternalSvgClipboardPayload(text);
+      if (internalPayload && Array.isArray(state.clipboardItems) && state.clipboardItems.length) {
+        const ok = pasteInternalClipboard();
+        if (ok) {
+          setLastPasteReport(`${route}-internal`, types, "internal clipboard route");
+          return true;
+        }
+      }
+      if (internalPayload) {
+        const nudge = getPasteNudgeOffset();
+        const ids = importSvgText(text, {
+          push: false,
+          setMessage: false,
+          select: true,
+          wrap: false,
+          fitToCanvas: false,
+          offsetX: nudge.x,
+          offsetY: nudge.y
+        });
+        const ok = ids.length > 0;
+        setLastPasteReport(`${route}-internal`, types, ok ? `objects=${ids.length}` : "parse failed");
+        if (ok) {
+          pushHistory("paste-svg");
+          setStatus(`Pasted ${ids.length} object(s).`);
+        }
+        return ok;
+      }
+      const ok = importSvgTextWithPasteNudge(text).length > 0;
+      setLastPasteReport(route, types, ok ? "vector imported" : "parse failed");
+      if (!ok) setStatus("Paste SVG parse failed.");
+      return ok;
+    }
+
     async function handlePaste(ev) {
       if (ev && typeof ev === "object") {
         if (processedPasteEvents.has(ev)) return;
@@ -8213,8 +8333,7 @@
         const plain = getDataSafe("text/plain");
         if (svgXmlText.trim().startsWith("<svg")) {
           ev.preventDefault();
-          const ok = importSvgTextWithPasteNudge(svgXmlText).length > 0;
-          setLastPasteReport("image-svg+xml", types, ok ? "vector imported" : "parse failed");
+          const ok = importSvgFromClipboardPayload(svgXmlText, types, "image-svg+xml");
           if (!ok) setStatus("Paste SVG(XML) parse failed.");
           return;
         }
@@ -8224,16 +8343,15 @@
           ev.preventDefault();
           const raw = await readClipboardItemAsText(svgItem);
           const snippet = extractSvgSnippet(raw);
-          const ok = snippet ? importSvgTextWithPasteNudge(snippet).length > 0 : false;
-          setLastPasteReport("item-image-svg+xml", types, ok ? "vector imported" : "item parse failed");
+          const ok = snippet ? importSvgFromClipboardPayload(snippet, types, "item-image-svg+xml") : false;
+          if (!snippet) setLastPasteReport("item-image-svg+xml", types, "item parse failed");
           if (ok) return;
         }
 
         const plainSvg = plain.trim().startsWith("<svg") ? plain : extractSvgSnippet(plain);
         if (plainSvg) {
           ev.preventDefault();
-          const ok = importSvgTextWithPasteNudge(plainSvg).length > 0;
-          setLastPasteReport("plain-svg", types, ok ? "vector imported" : "parse failed");
+          const ok = importSvgFromClipboardPayload(plainSvg, types, "plain-svg");
           if (!ok) setStatus("Paste SVG parse failed.");
           return;
         }
@@ -8590,10 +8708,10 @@
         if (stripGroupLabels && clone instanceof SVGElement) {
           clone.querySelectorAll?.('[data-fm-group-label="1"]').forEach((n) => n.remove());
         }
+        el.parentNode.appendChild(clone);
         ensureId(clone);
         const t = getTranslate(el);
         setTranslate(clone, t.x + offsetX, t.y + offsetY);
-        el.parentNode.appendChild(clone);
         assignIds(clone);
         if (clone.dataset.id) clones.push(clone.dataset.id);
       });
@@ -10157,7 +10275,12 @@
             }
           } else {
             // Selection (Black Arrow): Select the outermost group
-            target = resolveTargetByTool(raw || stack[0]);
+            const textCandidate = resolveDirectTextLikeTarget(raw || stack[0] || null);
+            if (textCandidate instanceof SVGElement && svgTagName(textCandidate) === "text" && !isGroupLabel(textCandidate)) {
+              target = textCandidate;
+            } else {
+              target = resolveTargetByTool(raw || stack[0]);
+            }
           }
 
           if (!target || !target.dataset.id) return;
@@ -10529,11 +10652,14 @@
       if (pasteSinkEl) pasteSinkEl.addEventListener("paste", handlePaste);
       // window.addEventListener("focus", focusPasteSink);
       window.addEventListener("resize", renderStatus);
+      window.addEventListener("focus", () => { void runTimedAutosaveCatchup("focus"); });
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) void runTimedAutosaveCatchup("visible");
+      });
       window.addEventListener("beforeunload", () => {
         void writeLiveAutosave("beforeunload");
         if (document.getElementById("autosaveSelect").value !== "off") {
-          void saveAutosave();
-          void saveTimeMachineSvgFile();
+          void runTimedAutosaveTick("beforeunload", { force: true });
         }
       });
     }
