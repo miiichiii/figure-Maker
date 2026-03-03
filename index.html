@@ -947,8 +947,8 @@
         <button class="menu-trigger" data-menu-trigger="file">File</button>
         <div class="menu-panel">
           <button class="menu-action" data-menu-action="file.new">New</button>
-          <button class="menu-action" data-menu-action="file.open">Open SVG...</button>
-          <button class="menu-action" data-menu-action="file.import">Import SVG...</button>
+          <button class="menu-action" data-menu-action="file.open">Open SVG/AI/PDF...</button>
+          <button class="menu-action" data-menu-action="file.import">Import SVG/AI/PDF...</button>
           <button class="menu-action" data-menu-action="file.save">Save SVG</button>
           <button class="menu-action" data-menu-action="file.saveAs">Save As...</button>
           <button class="menu-action" data-menu-action="file.pdf">Export PDF</button>
@@ -1051,19 +1051,19 @@
           </svg>
           <span class="sr-only">New</span>
         </button>
-        <button id="openSvg" class="tool-icon-btn" title="Open SVG" aria-label="Open SVG">
+        <button id="openSvg" class="tool-icon-btn" title="Open SVG/AI/PDF" aria-label="Open SVG/AI/PDF">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M3 16V6h5l2 2h7v8z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
             <path d="M10 10 L8 12 M8 12 L10 14 M8 12 H14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
-          <span class="sr-only">Open SVG</span>
+          <span class="sr-only">Open SVG/AI/PDF</span>
         </button>
-        <button id="importSvgBtn" class="tool-icon-btn" title="Import SVG" aria-label="Import SVG">
+        <button id="importSvgBtn" class="tool-icon-btn" title="Import SVG/AI/PDF" aria-label="Import SVG/AI/PDF">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <rect x="3" y="4" width="14" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect>
             <path d="M10 6 V12 M7.5 9.5 L10 12 L12.5 9.5 M6 14 H14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
           </svg>
-          <span class="sr-only">Import SVG</span>
+          <span class="sr-only">Import SVG/AI/PDF</span>
         </button>
         <button id="saveSvg" class="tool-icon-btn" title="Save SVG" aria-label="Save SVG">
           <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -6144,7 +6144,7 @@
           const handles = await window.showOpenFilePicker({
             multiple: false,
             types: [{
-              description: "SVG/AI file",
+              description: "SVG/AI/PDF file",
               accept: {
                 "image/svg+xml": [".svg"],
                 "application/postscript": [".ai"],
@@ -6166,7 +6166,7 @@
             setStatus("Open canceled.");
             return false;
           }
-          captureError("open-svg-picker", err, { userMessage: "Open SVG failed." });
+          captureError("open-svg-picker", err, { userMessage: "Open SVG/AI/PDF failed." });
           const fileInput = document.getElementById("openFileInput");
           if (fileInput) {
             fileInput.click();
@@ -9769,7 +9769,7 @@
         try {
           await handlePickedImportFile(file, { source: "open", fileHandle: null });
         } catch (err) {
-          setStatus("Open failed. Please select a valid SVG/AI file.");
+          setStatus("Open failed. Please select a valid SVG/AI/PDF file.");
           captureError("open-file-read", err, { userMessage: "File read failed." });
         }
         fileInput.value = "";
@@ -9780,8 +9780,8 @@
         try {
           await handlePickedImportFile(file, { source: "import" });
         } catch (err) {
-          setStatus("Import failed. Please select a valid SVG/AI file.");
-          captureError("import-file-read", err, { userMessage: "SVG/AI import failed." });
+          setStatus("Import failed. Please select a valid SVG/AI/PDF file.");
+          captureError("import-file-read", err, { userMessage: "SVG/AI/PDF import failed." });
         }
         importInput.value = "";
       });

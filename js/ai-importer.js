@@ -143,7 +143,11 @@ async function appendIndividualImagesToSvg(page, svgEl, viewport, pdfjsLib) {
           // Continue extracting other images.
         }
       }
-      if (imageLayer.childNodes.length > 0) svgEl.insertBefore(imageLayer, svgEl.firstChild);
+      if (imageLayer.childNodes.length > 0) {
+        // Keep extracted rasters above raw vector fallback masks.
+        // Text layer is appended afterwards, so labels still stay readable.
+        svgEl.appendChild(imageLayer);
+      }
     }
 
 function markAiRootGroups(svgEl) {
@@ -272,21 +276,21 @@ function importDataUrlAsImageFitted(dataUrl, nativeWidth, nativeHeight, options 
     }
 
 async function importAiFile(file, options = {}) {
-      setStatus("Importing AI file...");
+      setStatus("Importing AI/PDF file...");
       try {
         const svgText = await aiFileToSvgText(file);
         
         const imported = importSvgTextFitted(svgText, { forceHistory: true });
         if (!imported.length) {
-          setStatus("AI import failed: generated SVG was empty or invalid.");
+          setStatus("AI/PDF import failed: generated SVG was empty or invalid.");
           return [];
         }
         if (options.source === "open") state.fileHandle = options.fileHandle || null;
-        setStatus(`Imported AI file (${imported.length} object(s)).`);
+        setStatus(`Imported AI/PDF file (${imported.length} object(s)).`);
         return imported;
       } catch (vectorErr) {
         try {
-          setStatus("AI vector conversion failed. Trying image fallback...");
+          setStatus("AI/PDF vector conversion failed. Trying image fallback...");
           const raster = await aiFileToRasterImage(file);
           
           const fallbackId = importDataUrlAsImageFitted(raster.dataUrl, raster.width, raster.height, {
@@ -297,14 +301,14 @@ async function importAiFile(file, options = {}) {
           });
           if (fallbackId) {
             if (options.source === "open") state.fileHandle = options.fileHandle || null;
-            setStatus("Imported AI as raster image (fallback).");
+            setStatus("Imported AI/PDF as raster image (fallback).");
             return [fallbackId];
           }
         } catch (fallbackErr) {
-          captureError("import-ai-fallback", fallbackErr, { userMessage: "AI fallback import failed." });
+          captureError("import-ai-fallback", fallbackErr, { userMessage: "AI/PDF fallback import failed." });
         }
-        setStatus("This .ai file could not be read. Use AI files saved with PDF compatibility.");
-        captureError("import-ai-file", vectorErr, { userMessage: "AI import failed." });
+        setStatus("This AI/PDF file could not be read. Try re-saving with PDF compatibility.");
+        captureError("import-ai-file", vectorErr, { userMessage: "AI/PDF import failed." });
         return [];
       }
     }
