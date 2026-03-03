@@ -6207,6 +6207,7 @@
       const margin = Math.max(8, Number(options.margin || 24));
       const availW = Math.max(24, dims.width - margin * 2);
       const availH = Math.max(24, dims.height - margin * 2);
+      const allowUpscale = options.allowUpscale !== false;
       
       let initial = null;
       // Prefer safeBBox first; wrapper.getBBox() may include oversized hidden PDF/AI artifacts.
@@ -6226,7 +6227,9 @@
       if (!initial || initial.width <= 0 || initial.height <= 0) return false;
       let scale = Math.min(availW / initial.width, availH / initial.height);
       if (!Number.isFinite(scale) || scale <= 0) scale = 1;
-      const maxScale = Math.max(1, Number(options.maxScale || 12));
+      const rawMaxScale = Number(options.maxScale);
+      let maxScale = Number.isFinite(rawMaxScale) && rawMaxScale > 0 ? rawMaxScale : 12;
+      if (!allowUpscale) maxScale = Math.min(maxScale, 1);
       if (scale > maxScale) scale = maxScale;
       
       if (Math.abs(scale - 1) > 1e-4) {
@@ -7871,6 +7874,7 @@
                 setMessage: false,
                 select: false,
                 fitToCanvas: true,
+                fitAllowUpscale: false,
                 offsetX: nudge.x + idx * 24,
                 offsetY: nudge.y + idx * 24
               });
@@ -8170,6 +8174,11 @@
       const wrap = options.wrap !== false;
       const fitToCanvas = options.fitToCanvas === true;
       const fitMargin = Math.max(8, Number(options.fitMargin || 28) || 28);
+      const fitAllowUpscale = options.fitAllowUpscale !== false;
+      const fitMaxScaleOption = Number(options.fitMaxScale);
+      const fitMaxScale = Number.isFinite(fitMaxScaleOption) && fitMaxScaleOption > 0
+        ? fitMaxScaleOption
+        : (fitAllowUpscale ? 12 : 1);
       const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
       if (doc.querySelector("parsererror")) return [];
       const root = doc.querySelector("svg");
@@ -8206,7 +8215,13 @@
         }
       }
       if (wrapper) {
-        if (fitToCanvas) fitImportedWrapperToCanvas(wrapper, { margin: fitMargin });
+        if (fitToCanvas) {
+          fitImportedWrapperToCanvas(wrapper, {
+            margin: fitMargin,
+            allowUpscale: fitAllowUpscale,
+            maxScale: fitMaxScale
+          });
+        }
         if (offsetX || offsetY) {
           const t = getTranslate(wrapper);
           setTranslate(wrapper, t.x + offsetX, t.y + offsetY);
@@ -8225,6 +8240,7 @@
       return importSvgText(svgText, {
         ...options,
         fitToCanvas: options.fitToCanvas !== false,
+        fitAllowUpscale: options.fitAllowUpscale === true,
         offsetX: Number(options.offsetX || 0) + nudge.x,
         offsetY: Number(options.offsetY || 0) + nudge.y
       });
@@ -8375,6 +8391,7 @@
               setMessage: false,
               select: false,
               fitToCanvas: true,
+              fitAllowUpscale: false,
               offsetX: nudge.x + idx * 24,
               offsetY: nudge.y + idx * 24
             });
@@ -8483,6 +8500,7 @@
                         setMessage: false,
                         select: false,
                         fitToCanvas: true,
+                        fitAllowUpscale: false,
                         offsetX: nudge.x + idx * 24,
                         offsetY: nudge.y + idx * 24
                       });
