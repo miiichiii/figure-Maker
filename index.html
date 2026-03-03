@@ -325,6 +325,28 @@
       height: 18px;
       display: block;
     }
+    #matchArrowBtn {
+      min-width: 86px;
+      padding: 4px 8px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      line-height: 1.05;
+    }
+    #matchArrowBtn .arrow-glyph {
+      width: 28px;
+      height: 12px;
+      display: block;
+    }
+    #matchArrowBtn .arrow-glyph path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .align-icon-btn {
       width: 34px;
       height: 30px;
@@ -483,6 +505,32 @@
       background: transparent;
       cursor: default;
       pointer-events: none;
+    }
+    .context-menu button[data-ctx-action="mark"]::after {
+      content: "▸";
+      float: right;
+      color: var(--muted);
+    }
+    .context-submenu {
+      position: fixed;
+      display: none;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 2px;
+      min-width: 156px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      box-shadow: 0 8px 24px rgba(43, 42, 39, 0.18);
+      z-index: 20;
+    }
+    .context-submenu.open { display: grid; }
+    .context-submenu button {
+      width: 24px;
+      min-width: 24px;
+      padding: 4px 0;
+      text-align: center;
+      border-radius: 4px;
     }
     .mark-editor {
       position: fixed;
@@ -1171,7 +1219,13 @@
           </svg>
           <span class="sr-only">Triangle</span>
         </button>
-        <button id="matchArrowBtn" title="Apply Arrow: selected line(s) get an arrowhead. Arrowhead height follows stroke width x3.">Apply Arrow</button>
+        <button id="matchArrowBtn" title="Apply Arrow: selected line(s) get an arrowhead. Arrowhead height follows stroke width x3.">
+          <span>Apply Arrow</span>
+          <svg class="arrow-glyph" viewBox="0 0 28 12" aria-hidden="true">
+            <path d="M2 6 H21"></path>
+            <path d="M17 2 L25 6 L17 10"></path>
+          </svg>
+        </button>
         <label for="lineStrokeWidthInput">Stroke width</label>
         <input id="lineStrokeWidthInput" type="number" min="0.5" max="20" step="0.5" value="3" style="width:70px" />
         <label for="objectFillColorInput">Fill</label>
@@ -1334,7 +1388,8 @@
     <button data-ctx-action="paste">Paste</button>
     <button data-ctx-action="rasterize-image" hidden>Rasterize...</button>
     <div class="menu-sep"></div>
-    <button data-ctx-action="mark">Mark (A-Z)...</button>
+    <button data-ctx-action="mark">Mark</button>
+    <div id="ctxMarkSubmenu" class="context-submenu" role="menu" aria-label="Mark letters A-Z"></div>
     <button data-ctx-action="mark-clear">Clear Mark</button>
     <div class="menu-sep"></div>
     <button data-ctx-action="group">Group</button>
@@ -1431,6 +1486,7 @@
     const statusEl = document.getElementById("status");
     const restoreListEl = document.getElementById("restoreList");
     const ctxMenu = document.getElementById("ctxMenu");
+    const ctxMarkSubmenuEl = document.getElementById("ctxMarkSubmenu");
     const markEditorEl = document.getElementById("markEditor");
     const markEditorInputEl = document.getElementById("markEditorInput");
     const figureEditorEl = document.getElementById("figureEditor");
@@ -1540,6 +1596,11 @@
       const normalized = normalizeSvgNamespaceTagPrefixes(String(markup || ""));
       const resolved = restoreMarkupFromRefs(normalized);
       canvas.innerHTML = resolved;
+      canvas.querySelectorAll('[data-fm-mark="1"]').forEach((label) => {
+        if (!(label instanceof SVGElement) || svgTagName(label) !== "text") return;
+        label.setAttribute("font-family", "Arial, sans-serif");
+        label.setAttribute("font-weight", "400");
+      });
       ensureArtboardLayer();
       updateArtboardVisual();
     }
@@ -3515,12 +3576,12 @@
 
     function getTextElementFontFamilyChoice(el) {
       if (!(el instanceof SVGElement) || svgTagName(el) !== "text") return "";
-      const attrChoice = normalizeTextFontFamilyChoice(el.getAttribute("font-family"));
-      if (attrChoice) return attrChoice;
       const styleChoice = normalizeTextFontFamilyChoice(el.style?.fontFamily || "");
       if (styleChoice) return styleChoice;
       const computedChoice = normalizeTextFontFamilyChoice(window.getComputedStyle(el).fontFamily || "");
-      return computedChoice;
+      if (computedChoice) return computedChoice;
+      const attrChoice = normalizeTextFontFamilyChoice(el.getAttribute("font-family"));
+      return attrChoice;
     }
 
     function getSelectedTextFontFamilyChoice() {
@@ -3628,10 +3689,34 @@
         if (withStatus) setStatus("Select text object(s) to change font.");
         return false;
       }
+      const sampleBefore = targets.slice(0, 3).map((el) => ({
+        id: String(el.dataset?.id || ""),
+        attr: String(el.getAttribute("font-family") || ""),
+        style: String(el.style?.fontFamily || ""),
+        computed: String(window.getComputedStyle(el).fontFamily || "")
+      }));
+      const applyFontToNode = (node) => {
+        if (!(node instanceof SVGElement)) return;
+        node.setAttribute("font-family", fontFamily);
+        if (node.style && typeof node.style.setProperty === "function") {
+          node.style.setProperty("font-family", fontFamily, "important");
+        }
+      };
       targets.forEach((el) => {
-        el.setAttribute("font-family", fontFamily);
-        const tspans = Array.from(el.children).filter((n) => n instanceof SVGElement && svgTagName(n) === "tspan");
-        tspans.forEach((span) => span.setAttribute("font-family", fontFamily));
+        applyFontToNode(el);
+        el.querySelectorAll("tspan").forEach((span) => applyFontToNode(span));
+      });
+      const sampleAfter = targets.slice(0, 3).map((el) => ({
+        id: String(el.dataset?.id || ""),
+        attr: String(el.getAttribute("font-family") || ""),
+        style: String(el.style?.fontFamily || ""),
+        computed: String(window.getComputedStyle(el).fontFamily || "")
+      }));
+      debugLog("text font apply", {
+        selectedFont: fontFamily,
+        targetCount: targets.length,
+        sampleBefore,
+        sampleAfter
       });
       if (push) pushHistory("text-font-family");
       requestSelectionVisualRefresh();
@@ -6031,7 +6116,7 @@
         label.dataset.markBaseSize = String(markSize);
       }
       label.setAttribute("font-family", "Arial, sans-serif");
-      label.setAttribute("font-weight", "700");
+      label.setAttribute("font-weight", "400");
       label.setAttribute("fill", label.getAttribute("fill") || "#111827");
       label.textContent = letter;
       ensureId(label);
@@ -6061,6 +6146,64 @@
         if (selected instanceof SVGElement && isEditableElement(selected) && !isMarkText(selected)) return selected;
       }
       return null;
+    }
+
+    function ensureContextMarkSubmenuButtons() {
+      if (!(ctxMarkSubmenuEl instanceof HTMLElement) || ctxMarkSubmenuEl.childElementCount > 0) return;
+      for (let i = 65; i <= 90; i += 1) {
+        const letter = String.fromCharCode(i);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.ctxAction = "mark-letter";
+        btn.dataset.markLetter = letter;
+        btn.textContent = letter;
+        btn.setAttribute("role", "menuitem");
+        ctxMarkSubmenuEl.appendChild(btn);
+      }
+    }
+
+    function closeMarkSubmenu() {
+      if (!(ctxMarkSubmenuEl instanceof HTMLElement)) return;
+      ctxMarkSubmenuEl.classList.remove("open");
+      ctxMarkSubmenuEl.style.left = "";
+      ctxMarkSubmenuEl.style.top = "";
+    }
+
+    function openMarkSubmenu() {
+      if (!(ctxMarkSubmenuEl instanceof HTMLElement)) return false;
+      ensureContextMarkSubmenuButtons();
+      const markBtn = ctxMenu.querySelector('button[data-ctx-action="mark"]');
+      if (!(markBtn instanceof HTMLButtonElement) || markBtn.disabled) return false;
+      ctxMarkSubmenuEl.classList.add("open");
+      ctxMarkSubmenuEl.style.left = "0px";
+      ctxMarkSubmenuEl.style.top = "0px";
+      const btnRect = markBtn.getBoundingClientRect();
+      const menuRect = ctxMenu.getBoundingClientRect();
+      const subRect = ctxMarkSubmenuEl.getBoundingClientRect();
+      let left = menuRect.right + 4;
+      let top = btnRect.top;
+      if (left + subRect.width > window.innerWidth - 4) {
+        left = Math.max(4, menuRect.left - subRect.width - 4);
+      }
+      if (top + subRect.height > window.innerHeight - 4) {
+        top = Math.max(4, window.innerHeight - subRect.height - 4);
+      }
+      ctxMarkSubmenuEl.style.left = `${Math.round(left)}px`;
+      ctxMarkSubmenuEl.style.top = `${Math.round(top)}px`;
+      return true;
+    }
+
+    function setContextMarkLetter(letter) {
+      const normalized = String(letter || "").trim().toUpperCase();
+      if (!/^[A-Z]$/.test(normalized)) return false;
+      const target = resolveContextMarkTarget();
+      if (!(target instanceof SVGElement) || !target.dataset?.id) {
+        setStatus("Mark needs a target.");
+        return false;
+      }
+      addOrReplaceMarkLabel(target, normalized);
+      setStatus(`Label ${normalized} set.`);
+      return true;
     }
 
     function closeMarkEditor() {
@@ -6157,6 +6300,7 @@
 
     function openContextMenu(clientX, clientY, options = {}) {
       closeMarkEditor();
+      closeMarkSubmenu();
       state.contextGroupId = options.groupId || "";
       state.contextTargetId = options.targetId || "";
       const hasSelection = state.selectedIds.length > 0;
@@ -6178,6 +6322,7 @@
         if (action === "group") disabled = state.selectedIds.length < 2;
         if (action === "ungroup") disabled = !hasGroupSelection;
         if (action === "mark") disabled = !canMark;
+        if (action === "mark-letter") disabled = !canMark;
         if (action === "mark-clear") disabled = !canMarkClear;
         if (action === "rasterize-image") btn.hidden = !canRasterizeImage;
         else btn.hidden = false;
@@ -6195,6 +6340,7 @@
     }
 
     function closeContextMenu() {
+      closeMarkSubmenu();
       ctxMenu.style.display = "none";
       state.contextGroupId = null;
       state.contextTargetId = null;
@@ -10487,6 +10633,8 @@
         openContextMenu(e.clientX, e.clientY, { groupId, targetId: target?.dataset?.id || "" });
       });
 
+      ensureContextMarkSubmenuButtons();
+
       ctxMenu.addEventListener("click", (e) => {
         const btn = e.target.closest("button[data-ctx-action]");
         if (!btn || btn.disabled) return;
@@ -10495,7 +10643,16 @@
         if (action === "cut") cutSelected();
         if (action === "paste") pasteInternalClipboard();
         if (action === "rasterize-image") promptRasterizeSelectedImage();
-        if (action === "mark") promptGroupMark();
+        if (action === "mark") {
+          if (ctxMarkSubmenuEl?.classList.contains("open")) closeMarkSubmenu();
+          else openMarkSubmenu();
+          return;
+        }
+        if (action === "mark-letter") {
+          setContextMarkLetter(btn.dataset.markLetter || "");
+          closeContextMenu();
+          return;
+        }
         if (action === "mark-clear") clearGroupMark();
         if (action === "group") groupSelected();
         if (action === "ungroup") ungroupSelected();
