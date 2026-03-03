@@ -980,7 +980,7 @@
         <button class="menu-trigger" data-menu-trigger="maintenance">Maintenance</button>
         <div class="menu-panel">
           <button class="menu-action" data-menu-action="maintenance.shortcuts">Shortcuts</button>
-          <button class="menu-action" data-menu-action="maintenance.restore">Restore Latest Autosave</button>
+          <button class="menu-action" data-menu-action="maintenance.restore">Restore Latest Time Machine</button>
           <div class="menu-sep"></div>
           <button class="menu-action" data-menu-action="maintenance.pasteReport">Paste Report</button>
           <button class="menu-action" data-menu-action="maintenance.pasteReport.copy">Copy Paste Report</button>
@@ -1108,9 +1108,10 @@
         </button>
       </div>
       <div class="group" data-toolbar-tab="tool">
-        <label for="autosaveSelect">Autosave</label>
+        <label for="autosaveSelect">Time Machine</label>
         <select id="autosaveSelect">
           <option value="off">Off</option>
+          <option value="1">1 min</option>
           <option value="10">10 min</option>
           <option value="30">30 min</option>
         </select>
@@ -1123,7 +1124,7 @@
           <span class="sr-only">More</span>
         </button>
         <select id="restoreList"></select>
-        <button id="restoreFromList" class="tool-icon-btn" title="Restore selected autosave" aria-label="Restore selected autosave">
+        <button id="restoreFromList" class="tool-icon-btn" title="Restore selected Time Machine snapshot" aria-label="Restore selected Time Machine snapshot">
           <svg viewBox="0 0 20 20" aria-hidden="true">
             <path d="M10 4 A6 6 0 1 1 5.2 6.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
             <path d="M2.8 7.2 H6.4 V3.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1560,10 +1561,10 @@
           };
           req.onerror = () => {
             autosaveDbPromise = null;
-            reject(req.error || new Error("Failed to open autosave IndexedDB."));
+            reject(req.error || new Error("Failed to open Time Machine IndexedDB."));
           };
           req.onblocked = () => {
-            setStatus("Autosave DB upgrade blocked. Close other Figure Maker tabs.");
+            setStatus("Time Machine DB upgrade blocked. Close other Figure Maker tabs.");
           };
         });
       }
@@ -1681,6 +1682,9 @@
       maxHistory: MAX_HISTORY_ENTRIES_DEFAULT,
       interaction: null,
       autosaveTimer: null,
+      fileAutosaveTimer: null,
+      fileAutosaveRunning: false,
+      fileAutosaveWarned: false,
       liveAutosaveTimer: 0,
       contextGroupId: null,
       contextTargetId: null,
@@ -1887,7 +1891,7 @@
         if (compact) {
           statusMsgEl.textContent = `${state.statusMessage} | ${toolName} | sel:${selectedCount} | z:${zoomPct}% | h:${histPos}/${histTotal}`;
         } else {
-          statusMsgEl.textContent = `${state.statusMessage} | tool:${toolName} | sel:${selectedCount} | zoom:${zoomPct}% | hist:${histPos}/${histTotal} | autosave:${autosave}`;
+          statusMsgEl.textContent = `${state.statusMessage} | tool:${toolName} | sel:${selectedCount} | zoom:${zoomPct}% | hist:${histPos}/${histTotal} | tm:${autosave}`;
         }
       }
     }
@@ -6033,15 +6037,21 @@
 
     async function saveSvg(options = {}) {
       const saveAs = !!options.saveAs;
+      const silent = options.silent === true;
+      const requireExistingHandle = options.requireExistingHandle === true;
+      const disableDownloadFallback = options.disableDownloadFallback === true;
       const markup = getCleanSvgDocument();
       const suggestedName = getDefaultSvgFileName();
       if (!supportsFileSystemSaveApi()) {
+        if (disableDownloadFallback) return false;
         downloadSvgFallback(markup, suggestedName);
-        setStatus("SVG saved (download fallback).");
+        if (!silent) setStatus("SVG saved (download fallback).");
         return true;
       }
       try {
         let handle = saveAs ? null : state.fileHandle;
+        if (handle && !String(handle.name || "").toLowerCase().endsWith(".svg")) handle = null;
+        if (requireExistingHandle && !handle) return false;
         if (!handle) {
           handle = await window.showSaveFilePicker({
             suggestedName,
@@ -6052,23 +6062,27 @@
           });
         }
         if (!handle) {
-          setStatus("Save canceled.");
+          if (!silent) setStatus("Save canceled.");
           return false;
         }
         const writable = await handle.createWritable();
         await writable.write(markup);
         await writable.close();
         state.fileHandle = handle;
-        setStatus(saveAs ? "SVG saved as new file." : "SVG saved.");
+        if (!silent) setStatus(saveAs ? "SVG saved as new file." : "SVG saved.");
         return true;
       } catch (err) {
         if (String(err?.name || "") === "AbortError") {
-          setStatus("Save canceled.");
+          if (!silent) setStatus("Save canceled.");
           return false;
         }
         captureError("save-svg", err, { userMessage: "SVG save failed." });
+        if (disableDownloadFallback) {
+          if (!silent) setStatus("SVG save failed.");
+          return false;
+        }
         downloadSvgFallback(markup, suggestedName);
-        setStatus("SVG save failed; downloaded instead.");
+        if (!silent) setStatus("SVG save failed; downloaded instead.");
         return false;
       }
     }
@@ -6368,7 +6382,7 @@
         localStorage.removeItem(AUTOSAVE_KEY);
         localStorage.removeItem(LIVE_AUTOSAVE_KEY);
       } catch (err) {
-        captureError("autosave-migrate", err, { userMessage: "Autosave migration failed." });
+        captureError("autosave-migrate", err, { userMessage: "Time Machine migration failed." });
       }
     }
 
@@ -6379,8 +6393,8 @@
       } catch (err) {
         if (!state.autosaveParseWarned) {
           state.autosaveParseWarned = true;
-          setStatus("Autosave storage read failed. Fallback storage was used.");
-          captureError("autosave-read", err, { userMessage: "Autosave data could not be read." });
+          setStatus("Time Machine storage read failed. Fallback storage was used.");
+          captureError("autosave-read", err, { userMessage: "Time Machine data could not be read." });
         }
         return readAutosaveRecordsFromLocalStorage();
       }
@@ -6406,7 +6420,7 @@
         if (!isIndexedDbAvailable()) return readLiveAutosaveRecordFromLocalStorage();
         return await readLiveAutosaveRecordFromIndexedDb();
       } catch (err) {
-        captureError("live-autosave-read", err, { userMessage: "Live autosave data could not be read." });
+        captureError("live-autosave-read", err, { userMessage: "Live Time Machine data could not be read." });
         return readLiveAutosaveRecordFromLocalStorage();
       }
     }
@@ -6432,12 +6446,12 @@
         if (isQuotaExceededError(err)) {
           if (!state.liveAutosaveQuotaWarned) {
             state.liveAutosaveQuotaWarned = true;
-            setStatus("Live autosave skipped: storage is full. Use Save SVG.");
+            setStatus("Live Time Machine snapshot skipped: storage is full. Use Save SVG.");
           }
           try { localStorage.removeItem(LIVE_AUTOSAVE_KEY); } catch (_) {}
           return;
         }
-        captureError("live-autosave-write", err, { userMessage: "Autosave write failed." });
+        captureError("live-autosave-write", err, { userMessage: "Time Machine write failed." });
       }
     }
 
@@ -6458,7 +6472,7 @@
       try {
         result = await setAutosaveRecords(records);
       } catch (err) {
-        captureError("autosave-write", err, { userMessage: "Autosave write failed." });
+        captureError("autosave-write", err, { userMessage: "Time Machine write failed." });
         return;
       }
       await writeLiveAutosave("timed");
@@ -6466,13 +6480,39 @@
       if (!result.stored) {
         if (!state.autosaveQuotaWarned) {
           state.autosaveQuotaWarned = true;
-          setStatus("Autosave skipped: storage is full. Use Save SVG.");
+          setStatus("Time Machine snapshot skipped: storage is full. Use Save SVG.");
         }
         return;
       }
       state.autosaveQuotaWarned = false;
       const dropped = result.dropped > 0 ? ` (${result.dropped} old record(s) dropped)` : "";
-      setStatus(`Autosave snapshot written.${dropped}`);
+      setStatus(`Time Machine snapshot written.${dropped}`);
+    }
+
+    async function saveTimeMachineSvgFile() {
+      if (state.fileAutosaveRunning) return false;
+      if (!supportsFileSystemSaveApi()) return false;
+      const handleName = String(state.fileHandle?.name || "").toLowerCase();
+      if (!state.fileHandle || !handleName.endsWith(".svg")) {
+        if (!state.fileAutosaveWarned) {
+          state.fileAutosaveWarned = true;
+          setStatus("Time Machine file save skipped: choose a target with Save As (.svg).");
+        }
+        return false;
+      }
+      state.fileAutosaveWarned = false;
+      state.fileAutosaveRunning = true;
+      try {
+        return await saveSvg({
+          silent: true,
+          requireExistingHandle: true,
+          disableDownloadFallback: true
+        });
+      } catch (_) {
+        return false;
+      } finally {
+        state.fileAutosaveRunning = false;
+      }
     }
 
     async function refreshRestoreList() {
@@ -6504,7 +6544,7 @@
         const live = await getLiveAutosaveRecord();
         const r = live && (!timed || Number(live.at || 0) >= Number(timed.at || 0)) ? live : timed;
         if (!r || !r.markup) {
-          setStatus("No autosave records.");
+          setStatus("No Time Machine snapshots.");
           return;
         }
         applyCanvasMeta(r.canvasMeta);
@@ -6515,7 +6555,7 @@
         pushHistory("restore-latest");
         const source = r.id && String(r.id).startsWith("live-") ? "live" : "timed";
         const stamp = r.at ? new Date(r.at).toLocaleString() : "";
-        setStatus(`Latest autosave restored (${source}${stamp ? `: ${stamp}` : ""}).`);
+        setStatus(`Latest Time Machine snapshot restored (${source}${stamp ? `: ${stamp}` : ""}).`);
       } catch (err) {
         captureError("autosave-restore-latest", err, { userMessage: "Restore latest failed." });
         setStatus("Restore latest failed.");
@@ -6535,7 +6575,7 @@
         }
         
         if (!r) {
-          setStatus("Selected autosave not found.");
+          setStatus("Selected Time Machine snapshot not found.");
           return;
         }
         applyCanvasMeta(r.canvasMeta);
@@ -6544,7 +6584,7 @@
         ensureFigureTitle();
         setSelection(r.selectedIds || []);
         pushHistory("restore-from-list");
-        setStatus("Autosave restored.");
+        setStatus("Time Machine snapshot restored.");
       } catch (err) {
         captureError("autosave-restore-selected", err, { userMessage: "Restore selected failed." });
         setStatus("Restore selected failed.");
@@ -6556,13 +6596,20 @@
         clearInterval(state.autosaveTimer);
         state.autosaveTimer = null;
       }
+      if (state.fileAutosaveTimer) {
+        clearInterval(state.fileAutosaveTimer);
+        state.fileAutosaveTimer = null;
+      }
+      state.fileAutosaveWarned = false;
       const val = document.getElementById("autosaveSelect").value;
       localStorage.setItem(AUTOSAVE_INTERVAL_KEY, val);
       if (val !== "off") {
-        state.autosaveTimer = setInterval(() => { void saveAutosave(); }, Number(val) * 60 * 1000);
+        const intervalMs = Math.max(1, Number(val)) * 60 * 1000;
+        state.autosaveTimer = setInterval(() => { void saveAutosave(); }, intervalMs);
+        state.fileAutosaveTimer = setInterval(() => { void saveTimeMachineSvgFile(); }, intervalMs);
       }
-      if (val === "off") setStatus("Autosave off. Live restore snapshot remains available.");
-      else setStatus(`Autosave set: ${val} min (timed) + live snapshot on edit.`);
+      if (val === "off") setStatus("Time Machine off. Live restore snapshot remains available.");
+      else setStatus(`Time Machine set: ${val} min (snapshot + SVG file auto-save).`);
     }
 
     function consumePasteNudgeStep() {
@@ -6744,6 +6791,7 @@
       if (!file) return false;
       if (isAiFile(file)) {
         const imported = await importAiFile(file, options);
+        if (options.source === "open") state.fileHandle = null;
         return imported.length > 0;
       }
       if (isSvgFile(file)) {
@@ -7963,7 +8011,7 @@
         "Ctrl/Cmd+C/X : Copy/Cut",
         "Ctrl/Cmd+V : Paste from OS clipboard (or internal fallback if OS paste not delivered)",
         "Ctrl/Cmd+Shift+V : Paste internal clipboard (force)",
-        "Ctrl/Cmd+Shift+R : Restore latest autosave",
+        "Ctrl/Cmd+Shift+R : Restore latest Time Machine snapshot",
         "Ctrl/Cmd+Shift+I : Show paste report",
         "Ctrl/Cmd+Shift+J : Copy paste report",
         "Ctrl/Cmd+Shift+K : Save paste report file",
@@ -10483,7 +10531,10 @@
       window.addEventListener("resize", renderStatus);
       window.addEventListener("beforeunload", () => {
         void writeLiveAutosave("beforeunload");
-        if (document.getElementById("autosaveSelect").value !== "off") void saveAutosave();
+        if (document.getElementById("autosaveSelect").value !== "off") {
+          void saveAutosave();
+          void saveTimeMachineSvgFile();
+        }
       });
     }
 
@@ -10527,8 +10578,8 @@
         }
       } catch (_) {}
       await migrateLegacyAutosaveStorage();
-      const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "off";
-      document.getElementById("autosaveSelect").value = ["off", "10", "30"].includes(interval) ? interval : "off";
+      const interval = localStorage.getItem(AUTOSAVE_INTERVAL_KEY) || "1";
+      document.getElementById("autosaveSelect").value = ["off", "1", "10", "30"].includes(interval) ? interval : "1";
       await refreshRestoreList();
       updateAutosaveTimer();
       ensureFigureTitle();

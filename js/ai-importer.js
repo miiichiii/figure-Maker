@@ -285,7 +285,6 @@ async function importAiFile(file, options = {}) {
           setStatus("AI/PDF import failed: generated SVG was empty or invalid.");
           return [];
         }
-        if (options.source === "open") state.fileHandle = options.fileHandle || null;
         setStatus(`Imported AI/PDF file (${imported.length} object(s)).`);
         return imported;
       } catch (vectorErr) {
@@ -300,7 +299,6 @@ async function importAiFile(file, options = {}) {
             historyOptions: { force: true }
           });
           if (fallbackId) {
-            if (options.source === "open") state.fileHandle = options.fileHandle || null;
             setStatus("Imported AI/PDF as raster image (fallback).");
             return [fallbackId];
           }
