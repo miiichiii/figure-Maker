@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Figure Maker — 論文Figure作成ツール</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FDFBF7;
+  --surface: #F6F0E3;
+  --panel: #E7D7B8;
+  --border: #CBB489;
+  --ink: #2B2A27;
+  --muted: #6B6560;
+  --accent: #7B5A2B;
+  --accent-light: #C6A575;
+  --hero-grad-start: #F3EFE6;
+  --hero-grad-end: #E7D7B8;
+  --blue: #2563eb;
+  --green: #16a34a;
+  --pink: #ec4899;
+  --shadow: rgba(43,42,39,0.12);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Zen Kaku Gothic New", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.7;
+}
+
+/* ===== Hero ===== */
+.hero {
+  background: linear-gradient(135deg, var(--hero-grad-start), var(--hero-grad-end));
+  border-bottom: 1px solid var(--border);
+  padding: 80px 24px 60px;
+  text-align: center;
+}
+.hero-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+.hero h1 span { color: var(--accent); }
+.hero-sub {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  color: var(--muted);
+  max-width: 600px;
+  margin: 0 auto 36px;
+}
+.hero-pills {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 36px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.pill svg { width: 18px; height: 18px; flex-shrink: 0; }
+.hero-cta {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 14px 36px;
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(123,90,43,0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.hero-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(123,90,43,0.4);
+}
+
+/* ===== Section ===== */
+.section {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 64px 24px;
+}
+.section-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.section-desc {
+  text-align: center;
+  color: var(--muted);
+  max-width: 640px;
+  margin: 0 auto 48px;
+}
+
+/* ===== Feature cards ===== */
+.features { display: grid; gap: 32px; }
+.feature-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 20px var(--shadow);
+}
+.feature-card:nth-child(even) { direction: rtl; }
+.feature-card:nth-child(even) > * { direction: ltr; }
+.feature-info h3 {
+  font-size: 1.2rem;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+.feature-info p { color: var(--muted); font-size: 0.95rem; }
+.feature-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+/* ===== Demo boxes ===== */
+.demo-box {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+.demo-box svg { width: 100%; height: 100%; display: block; }
+.demo-box img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 11px;
+}
+.hero-screenshot {
+  max-width: 900px;
+  margin: 32px auto 0;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px var(--shadow);
+  overflow: hidden;
+}
+.hero-screenshot img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+/* Sub-feature image cards */
+.sub-feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sub-feature-card img {
+  width: 100%;
+  height: auto;
+  min-height: 160px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.sub-feature-card strong { color: var(--accent); }
+
+/* ===== Lightbox ===== */
+.lb-trigger {
+  cursor: zoom-in;
+  transition: opacity 0.15s;
+}
+.lb-trigger:hover { opacity: 0.85; }
+#lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.82);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+}
+#lightbox.open { display: flex; }
+#lightbox img {
+  max-width: min(1200px, 96vw);
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+  cursor: default;
+  animation: lb-in 0.18s ease;
+}
+@keyframes lb-in {
+  from { opacity: 0; transform: scale(0.93); }
+  to   { opacity: 1; transform: scale(1); }
+}
+#lb-close {
+  position: fixed;
+  top: 16px; right: 20px;
+  font-size: 28px;
+  color: #fff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  opacity: 0.8;
+  transition: opacity 0.12s;
+}
+#lb-close:hover { opacity: 1; }
+
+/* ===== Shortcuts table ===== */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.shortcut-row kbd {
+  font-family: "SF Mono", "Consolas", monospace;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+/* ===== Quick Start ===== */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+  counter-reset: step;
+}
+.step {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  position: relative;
+}
+.step::before {
+  counter-increment: step;
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 36px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  border-radius: 50%;
+  margin-bottom: 12px;
+}
+.step h4 { font-size: 1rem; margin-bottom: 4px; }
+.step p { font-size: 0.85rem; color: var(--muted); }
+
+/* ===== FAQ ===== */
+.faq-list { max-width: 680px; margin: 0 auto; }
+.faq-item {
+  border-bottom: 1px solid var(--border);
+  padding: 20px 0;
+}
+.faq-item summary {
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.95rem;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.faq-item summary::after { content: "+"; font-size: 1.2rem; color: var(--accent); }
+.faq-item[open] summary::after { content: "−"; }
+.faq-item p { margin-top: 8px; color: var(--muted); font-size: 0.9rem; }
+
+/* ===== Footer ===== */
+.footer {
+  text-align: center;
+  padding: 32px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--hero-grad-start);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Animations removed - using real screenshots and GIFs now */
+
+/* ===== Responsive ===== */
+@media (max-width: 700px) {
+  .feature-card { grid-template-columns: 1fr; }
+  .feature-card:nth-child(even) { direction: ltr; }
+  .hero { padding: 48px 16px 40px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<header class="hero">
+  <div class="hero-badge">FREE &amp; NO LOGIN</div>
+  <h1><span>Figure Maker</span></h1>
+  <p class="hero-sub">論文Figureの作成に特化した、ブラウザ完結型ベクターエディタ。<br>Illustratorの複雑さを排除し、研究者に必要な機能だけを凝縮しました。</p>
+  <div class="hero-pills">
+    <span class="pill">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2" stroke-linecap="round"/></svg>
+      完全無料
+    </span>
+    <span class="pill">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3" width="12" height="14" rx="2"/><path d="M8 10h4M10 8v4" stroke-linecap="round"/></svg>
+      ログイン不要
+    </span>
+    <span class="pill">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="14" height="11" rx="2"/><path d="M7 18h6" stroke-linecap="round"/></svg>
+      ブラウザのみで完結
+    </span>
+    <span class="pill">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 3h8l4 4v10H4z"/><path d="M12 3v4h4"/></svg>
+      .ai / SVG / PDF対応
+    </span>
+  </div>
+  <a href="../index.html" class="hero-cta">Figure Maker を開く</a>
+  <div class="hero-screenshot">
+    <img src="assets/app-with-shapes.png" alt="Figure Maker のインターフェース" loading="lazy">
+  </div>
+</header>
+
+<!-- ===== FEATURES ===== -->
+<section class="section">
+  <h2 class="section-title">主な機能</h2>
+  <p class="section-desc">Adobe Illustratorの操作感はそのままに、論文Figure作成に必要な機能を厳選しました。</p>
+
+  <div class="features">
+
+    <!-- Feature 1: AI File Import -->
+    <div class="feature-card">
+      <div class="feature-info">
+        <span class="feature-tag">必須機能</span>
+        <h3>AIファイルのドラッグ&amp;ドロップ取り込み</h3>
+        <p>Adobe Illustrator (.ai) ファイルをブラウザにドラッグするだけで取り込めます。既存の論文Figureデータをそのまま活用でき、SVGやPDFファイルも同様にインポート可能です。</p>
+      </div>
+      <div class="demo-box">
+        <img src="assets/file-menu-open.png" alt="File メニューから SVG/AI/PDF をインポート" loading="lazy">
+      </div>
+    </div>
+
+    <!-- Feature 2: Direct Selection -->
+    <div class="feature-card">
+      <div class="feature-info">
+        <span class="feature-tag">強力な編集</span>
+        <h3>ダイレクト選択ツール</h3>
+        <p>グループ化された要素を無視して、個別のオブジェクトを直接選択・編集できます。Illustratorの白矢印ツールに相当する機能で、複雑なFigure内の個別要素を素早く操作できます。</p>
+      </div>
+      <div class="demo-box">
+        <img src="assets/demo-tools.gif" alt="ダイレクト選択ツール（White Arrow）の切り替えデモ" loading="lazy">
+        <img src="assets/tool-palette.png" alt="ツールパレット" loading="lazy" style="position:absolute; bottom:8px; right:8px; width:80px; border-radius:8px; border:1px solid var(--border); box-shadow: 0 2px 8px var(--shadow);">
+      </div>
+    </div>
+
+    <!-- Feature 3: Time Machine -->
+    <div class="feature-card">
+      <div class="feature-info">
+        <span class="feature-tag">データ保全</span>
+        <h3>Time Machine — 自動保存 &amp; 復元</h3>
+        <p>1分・10分・30分の間隔で自動的にスナップショットを保存。ブラウザが閉じても作業状態を復元でき、過去のバージョンをリストから自由に選んで戻せます。IndexedDBベースで大容量画像にも対応。</p>
+      </div>
+      <div class="demo-box">
+        <img src="assets/time-machine-closeup.png" alt="Time Machine ツールバー：自動保存間隔の設定と復元リスト" loading="lazy">
+      </div>
+    </div>
+
+    <!-- Feature 4: PDF Export -->
+    <div class="feature-card">
+      <div class="feature-info">
+        <span class="feature-tag">出力</span>
+        <h3>ワンクリックPDF書き出し</h3>
+        <p>作成したFigureをPDF形式で即座に書き出し。論文投稿やレビュー用に最適なベクターPDFを生成します。もちろんSVG保存も可能で、再編集にも対応。</p>
+      </div>
+      <div class="demo-box">
+        <img src="assets/file-ops-closeup.png" alt="Save SVG / Export PDF ボタン" loading="lazy">
+      </div>
+    </div>
+
+    <!-- Feature 5: Align & Smart Guides -->
+    <div class="feature-card">
+      <div class="feature-info">
+        <span class="feature-tag">精密配置</span>
+        <h3>整列ツール &amp; スマートガイド</h3>
+        <p>左揃え、中央揃え、等間隔分布など6方向の整列と2軸の分布機能。さらにスマートガイドがリアルタイムでスナップポイントを表示し、美しいレイアウトを直感的に作成できます。</p>
+      </div>
+      <div class="demo-box">
+        <img src="assets/smart-guides-demo.png" alt="スマートガイドが表示された状態のキャンバス" loading="lazy">
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===== QUICK START ===== -->
+<section class="section" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); max-width: 100%; padding-left: calc((100% - 960px) / 2 + 24px); padding-right: calc((100% - 960px) / 2 + 24px);">
+  <h2 class="section-title">クイックスタート</h2>
+  <p class="section-desc">3ステップで論文Figureを作り始められます。</p>
+  <div class="steps">
+    <div class="step">
+      <h4>ブラウザで開く</h4>
+      <p>インストール不要。URLにアクセスするだけで、すぐに使い始められます。</p>
+    </div>
+    <div class="step">
+      <h4>素材を取り込む</h4>
+      <p>.ai / .svg / .pdf ファイルやクリップボード画像をドラッグ&amp;ドロップまたはペーストで追加。</p>
+    </div>
+    <div class="step">
+      <h4>編集して書き出し</h4>
+      <p>ダイレクト選択・整列・矢印変換などで仕上げたら、PDF/SVGでエクスポート。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== MORE FEATURES ===== -->
+<section class="section">
+  <h2 class="section-title">その他の機能</h2>
+  <p class="section-desc">研究者の実作業フローに合わせた便利機能を多数搭載しています。</p>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+    <div class="sub-feature-card">
+      <strong>図形描画</strong>
+      <img src="assets/shapes-on-canvas.png" alt="キャンバス上に配置された図形" loading="lazy">
+      <p style="font-size: 0.88rem; color: var(--muted);">矩形、楕円、直線、三角形、テキストをワンクリック追加。矢印変換（Apply Arrow）で線を即座にアローヘッドへ。</p>
+    </div>
+    <div class="sub-feature-card">
+      <strong>マークラベル (A-Z) &amp; コンテキストメニュー</strong>
+      <img src="assets/context-menu-mark.png" alt="コンテキストメニューとMarkサブメニュー" loading="lazy">
+      <p style="font-size: 0.88rem; color: var(--muted);">右クリックメニューからFigureパネルラベル（A, B, C...）を付与。Copy/Cut/Paste/Group/Duplicateにも素早くアクセス。</p>
+    </div>
+    <div class="sub-feature-card">
+      <strong>テキスト編集</strong>
+      <img src="assets/text-tab-closeup.png" alt="Text タブ：フォント・サイズ・カラー・マーク設定" loading="lazy">
+      <p style="font-size: 0.88rem; color: var(--muted);">テキストの追加・太字・フォントサイズ変更。ダブルクリックでインライン編集。Figure Title / Figure Numberも対応。</p>
+    </div>
+    <div class="sub-feature-card">
+      <strong>ツールバー &amp; Time Machine</strong>
+      <img src="assets/tool-tab-closeup.png" alt="Tool タブ：Undo/Redo、クロップ、ファイル操作、Time Machine" loading="lazy">
+      <p style="font-size: 0.88rem; color: var(--muted);">Undo/Redo（最大30段階）、クロップ、ファイル操作、グループ化、Time Machineが一画面に。</p>
+    </div>
+    <div class="sub-feature-card">
+      <strong>ズーム &amp; ステータスバー</strong>
+      <img src="assets/zoom-statusbar-closeup.png" alt="ステータスバー：ズームスライダー・選択数・履歴表示" loading="lazy">
+      <p style="font-size: 0.88rem; color: var(--muted);">スライダー + Ctrl/Cmd+ホイール + ピンチでズーム。現在のツール、選択数、履歴位置をリアルタイム表示。</p>
+    </div>
+    <div class="sub-feature-card">
+      <strong>キーボードショートカット一覧</strong>
+      <img src="assets/shortcuts-modal.png" alt="ショートカットモーダル" loading="lazy">
+      <p style="font-size: 0.88rem; color: var(--muted);">Ctrl/Cmd+/ で全ショートカットをすぐ確認。Illustrator風の操作体系（V, A, H, R, E, L, T, Q等）。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== KEYBOARD SHORTCUTS ===== -->
+<section class="section" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); max-width: 100%; padding-left: calc((100% - 960px) / 2 + 24px); padding-right: calc((100% - 960px) / 2 + 24px);">
+  <h2 class="section-title">キーボードショートカット</h2>
+  <p class="section-desc">Illustrator風の操作体系で直感的に操作できます。</p>
+  <div class="shortcuts-grid">
+    <div class="shortcut-row"><span>選択ツール（Black Arrow）</span><kbd>V</kbd></div>
+    <div class="shortcut-row"><span>ダイレクト選択（White Arrow）</span><kbd>A</kbd></div>
+    <div class="shortcut-row"><span>ハンドツール</span><kbd>H</kbd></div>
+    <div class="shortcut-row"><span>一時的パン</span><kbd>Space 長押し</kbd></div>
+    <div class="shortcut-row"><span>矩形を追加</span><kbd>R</kbd></div>
+    <div class="shortcut-row"><span>直線を追加</span><kbd>L</kbd></div>
+    <div class="shortcut-row"><span>楕円を追加</span><kbd>E</kbd></div>
+    <div class="shortcut-row"><span>三角形を追加</span><kbd>Y</kbd></div>
+    <div class="shortcut-row"><span>テキストを追加</span><kbd>T</kbd></div>
+    <div class="shortcut-row"><span>矢印に変換</span><kbd>Q</kbd></div>
+    <div class="shortcut-row"><span>Undo</span><kbd>Ctrl/Cmd + Z</kbd></div>
+    <div class="shortcut-row"><span>Redo</span><kbd>Ctrl/Cmd + Shift + Z</kbd></div>
+    <div class="shortcut-row"><span>複製</span><kbd>Ctrl/Cmd + D</kbd></div>
+    <div class="shortcut-row"><span>コピー / カット</span><kbd>Ctrl/Cmd + C / X</kbd></div>
+    <div class="shortcut-row"><span>ペースト</span><kbd>Ctrl/Cmd + V</kbd></div>
+    <div class="shortcut-row"><span>削除</span><kbd>Delete / Backspace</kbd></div>
+    <div class="shortcut-row"><span>ナッジ移動</span><kbd>矢印キー (Shift=10px)</kbd></div>
+    <div class="shortcut-row"><span>ズーム</span><kbd>Ctrl/Cmd + ホイール</kbd></div>
+    <div class="shortcut-row"><span>Time Machine復元</span><kbd>Ctrl/Cmd + Shift + R</kbd></div>
+    <div class="shortcut-row"><span>ショートカット一覧</span><kbd>Ctrl/Cmd + /</kbd></div>
+  </div>
+</section>
+
+<!-- ===== FAQ ===== -->
+<section class="section">
+  <h2 class="section-title">よくある質問</h2>
+  <div class="faq-list">
+    <details class="faq-item">
+      <summary>本当に無料ですか？</summary>
+      <p>はい、完全に無料です。アカウント登録やクレジットカード情報も一切不要です。ブラウザでアクセスするだけですぐにお使いいただけます。</p>
+    </details>
+    <details class="faq-item">
+      <summary>データはどこに保存されますか？</summary>
+      <p>すべてのデータはお使いのブラウザ（IndexedDB / localStorage）にローカル保存されます。外部サーバーにデータが送信されることはありません。Time Machine機能で自動バックアップも取れます。</p>
+    </details>
+    <details class="faq-item">
+      <summary>Adobe Illustratorの.aiファイルは開けますか？</summary>
+      <p>はい。.aiファイルをブラウザにドラッグ&amp;ドロップするか、File &gt; Open/Import メニューから取り込めます。内部のSVG互換部分が読み込まれ、編集可能になります。</p>
+    </details>
+    <details class="faq-item">
+      <summary>出力形式は何に対応していますか？</summary>
+      <p>SVG形式での保存と、PDF形式でのエクスポートに対応しています。SVGはベクター形式なので再編集が可能、PDFは論文投稿やプレゼンテーションに最適です。</p>
+    </details>
+    <details class="faq-item">
+      <summary>ブラウザが閉じたらデータは消えますか？</summary>
+      <p>Time Machine機能をONにしておけば、ブラウザを閉じてもIndexedDBにスナップショットが保存されています。次回アクセス時にMaintenance &gt; Restore Latest Time Machineから復元できます。</p>
+    </details>
+    <details class="faq-item">
+      <summary>どのブラウザで動きますか？</summary>
+      <p>Google Chrome、Microsoft Edge、Firefox、Safariなど、モダンブラウザで動作します。最新版のChrome / Edgeを推奨します。</p>
+    </details>
+    <details class="faq-item">
+      <summary>TIFF画像は使えますか？</summary>
+      <p>はい。TIFF画像をドラッグ&amp;ドロップまたはペーストすると、自動的にPNG形式に変換されて取り込まれます。顕微鏡画像などのTIFFファイルもそのまま利用可能です。</p>
+    </details>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer class="footer">
+  <p>&copy; 2026 Michito Hamada &mdash; Figure Maker (Beta)</p>
+  <p style="margin-top: 4px;"><a href="../index.html" style="color: var(--accent); text-decoration: none;">Figure Maker を開く</a></p>
+</footer>
+
+<!-- ===== LIGHTBOX OVERLAY ===== -->
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="画像拡大表示">
+  <button id="lb-close" aria-label="閉じる">✕</button>
+  <img id="lb-img" src="" alt="">
+</div>
+
+<script>
+(function () {
+  const lb      = document.getElementById('lightbox');
+  const lbImg   = document.getElementById('lb-img');
+  const lbClose = document.getElementById('lb-close');
+
+  // Make every <img> inside .demo-box, .sub-feature-card, .hero-screenshot a trigger
+  const selectors = '.demo-box img, .sub-feature-card img, .hero-screenshot img';
+  document.querySelectorAll(selectors).forEach(img => {
+    img.classList.add('lb-trigger');
+    img.setAttribute('title', 'クリックで拡大');
+    img.addEventListener('click', e => {
+      lbImg.src = img.src;
+      lbImg.alt = img.alt;
+      lb.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      e.stopPropagation();
+    });
+  });
+
+  // Close on backdrop click or close button
+  lb.addEventListener('click', close);
+  lbClose.addEventListener('click', close);
+  // Prevent click on image from closing
+  lbImg.addEventListener('click', e => e.stopPropagation());
+  // Close on Escape key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && lb.classList.contains('open')) close();
+  });
+
+  function close() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+    lbImg.src = '';
+  }
+})();
+</script>
+</body>
+</html>
