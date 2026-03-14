@@ -515,6 +515,7 @@
     }
     .object-palette-frame {
       min-height: 92px;
+      position: relative;
       border: 1px solid rgba(110, 81, 47, 0.22);
       border-radius: 12px;
       background:
@@ -568,6 +569,11 @@
       box-shadow: 0 4px 14px rgba(43, 42, 39, 0.08);
       user-select: none;
     }
+    .object-palette-card.selected {
+      border-color: #6b8f4e;
+      background: linear-gradient(180deg, rgba(248,255,244,0.98), rgba(230, 241, 220, 0.96));
+      box-shadow: 0 0 0 2px rgba(107, 143, 78, 0.22), 0 4px 14px rgba(43, 42, 39, 0.08);
+    }
     .object-palette-card.dragging {
       opacity: 0.45;
     }
@@ -585,7 +591,37 @@
       font-size: 11px;
       color: var(--muted);
     }
-    .object-palette-card-head button {
+    .object-palette-card-title {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+    .object-palette-card-title span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .object-palette-select-btn {
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1.5px solid rgba(123, 90, 43, 0.45);
+      background: rgba(255,255,255,0.85);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+    .object-palette-select-btn:hover {
+      border-color: rgba(107, 143, 78, 0.72);
+      background: rgba(247, 252, 243, 0.95);
+    }
+    .object-palette-select-btn.active {
+      background: radial-gradient(circle at center, #6b8f4e 0 48%, rgba(255,255,255,0) 52%);
+      border-color: #6b8f4e;
+    }
+    .object-palette-remove-btn {
       width: 22px;
       height: 22px;
       padding: 0;
@@ -593,7 +629,7 @@
       background: transparent;
       color: var(--muted);
     }
-    .object-palette-card-head button:hover {
+    .object-palette-remove-btn:hover {
       background: rgba(184, 74, 58, 0.12);
       color: var(--danger);
       border-color: rgba(184, 74, 58, 0.3);
@@ -629,6 +665,15 @@
     .object-palette-card.dragging .object-palette-grip {
       cursor: grabbing;
     }
+    .object-palette-selection-box {
+      position: absolute;
+      border: 1.5px dashed #6b8f4e;
+      background: rgba(107, 143, 78, 0.12);
+      border-radius: 8px;
+      pointer-events: none;
+      z-index: 2;
+      display: none;
+    }
     #copyright {
       font-size: 11px;
       color: var(--muted);
@@ -648,6 +693,21 @@
       stroke-dasharray: 8 4;
       pointer-events: none;
       vector-effect: non-scaling-stroke;
+    }
+    .placement-preview {
+      fill: rgba(123, 90, 43, 0.12);
+      stroke: rgba(123, 90, 43, 0.78);
+      stroke-width: 1.2;
+      stroke-dasharray: 5 3;
+      pointer-events: none;
+      vector-effect: non-scaling-stroke;
+    }
+    .placement-preview-label {
+      fill: rgba(43, 42, 39, 0.82);
+      font-size: 12px;
+      font-weight: 600;
+      pointer-events: none;
+      user-select: none;
     }
     .selection-outline {
       fill: none;
@@ -1636,7 +1696,7 @@
           </div>
         </div>
         <div id="objectPaletteFrame" class="object-palette-frame" tabindex="0" aria-describedby="objectPaletteHint">
-          <div id="objectPaletteHint" class="object-palette-empty">Press <kbd>Cmd/Ctrl + V</kbd> here. Drag cards to reorder them or copy them onto the canvas.</div>
+          <div id="objectPaletteHint" class="object-palette-empty">Press <kbd>Cmd/Ctrl + V</kbd> here for SVG or image assets. You can also drop image files, reorder cards, or drag them onto the canvas.</div>
           <div id="objectPaletteList" class="object-palette-list" role="list" hidden></div>
         </div>
       </section>
@@ -2091,6 +2151,7 @@
         state.interaction.rect?.remove?.();
         state.interaction = null;
       }
+      clearObjectPalettePlacementPreview();
       if (!state.objectPalettePlacement.active && silent) return;
       state.objectPalettePlacement.active = false;
       syncObjectPaletteUi();
@@ -2101,6 +2162,10 @@
     function startObjectPalettePlacementMode() {
       if (!Array.isArray(state.objectPaletteItems) || !state.objectPaletteItems.length) {
         setStatus("Object palette is empty.");
+        return;
+      }
+      if (!getSelectedObjectPaletteItems().length) {
+        setStatus("Select object(s) in the palette first.");
         return;
       }
       if (state.objectPalettePlacement.active) {
@@ -2126,7 +2191,7 @@
     function inferPaletteItemLabel(markup) {
       const text = String(markup || "").trim();
       if (!text) return "Object";
-      const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${text}</svg>`, "image/svg+xml");
+      const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}">${text}</svg>`, "image/svg+xml");
       const node = doc.querySelector("svg")?.firstElementChild;
       if (!(node instanceof SVGElement)) return "Object";
       const tag = svgTagName(node);
@@ -2147,7 +2212,7 @@
     function sanitizeObjectPaletteMarkup(markup) {
       const normalized = normalizeSvgNamespaceTagPrefixes(String(markup || "").trim());
       if (!normalized) return "";
-      const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${normalized}</svg>`, "image/svg+xml");
+      const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}">${normalized}</svg>`, "image/svg+xml");
       if (doc.querySelector("parsererror")) return "";
       const node = doc.querySelector("svg")?.firstElementChild;
       if (!(node instanceof SVGElement)) return "";
@@ -2178,6 +2243,30 @@
       garbageCollectImagePool();
     }
 
+    function normalizeObjectPaletteSelection(options = {}) {
+      const validIds = new Set((state.objectPaletteItems || []).map((item) => String(item.id || "")));
+      const next = (state.objectPaletteSelectedIds || []).filter((id) => validIds.has(id));
+      if (!next.length && validIds.size && options.selectAllIfEmpty) {
+        state.objectPaletteSelectedIds = [...validIds];
+      } else {
+        state.objectPaletteSelectedIds = next;
+      }
+    }
+
+    function getSelectedObjectPaletteItems() {
+      const selectedIds = new Set(state.objectPaletteSelectedIds || []);
+      return (state.objectPaletteItems || []).filter((item) => selectedIds.has(item.id));
+    }
+
+    function setObjectPaletteSelection(ids, options = {}) {
+      const validIds = new Set((state.objectPaletteItems || []).map((item) => String(item.id || "")));
+      const next = [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "")).filter((id) => validIds.has(id)))];
+      const prev = Array.isArray(state.objectPaletteSelectedIds) ? state.objectPaletteSelectedIds : [];
+      if (prev.length === next.length && prev.every((id, index) => id === next[index])) return;
+      state.objectPaletteSelectedIds = next;
+      if (options.render !== false) renderObjectPalette();
+    }
+
     function loadObjectPalette() {
       try {
         const parsed = JSON.parse(localStorage.getItem(OBJECT_PALETTE_KEY) || "[]");
@@ -2196,6 +2285,7 @@
       } catch (_) {
         state.objectPaletteItems = [];
       }
+      normalizeObjectPaletteSelection({ selectAllIfEmpty: true });
       renderObjectPalette();
     }
 
@@ -2217,10 +2307,114 @@
       if (options.render) renderObjectPalette();
     }
 
+    function ensureObjectPaletteSelectionBox() {
+      if (!(objectPaletteFrameEl instanceof HTMLElement)) return null;
+      let box = objectPaletteFrameEl.querySelector(".object-palette-selection-box");
+      if (!(box instanceof HTMLDivElement)) {
+        box = document.createElement("div");
+        box.className = "object-palette-selection-box";
+        objectPaletteFrameEl.appendChild(box);
+      }
+      return box;
+    }
+
+    function clearObjectPaletteSelectionBox() {
+      const box = objectPaletteFrameEl?.querySelector(".object-palette-selection-box");
+      if (box instanceof HTMLElement) box.style.display = "none";
+    }
+
+    function beginObjectPaletteSelectionDrag(e) {
+      if (!(objectPaletteFrameEl instanceof HTMLElement) || !(objectPaletteListEl instanceof HTMLElement)) return;
+      if (!state.objectPaletteItems.length) return;
+      state.objectPaletteUi.selectionDrag = {
+        pointerId: e.pointerId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        currentClientX: e.clientX,
+        currentClientY: e.clientY,
+        moved: false
+      };
+      const box = ensureObjectPaletteSelectionBox();
+      if (box) box.style.display = "none";
+      if (objectPaletteFrameEl.setPointerCapture) {
+        try { objectPaletteFrameEl.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    }
+
+    function updateObjectPaletteSelectionDrag(e) {
+      const drag = state.objectPaletteUi.selectionDrag;
+      if (!drag || drag.pointerId !== e.pointerId || !(objectPaletteFrameEl instanceof HTMLElement) || !(objectPaletteListEl instanceof HTMLElement)) return;
+      drag.currentClientX = e.clientX;
+      drag.currentClientY = e.clientY;
+      const dx = drag.currentClientX - drag.startClientX;
+      const dy = drag.currentClientY - drag.startClientY;
+      const moved = Math.abs(dx) > 6 || Math.abs(dy) > 6;
+      if (!moved) {
+        drag.moved = false;
+        clearObjectPaletteSelectionBox();
+        return;
+      }
+      drag.moved = true;
+      const frameRect = objectPaletteFrameEl.getBoundingClientRect();
+      const left = Math.min(drag.startClientX, drag.currentClientX) - frameRect.left + objectPaletteFrameEl.scrollLeft;
+      const top = Math.min(drag.startClientY, drag.currentClientY) - frameRect.top + objectPaletteFrameEl.scrollTop;
+      const width = Math.abs(dx);
+      const height = Math.abs(dy);
+      const box = ensureObjectPaletteSelectionBox();
+      if (box) {
+        box.style.display = "block";
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.width = `${width}px`;
+        box.style.height = `${height}px`;
+      }
+      const selectionRect = {
+        x: Math.min(drag.startClientX, drag.currentClientX),
+        y: Math.min(drag.startClientY, drag.currentClientY),
+        width,
+        height
+      };
+      const hitIds = Array.from(objectPaletteListEl.querySelectorAll(".object-palette-card")).map((card) => {
+        if (!(card instanceof HTMLElement)) return "";
+        const rect = card.getBoundingClientRect();
+        return intersects(selectionRect, {
+          x: rect.left,
+          y: rect.top,
+          width: rect.width,
+          height: rect.height
+        }) ? String(card.dataset.paletteId || "") : "";
+      }).filter((id) => !!id);
+      setObjectPaletteSelection(hitIds);
+    }
+
+    function finishObjectPaletteSelectionDrag(e) {
+      const drag = state.objectPaletteUi.selectionDrag;
+      if (!drag || drag.pointerId !== e.pointerId || !(objectPaletteFrameEl instanceof HTMLElement)) return false;
+      state.objectPaletteUi.selectionDrag = null;
+      if (objectPaletteFrameEl.releasePointerCapture) {
+        try { objectPaletteFrameEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      clearObjectPaletteSelectionBox();
+      if (drag.moved) state.objectPaletteUi.suppressClickUntil = Date.now() + 220;
+      return drag.moved;
+    }
+
+    function cancelObjectPaletteSelectionDrag(e = null) {
+      const drag = state.objectPaletteUi.selectionDrag;
+      if (!drag || !(objectPaletteFrameEl instanceof HTMLElement)) return;
+      state.objectPaletteUi.selectionDrag = null;
+      if (e && objectPaletteFrameEl.releasePointerCapture) {
+        try { objectPaletteFrameEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      clearObjectPaletteSelectionBox();
+    }
+
     function renderObjectPalette() {
       if (!(objectPaletteListEl instanceof HTMLElement) || !(objectPaletteHintEl instanceof HTMLElement)) return;
       objectPaletteListEl.innerHTML = "";
       const items = Array.isArray(state.objectPaletteItems) ? state.objectPaletteItems : [];
+      normalizeObjectPaletteSelection();
+      const selectedIds = new Set(state.objectPaletteSelectedIds || []);
       const hasItems = items.length > 0;
       objectPaletteHintEl.hidden = hasItems;
       objectPaletteListEl.hidden = !hasItems;
@@ -2229,25 +2423,46 @@
       items.forEach((item, index) => {
         const card = document.createElement("article");
         card.className = "object-palette-card";
-        card.draggable = true;
+        if (selectedIds.has(item.id)) card.classList.add("selected");
+        card.draggable = false;
         card.dataset.paletteId = item.id;
         card.setAttribute("role", "listitem");
 
         const head = document.createElement("div");
         head.className = "object-palette-card-head";
+        const titleWrap = document.createElement("div");
+        titleWrap.className = "object-palette-card-title";
+        const selectBtn = document.createElement("button");
+        selectBtn.type = "button";
+        selectBtn.className = "object-palette-select-btn";
+        if (selectedIds.has(item.id)) selectBtn.classList.add("active");
+        selectBtn.setAttribute("aria-label", selectedIds.has(item.id) ? "Deselect object" : "Select object");
+        selectBtn.setAttribute("aria-pressed", selectedIds.has(item.id) ? "true" : "false");
+        selectBtn.title = selectedIds.has(item.id) ? "Deselect object" : "Select object";
+        selectBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const current = new Set(state.objectPaletteSelectedIds || []);
+          if (current.has(item.id)) current.delete(item.id);
+          else current.add(item.id);
+          setObjectPaletteSelection([...current]);
+        });
         const title = document.createElement("span");
         title.textContent = item.label || `Object ${index + 1}`;
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
+        removeBtn.className = "object-palette-remove-btn";
         removeBtn.textContent = "×";
         removeBtn.title = "Remove from palette";
-        removeBtn.addEventListener("click", () => {
+        removeBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
           state.objectPaletteItems = state.objectPaletteItems.filter((entry) => entry.id !== item.id);
+          normalizeObjectPaletteSelection();
           saveObjectPalette();
           renderObjectPalette();
           setStatus("Removed from object palette.");
         });
-        head.append(title, removeBtn);
+        titleWrap.append(selectBtn, title);
+        head.append(titleWrap, removeBtn);
 
         const preview = document.createElement("div");
         preview.className = "object-palette-preview";
@@ -2265,11 +2480,25 @@
         const grip = document.createElement("span");
         grip.className = "object-palette-grip";
         grip.textContent = "drag";
+        grip.draggable = true;
+        grip.title = "Drag to reorder or place on canvas";
         meta.append(size, grip);
 
         card.append(head, preview, meta);
+        card.addEventListener("click", (ev) => {
+          if ((state.objectPaletteUi.suppressClickUntil || 0) > Date.now()) return;
+          if (ev.target instanceof Element && ev.target.closest("button")) return;
+          const current = new Set(state.objectPaletteSelectedIds || []);
+          if (ev.metaKey || ev.ctrlKey) {
+            if (current.has(item.id)) current.delete(item.id);
+            else current.add(item.id);
+            setObjectPaletteSelection([...current]);
+          } else {
+            setObjectPaletteSelection([item.id]);
+          }
+        });
 
-        card.addEventListener("dragstart", (ev) => {
+        grip.addEventListener("dragstart", (ev) => {
           state.objectPaletteDrag = {
             itemId: item.id,
             sourceIndex: index,
@@ -2283,7 +2512,7 @@
             ev.dataTransfer.setData("text/plain", item.label || "palette-item");
           }
         });
-        card.addEventListener("dragend", () => {
+        grip.addEventListener("dragend", () => {
           card.classList.remove("dragging");
           clearObjectPaletteDragState();
         });
@@ -2319,6 +2548,7 @@
       if (dropSide === "after") nextIndex += 1;
       items.splice(Math.max(0, Math.min(items.length, nextIndex)), 0, moved);
       state.objectPaletteItems = items;
+      normalizeObjectPaletteSelection();
       saveObjectPalette();
       renderObjectPalette();
     }
@@ -2327,6 +2557,12 @@
       const valid = (Array.isArray(items) ? items : []).filter((item) => !!item && typeof item.markup === "string");
       if (!valid.length) return 0;
       state.objectPaletteItems = [...state.objectPaletteItems, ...valid];
+      if (options.select !== false) {
+        const merged = new Set([...(state.objectPaletteSelectedIds || []), ...valid.map((item) => item.id)]);
+        state.objectPaletteSelectedIds = [...merged];
+      } else {
+        normalizeObjectPaletteSelection({ selectAllIfEmpty: true });
+      }
       saveObjectPalette();
       renderObjectPalette();
       if (options.withStatus !== false) {
@@ -2361,7 +2597,8 @@
         if (!item || typeof item !== "object") return null;
         return buildObjectPaletteItem(String(item.markup || ""), {
           box: normalizeObjectPaletteBox(item.box),
-          label: String(item.label || "")
+          label: String(item.label || ""),
+          imageRefs: item.imageRefs && typeof item.imageRefs === "object" ? item.imageRefs : null
         });
       }).filter((item) => !!item);
       if (!nextItems.length) {
@@ -2374,6 +2611,55 @@
     function parseSvgLength(raw, fallback = 0) {
       const n = Number.parseFloat(String(raw || "").trim());
       return Number.isFinite(n) ? n : fallback;
+    }
+
+    function inferImagePaletteLabel(source, fallback = "Image") {
+      const explicit = typeof fallback === "string" ? fallback.trim() : "";
+      if (source instanceof File) {
+        const stem = String(source.name || "").replace(/\.[^.]+$/, "").trim();
+        if (stem) return stem;
+      }
+      if (explicit) return explicit;
+      return "Image";
+    }
+
+    async function buildObjectPaletteItemFromImageSource(source, options = {}) {
+      let src = "";
+      if (source instanceof Blob) {
+        const isTiffSource = source instanceof File ? isTiffFile(source) : isTiffMime(source.type);
+        src = isTiffSource ? await convertTiffToPngDataUrl(source) : await fileToDataUrl(source);
+      } else {
+        src = String(source || "").trim();
+      }
+      if (!src) return null;
+      const size = await getImageSize(src);
+      const image = document.createElementNS(SVG_NS, "image");
+      image.setAttribute("x", "0");
+      image.setAttribute("y", "0");
+      image.setAttribute("width", String(Math.max(1, Number(size.width || 1))));
+      image.setAttribute("height", String(Math.max(1, Number(size.height || 1))));
+      image.setAttribute("href", src);
+      image.setAttributeNS(XLINK_NS, "href", src);
+      return buildObjectPaletteItem(image.outerHTML, {
+        box: { x: 0, y: 0, width: Math.max(1, Number(size.width || 1)), height: Math.max(1, Number(size.height || 1)) },
+        label: inferImagePaletteLabel(source, String(options.label || "Image"))
+      });
+    }
+
+    async function appendImageSourcesToObjectPalette(sources, options = {}) {
+      const inputs = Array.isArray(sources) ? sources : [];
+      if (!inputs.length) return 0;
+      const items = [];
+      for (let index = 0; index < inputs.length; index += 1) {
+        const entry = inputs[index];
+        const source = entry?.source ?? entry;
+        const item = await buildObjectPaletteItemFromImageSource(source, {
+          label: entry?.label || options.label || `Image ${index + 1}`
+        });
+        if (item) items.push(item);
+      }
+      if (!items.length) return 0;
+      return appendObjectPaletteItems(items, { withStatus: options.withStatus !== false });
     }
 
     function createObjectPaletteItemsFromSvgText(svgText) {
@@ -2405,11 +2691,61 @@
       return true;
     }
 
+    async function addClipboardRasterItemsToObjectPalette(ev) {
+      const items = Array.from(ev?.clipboardData?.items || []).filter((item) => !!item);
+      const files = Array.from(ev?.clipboardData?.files || []).filter((file) => isImageFile(file));
+      const sources = [];
+      files.forEach((file) => {
+        sources.push({ source: file, label: inferImagePaletteLabel(file, "Image") });
+      });
+      if (!sources.length) {
+        items.forEach((item, index) => {
+          if (item.kind !== "file") return;
+          if (!isRasterClipboardMime(item.type)) return;
+          const file = item.getAsFile?.();
+          if (!file) return;
+          sources.push({ source: file, label: inferImagePaletteLabel(file, `Clipboard Image ${index + 1}`) });
+        });
+      }
+      if (!sources.length) {
+        const html = ev?.clipboardData?.getData("text/html") || "";
+        extractImageSrcFromHtml(html).slice(0, 20).forEach((src, index) => {
+          sources.push({ source: src, label: `Pasted Image ${index + 1}` });
+        });
+      }
+      if (!sources.length) return 0;
+      return appendImageSourcesToObjectPalette(sources);
+    }
+
+    async function addClipboardApiImagesToObjectPalette() {
+      if (typeof navigator?.clipboard?.read !== "function") return 0;
+      try {
+        const clipboardItems = await navigator.clipboard.read();
+        const sources = [];
+        for (const [itemIndex, clipboardItem] of clipboardItems.entries()) {
+          for (const type of Array.from(clipboardItem.types || [])) {
+            if (!isRasterClipboardMime(type)) continue;
+            try {
+              const blob = await clipboardItem.getType(type);
+              if (!blob) continue;
+              sources.push({ source: blob, label: `Clipboard Image ${sources.length + 1 || itemIndex + 1}` });
+            } catch (_) {}
+          }
+        }
+        if (!sources.length) return 0;
+        return appendImageSourcesToObjectPalette(sources);
+      } catch (_) {
+        return 0;
+      }
+    }
+
     async function pasteToObjectPalette() {
       setObjectPaletteOpen(true, { focusFrame: true });
       if (Array.isArray(state.clipboardItems) && state.clipboardItems.length) {
         return addClipboardItemsToObjectPalette(state.clipboardItems) > 0;
       }
+      const imageCount = await addClipboardApiImagesToObjectPalette();
+      if (imageCount > 0) return true;
       if (!navigator.clipboard?.readText) {
         setStatus("Clipboard API unavailable. Focus palette and press Cmd/Ctrl+V.");
         return false;
@@ -2425,7 +2761,7 @@
       return false;
     }
 
-    function handleObjectPalettePasteEvent(ev) {
+    async function handleObjectPalettePasteEvent(ev) {
       if (ev && typeof ev === "object") {
         if (processedPasteEvents.has(ev)) return;
         processedPasteEvents.add(ev);
@@ -2448,7 +2784,11 @@
         addClipboardItemsToObjectPalette(state.clipboardItems);
         return;
       }
-      setStatus("Palette paste supports SVG/object clipboard data.");
+      const imageCount = await addClipboardRasterItemsToObjectPalette(ev);
+      if (imageCount > 0) return;
+      const apiImageCount = await addClipboardApiImagesToObjectPalette();
+      if (apiImageCount > 0) return;
+      setStatus("Palette paste supports SVG and image clipboard data.");
     }
 
     function placeObjectPaletteItemOnCanvas(item, options = {}) {
@@ -2470,12 +2810,9 @@
       return [id];
     }
 
-    function autoArrangeObjectPaletteOnCanvas(areaBox = null) {
-      const items = Array.isArray(state.objectPaletteItems) ? state.objectPaletteItems : [];
-      if (!items.length) {
-        setStatus("Object palette is empty.");
-        return;
-      }
+    function computeObjectPaletteAutoLayout(areaBox = null) {
+      const items = getSelectedObjectPaletteItems();
+      if (!items.length) return null;
       const artDims = areaBox
         ? { x: Number(areaBox.x || 0), y: Number(areaBox.y || 0), width: Math.max(1, Number(areaBox.width || 1)), height: Math.max(1, Number(areaBox.height || 1)) }
         : (() => {
@@ -2511,30 +2848,71 @@
         const score = overflow * 1000 + Math.abs(totalHeight - targetHeight) + variance * 0.25;
         if (!best || score < best.score) best = { cols, rows, totalHeight, score };
       }
-      if (!best) {
-        setStatus("Auto layout failed.");
-        return;
-      }
+      if (!best) return null;
 
-      const inserted = [];
+      const placements = [];
       let y = artDims.y + Math.max(margin, (artDims.height - best.totalHeight) / 2);
       best.rows.forEach((row) => {
         const rowWidth = row.items.reduce((sum, entry) => sum + entry.aspect * row.rowHeight, 0) + gap * Math.max(0, row.items.length - 1);
         let x = artDims.x + (artDims.width - rowWidth) / 2;
         row.items.forEach((entry) => {
-          const targetBox = {
+          placements.push({
+            item: entry.item,
             x,
             y,
             width: entry.aspect * row.rowHeight,
             height: row.rowHeight
-          };
-          const ids = placeObjectPaletteItemOnCanvas(entry.item, { targetBox });
-          inserted.push(...ids);
-          x += targetBox.width + gap;
+          });
+          x += entry.aspect * row.rowHeight + gap;
         });
         y += row.rowHeight + gap;
       });
+      return { area: artDims, placements };
+    }
 
+    function clearObjectPalettePlacementPreview() {
+      canvas.querySelectorAll(".placement-preview,.placement-preview-label").forEach((el) => el.remove());
+    }
+
+    function renderObjectPalettePlacementPreview(areaBox = null) {
+      clearObjectPalettePlacementPreview();
+      const layout = computeObjectPaletteAutoLayout(areaBox);
+      if (!layout) return null;
+      layout.placements.forEach((placement, idx) => {
+        const rect = document.createElementNS(SVG_NS, "rect");
+        rect.setAttribute("class", "placement-preview");
+        rect.setAttribute("x", String(Number(placement.x.toFixed(4))));
+        rect.setAttribute("y", String(Number(placement.y.toFixed(4))));
+        rect.setAttribute("width", String(Number(placement.width.toFixed(4))));
+        rect.setAttribute("height", String(Number(placement.height.toFixed(4))));
+        canvas.appendChild(rect);
+
+        const label = document.createElementNS(SVG_NS, "text");
+        label.setAttribute("class", "placement-preview-label");
+        label.setAttribute("x", String(Number((placement.x + 8).toFixed(4))));
+        label.setAttribute("y", String(Number((placement.y + 16).toFixed(4))));
+        label.textContent = placement.item?.label || `Item ${idx + 1}`;
+        canvas.appendChild(label);
+      });
+      return layout;
+    }
+
+    function autoArrangeObjectPaletteOnCanvas(areaBox = null) {
+      const items = getSelectedObjectPaletteItems();
+      if (!items.length) {
+        setStatus("Select object(s) in the palette first.");
+        return;
+      }
+      const layout = computeObjectPaletteAutoLayout(areaBox);
+      if (!layout) {
+        setStatus("Auto layout failed.");
+        return;
+      }
+      const inserted = [];
+      layout.placements.forEach((placement) => {
+        const ids = placeObjectPaletteItemOnCanvas(placement.item, { targetBox: placement });
+        inserted.push(...ids);
+      });
       if (!inserted.length) {
         setStatus("Auto layout failed.");
         return;
@@ -2601,6 +2979,7 @@
       activeMenu: "",
       markLabelComp: {},
       objectPaletteItems: [],
+      objectPaletteSelectedIds: [],
       objectPaletteDrag: {
         itemId: "",
         sourceIndex: -1,
@@ -2609,7 +2988,9 @@
       },
       objectPaletteUi: {
         open: false,
-        hovered: false
+        hovered: false,
+        suppressClickUntil: 0,
+        selectionDrag: null
       },
       objectPalettePlacement: {
         active: false
@@ -2831,6 +3212,8 @@
         el.classList.contains("selection-handle") ||
         el.classList.contains("marquee") ||
         el.classList.contains("placement-guide") ||
+        el.classList.contains("placement-preview") ||
+        el.classList.contains("placement-preview-label") ||
         el.classList.contains("smart-guide") ||
         el.classList.contains("crop-boundary") ||
         el.classList.contains("crop-draft") ||
@@ -6792,8 +7175,8 @@
     }
 
     function importMarkupFragment(markup, offsetX = 0, offsetY = 0, parentId = "") {
-      const normalizedMarkup = normalizeSvgNamespaceTagPrefixes(markup);
-      const parserDoc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${normalizedMarkup}</svg>`, "image/svg+xml");
+      const normalizedMarkup = restoreMarkupFromRefs(normalizeSvgNamespaceTagPrefixes(markup));
+      const parserDoc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}" xmlns:xlink="${XLINK_NS}">${normalizedMarkup}</svg>`, "image/svg+xml");
       if (parserDoc.querySelector("parsererror")) return "";
       const tempRoot = parserDoc.querySelector("svg");
       const node = tempRoot?.firstElementChild;
@@ -9604,7 +9987,7 @@
 
     async function handlePaste(ev) {
       if (shouldRoutePasteToObjectPalette()) {
-        handleObjectPalettePasteEvent(ev);
+        await handleObjectPalettePasteEvent(ev);
         return;
       }
       if (ev && typeof ev === "object") {
@@ -9940,6 +10323,8 @@
       it.rect.setAttribute("y", String(y));
       it.rect.setAttribute("width", String(w));
       it.rect.setAttribute("height", String(h));
+      if (w > 8 && h > 8) renderObjectPalettePlacementPreview({ x, y, width: w, height: h });
+      else clearObjectPalettePlacementPreview();
     }
 
     function finishObjectPalettePlacement() {
@@ -9950,6 +10335,7 @@
       const width = Number(it.rect.getAttribute("width"));
       const height = Number(it.rect.getAttribute("height"));
       it.rect.remove();
+      clearObjectPalettePlacementPreview();
       state.interaction = null;
       state.objectPalettePlacement.active = false;
       syncObjectPaletteUi();
@@ -11205,6 +11591,7 @@
       bindClick("paletteAutoArrangeBtn", startObjectPalettePlacementMode);
       bindClick("paletteClearBtn", () => {
         state.objectPaletteItems = [];
+        state.objectPaletteSelectedIds = [];
         saveObjectPalette();
         renderObjectPalette();
         setStatus("Object palette cleared.");
@@ -11524,10 +11911,35 @@
       objectPaletteDockEl?.addEventListener("pointerenter", paletteHoverOn);
       objectPaletteDockEl?.addEventListener("pointerleave", paletteHoverOff);
       if (objectPaletteFrameEl) {
-        objectPaletteFrameEl.addEventListener("pointerdown", () => {
+        objectPaletteFrameEl.addEventListener("pointerdown", (e) => {
           setObjectPaletteOpen(true, { focusFrame: true });
+          if (e.button !== 0) return;
+          if (e.pointerType === "touch") return;
+          if (!(e.target instanceof Element)) return;
+          if (e.target.closest("button")) return;
+          if (e.target.closest(".object-palette-grip")) return;
+          beginObjectPaletteSelectionDrag(e);
         });
         objectPaletteFrameEl.addEventListener("paste", handleObjectPalettePasteEvent);
+        objectPaletteFrameEl.addEventListener("dragover", (e) => {
+          const files = Array.from(e.dataTransfer?.files || []).filter((file) => isImageFile(file));
+          if (!files.length) return;
+          e.preventDefault();
+          objectPaletteFrameEl.classList.add("paste-target");
+        });
+        objectPaletteFrameEl.addEventListener("dragleave", (e) => {
+          if (e.currentTarget !== objectPaletteFrameEl) return;
+          if (objectPaletteFrameEl.contains(e.relatedTarget instanceof Node ? e.relatedTarget : null)) return;
+          objectPaletteFrameEl.classList.remove("paste-target");
+        });
+        objectPaletteFrameEl.addEventListener("drop", async (e) => {
+          const files = Array.from(e.dataTransfer?.files || []).filter((file) => isImageFile(file));
+          objectPaletteFrameEl.classList.remove("paste-target");
+          if (!files.length) return;
+          e.preventDefault();
+          e.stopPropagation();
+          await appendImageSourcesToObjectPalette(files);
+        });
       }
       if (objectPaletteListEl) {
         objectPaletteListEl.addEventListener("dragover", (ev) => {
@@ -11898,6 +12310,7 @@
       });
 
       window.addEventListener("pointermove", (e) => {
+        if (state.objectPaletteUi.selectionDrag) updateObjectPaletteSelectionDrag(e);
         const it = state.interaction;
         if (!it) return;
         if (it.pointerId !== null && e.pointerId !== it.pointerId) return;
@@ -11914,6 +12327,7 @@
       });
 
       window.addEventListener("pointerup", (e) => {
+        finishObjectPaletteSelectionDrag(e);
         const it = state.interaction;
         if (!it) return;
         if (it.pointerId !== null && e.pointerId !== it.pointerId) return;
@@ -11934,6 +12348,7 @@
       });
 
       window.addEventListener("pointercancel", (e) => {
+        cancelObjectPaletteSelectionDrag(e);
         if (!state.interaction) return;
         if (state.interaction.pointerId !== null && e.pointerId !== state.interaction.pointerId) return;
         const capturedId = state.interaction.pointerId;
@@ -11955,6 +12370,7 @@
         }
         if (state.interaction.type === "palette-place-area") {
           state.interaction.rect?.remove?.();
+          clearObjectPalettePlacementPreview();
           state.objectPalettePlacement.active = false;
           syncObjectPaletteUi();
           updateToolCursor();
