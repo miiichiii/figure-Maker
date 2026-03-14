@@ -1626,17 +1626,17 @@
         <div class="object-palette-head">
           <div class="object-palette-title">
             <strong>Object Palette</strong>
-            <span>素材をストックして、ここから並び替え・ドラッグ配置・自動配置。</span>
+            <span>Store assets here, reorder them, drag them onto the canvas, or auto-place them.</span>
           </div>
           <div class="object-palette-actions">
-            <button id="paletteAddSelectionBtn" type="button">選択を追加</button>
-            <button id="palettePasteBtn" type="button">ペースト</button>
-            <button id="paletteAutoArrangeBtn" type="button">配置</button>
-            <button id="paletteClearBtn" type="button">クリア</button>
+            <button id="paletteAddSelectionBtn" type="button">Add Selection</button>
+            <button id="palettePasteBtn" type="button">Paste</button>
+            <button id="paletteAutoArrangeBtn" type="button">Place</button>
+            <button id="paletteClearBtn" type="button">Clear</button>
           </div>
         </div>
         <div id="objectPaletteFrame" class="object-palette-frame" tabindex="0" aria-describedby="objectPaletteHint">
-          <div id="objectPaletteHint" class="object-palette-empty">ここで <kbd>Cmd/Ctrl + V</kbd>。カードはドラッグで並び替え、キャンバスへ複製配置。</div>
+          <div id="objectPaletteHint" class="object-palette-empty">Press <kbd>Cmd/Ctrl + V</kbd> here. Drag cards to reorder them or copy them onto the canvas.</div>
           <div id="objectPaletteList" class="object-palette-list" role="list" hidden></div>
         </div>
       </section>
@@ -2055,7 +2055,7 @@
       const placeBtn = document.getElementById("paletteAutoArrangeBtn");
       if (placeBtn instanceof HTMLButtonElement) {
         placeBtn.classList.toggle("active", !!state.objectPalettePlacement?.active);
-        placeBtn.textContent = state.objectPalettePlacement?.active ? "配置範囲を指定中" : "配置";
+        placeBtn.textContent = state.objectPalettePlacement?.active ? "Drag Placement Area" : "Place";
       }
     }
 
