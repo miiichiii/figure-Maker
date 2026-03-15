@@ -510,6 +510,10 @@
       gap: 6px;
       flex-wrap: wrap;
     }
+    .object-palette-actions button.active {
+      background: linear-gradient(180deg, rgba(247, 252, 241, 0.98), rgba(230, 241, 220, 0.96));
+      border-color: #6b8f4e;
+    }
     .object-palette-actions button {
       min-height: 30px;
     }
@@ -708,6 +712,49 @@
       font-weight: 600;
       pointer-events: none;
       user-select: none;
+    }
+    .placement-session-frame {
+      fill: rgba(107, 143, 78, 0.07);
+      stroke: #6b8f4e;
+      stroke-width: 1.2;
+      stroke-dasharray: 6 3;
+      cursor: move;
+      pointer-events: all;
+      vector-effect: non-scaling-stroke;
+    }
+    .placement-session-handle {
+      fill: #f7fbef;
+      stroke: #6b8f4e;
+      stroke-width: 1.2;
+      pointer-events: all;
+      cursor: nwse-resize;
+      vector-effect: non-scaling-stroke;
+    }
+    .placement-session-slot {
+      fill: rgba(16, 111, 175, 0.12);
+      stroke: rgba(16, 111, 175, 0.78);
+      stroke-width: 1.1;
+      stroke-dasharray: 4 2;
+      pointer-events: all;
+      cursor: grab;
+      vector-effect: non-scaling-stroke;
+    }
+    .placement-session-slot.active {
+      fill: rgba(16, 111, 175, 0.22);
+      stroke-width: 1.4;
+    }
+    .placement-session-slot.drop-before,
+    .placement-session-slot.drop-after {
+      fill: rgba(16, 111, 175, 0.26);
+      stroke-width: 1.6;
+    }
+    .placement-session-slot-label {
+      fill: #2b2a27;
+      font-size: 11px;
+      font-weight: 600;
+      pointer-events: none;
+      user-select: none;
+      dominant-baseline: hanging;
     }
     .selection-outline {
       fill: none;
@@ -1692,6 +1739,7 @@
             <button id="paletteAddSelectionBtn" type="button">Add Selection</button>
             <button id="palettePasteBtn" type="button">Paste</button>
             <button id="paletteAutoArrangeBtn" type="button">Place</button>
+            <button id="paletteEditModeBtn" type="button">Edit Layout</button>
             <button id="paletteClearBtn" type="button">Clear</button>
           </div>
         </div>
@@ -1816,6 +1864,7 @@
     const FILE_PICKER_ID = "figureMaker-files";
     const OBJECT_PALETTE_DRAG_TYPE = "application/x-figure-maker-palette-item";
     const DEBUG_MODE = new URLSearchParams(window.location.search).get("debug") === "1";
+    const MAX_OBJECT_PALETTE_PLACEMENT_SESSIONS = 20;
     const CURSOR_BLACK = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23111827' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E\") 2 2, default";
     const CURSOR_WHITE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2 1 L2 18 L7 13 L10 19 L12 18 L9 12 L15 12 Z' fill='%23ff1493' stroke='%23111827' stroke-width='1.3'/%3E%3C/svg%3E\") 2 2, default";
     const CURSOR_ROTATE = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'%3E%3Cg fill='none' stroke='%232B2A27' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.8 7.8A8 8 0 1 0 18.5 13'/%3E%3Cpath d='M17.6 3.8v5h-5'/%3E%3C/g%3E%3C/svg%3E\") 11 11, alias";
@@ -2117,6 +2166,15 @@
         placeBtn.classList.toggle("active", !!state.objectPalettePlacement?.active);
         placeBtn.textContent = state.objectPalettePlacement?.active ? "Drag Placement Area" : "Place";
       }
+      const editModeBtn = document.getElementById("paletteEditModeBtn");
+      if (editModeBtn instanceof HTMLButtonElement) {
+        const hasSessions = Array.isArray(state.objectPalettePlacement?.sessions) && state.objectPalettePlacement.sessions.length > 0;
+        editModeBtn.classList.toggle("active", !!state.objectPalettePlacement?.editMode);
+        editModeBtn.textContent = state.objectPalettePlacement?.editMode ? "Exit Edit" : "Edit Layout";
+        editModeBtn.disabled = !hasSessions;
+      }
+      if (state.objectPalettePlacement?.editMode) renderObjectPalettePlacementSessions({ forceFrame: true });
+      else clearObjectPalettePlacementSessionsVisuals();
     }
 
     function setObjectPaletteOpen(open, options = {}) {
@@ -2256,6 +2314,301 @@
     function getSelectedObjectPaletteItems() {
       const selectedIds = new Set(state.objectPaletteSelectedIds || []);
       return (state.objectPaletteItems || []).filter((item) => selectedIds.has(item.id));
+    }
+
+    function createObjectPalettePlacementSessionId() {
+      return `op-session-${Date.now().toString(36)}-${state.idCounter++}`;
+    }
+
+    function normalizeObjectPalettePlacementSessionSlot(raw = {}) {
+      const normalized = normalizeObjectPaletteBox(raw, { x: 0, y: 0, width: 1, height: 1 });
+      return {
+        paletteItemId: String(raw.paletteItemId || ""),
+        canvasItemId: String(raw.canvasItemId || ""),
+        label: String(raw.label || ""),
+        x: normalized.x,
+        y: normalized.y,
+        width: normalized.width,
+        height: normalized.height
+      };
+    }
+
+    function normalizeObjectPalettePlacementSession(raw = {}) {
+      if (!raw || typeof raw !== "object") return null;
+      const area = normalizeObjectPaletteBox(raw.area, null);
+      if (!area) return null;
+      const placements = Array.isArray(raw.placements)
+        ? raw.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
+          .filter((entry) => entry.width > 0 && entry.height > 0)
+        : [];
+      if (!placements.length) return null;
+      return {
+        id: String(raw.id || createObjectPalettePlacementSessionId()),
+        area,
+        placements,
+        createdAt: Number.isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : Date.now(),
+        lastEditedAt: Number.isFinite(Number(raw.lastEditedAt)) ? Number(raw.lastEditedAt) : null
+      };
+    }
+
+    function normalizeObjectPalettePlacementSessions(raw) {
+      const result = [];
+      const seen = new Set();
+      Array.isArray(raw)
+        ? raw.forEach((entry) => {
+          const session = normalizeObjectPalettePlacementSession(entry);
+          if (!session || seen.has(session.id)) return;
+          seen.add(session.id);
+          result.push(session);
+        })
+        : null;
+      return result.slice(-MAX_OBJECT_PALETTE_PLACEMENT_SESSIONS);
+    }
+
+    function cloneObjectPalettePlacementSession(session) {
+      if (!session || typeof session !== "object") return null;
+      return {
+        id: String(session.id || createObjectPalettePlacementSessionId()),
+        area: normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 }),
+        placements: Array.isArray(session.placements)
+          ? session.placements.map((entry) => ({
+            paletteItemId: String(entry?.paletteItemId || ""),
+            canvasItemId: String(entry?.canvasItemId || ""),
+            label: String(entry?.label || ""),
+            x: Number(entry?.x || 0),
+            y: Number(entry?.y || 0),
+            width: Math.max(1, Number(entry?.width || 1)),
+            height: Math.max(1, Number(entry?.height || 1))
+          }))
+          : [],
+        createdAt: Number.isFinite(Number(session.createdAt)) ? Number(session.createdAt) : Date.now(),
+        lastEditedAt: Number.isFinite(Number(session.lastEditedAt)) ? Number(session.lastEditedAt) : null
+      };
+    }
+
+    function getObjectPalettePlacementSessionById(sessionId) {
+      const id = String(sessionId || "");
+      return (state.objectPalettePlacement?.sessions || []).find((session) => String(session?.id || "") === id) || null;
+    }
+
+    function clearObjectPalettePlacementSessions() {
+      state.objectPalettePlacement.sessions = [];
+      state.objectPalettePlacement.activeSessionId = "";
+      state.objectPalettePlacement.editMode = false;
+      clearObjectPalettePlacementSessionsVisuals();
+      syncObjectPaletteUi();
+    }
+
+    function clearObjectPalettePlacementSessionsVisuals() {
+      canvas.querySelectorAll(".placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label").forEach((el) => el.remove());
+    }
+
+    function replaceObjectPalettePlacementSession(nextSession) {
+      if (!nextSession || !nextSession.id) return false;
+      const sessions = Array.isArray(state.objectPalettePlacement.sessions) ? [...state.objectPalettePlacement.sessions] : [];
+      const id = String(nextSession.id);
+      const index = sessions.findIndex((session) => String(session?.id || "") === id);
+      if (index < 0) return false;
+      sessions[index] = nextSession;
+      state.objectPalettePlacement.sessions = sessions;
+      return true;
+    }
+
+    function addObjectPalettePlacementSession(nextSession) {
+      const session = normalizeObjectPalettePlacementSession(nextSession);
+      if (!session) return null;
+      const sessions = Array.isArray(state.objectPalettePlacement.sessions) ? [...state.objectPalettePlacement.sessions] : [];
+      const existingIndex = sessions.findIndex((entry) => String(entry?.id || "") === String(session.id));
+      if (existingIndex >= 0) sessions.splice(existingIndex, 1);
+      sessions.push(session);
+      while (sessions.length > MAX_OBJECT_PALETTE_PLACEMENT_SESSIONS) sessions.shift();
+      state.objectPalettePlacement.sessions = sessions;
+      state.objectPalettePlacement.activeSessionId = session.id;
+      state.objectPalettePlacement.editMode = true;
+      syncObjectPaletteUi();
+      return session;
+    }
+
+    function buildObjectPalettePlacementSessionFromLayout(layout, insertedIds = []) {
+      if (!layout || !Array.isArray(layout.placements) || !layout.placements.length) return null;
+      const area = normalizeObjectPaletteBox(layout.area, null);
+      if (!area) return null;
+      const placements = [];
+      layout.placements.forEach((placement, index) => {
+        const item = placement?.item || {};
+        const canvasItemId = insertedIds[index] ? String(insertedIds[index]) : "";
+        const normalized = normalizeObjectPaletteBox(placement, { x: placement?.x || 0, y: placement?.y || 0, width: placement?.width || 1, height: placement?.height || 1 });
+        placements.push({
+          paletteItemId: String(item?.id || ""),
+          canvasItemId,
+          label: String(item?.label || `Item ${index + 1}`),
+          x: normalized.x,
+          y: normalized.y,
+          width: normalized.width,
+          height: normalized.height
+        });
+      });
+      return {
+        id: createObjectPalettePlacementSessionId(),
+        area,
+        placements,
+        createdAt: Date.now(),
+        lastEditedAt: null
+      };
+    }
+
+    function getObjectPalettePlacementSessionPlacementByPaletteItemId(session, paletteItemId) {
+      if (!session || !session.placements) return null;
+      return session.placements.find((entry) => String(entry?.paletteItemId || "") === String(paletteItemId || ""));
+    }
+
+    function applyObjectPalettePlacementSessionToCanvas(session) {
+      if (!session) return false;
+      let changed = false;
+      const seen = new Set();
+      (session.placements || []).forEach((entry) => {
+        const id = String(entry?.canvasItemId || "");
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        const el = getById(id);
+        if (!(el instanceof SVGElement) || !el.isConnected) return;
+        const target = normalizeObjectPaletteBox(entry, { x: 0, y: 0, width: Math.max(1, Number(entry.width || 1)), height: Math.max(1, Number(entry.height || 1)) });
+        const current = safeBBox(el);
+        if (!current) return;
+        scaleSingleElement(el, current, target);
+        changed = true;
+      });
+      if (changed) requestSelectionVisualRefresh();
+      return changed;
+    }
+
+    function moveObjectPalettePlacementSession(sessionId, nextArea, nextPlacements, options = {}) {
+      const session = getObjectPalettePlacementSessionById(sessionId);
+      if (!session) return null;
+      const payload = cloneObjectPalettePlacementSession(session);
+      payload.area = normalizeObjectPaletteBox(nextArea, payload.area);
+      payload.placements = Array.isArray(nextPlacements)
+        ? nextPlacements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
+        : payload.placements;
+      payload.lastEditedAt = options.timestamp || Date.now();
+      replaceObjectPalettePlacementSession(payload);
+      state.objectPalettePlacement.activeSessionId = payload.id;
+      return payload;
+    }
+
+    function findClosestSessionSlotIndexFromPoint(session, pt = {}) {
+      const slots = Array.isArray(session?.placements) ? session.placements : [];
+      const targetX = Number(pt.x);
+      const targetY = Number(pt.y);
+      if (!slots.length || !Number.isFinite(targetX) || !Number.isFinite(targetY)) return -1;
+      let found = -1;
+      let bestDist = Infinity;
+      slots.forEach((slot, index) => {
+        const cx = Number(slot?.x || 0) + Number(slot?.width || 0) / 2;
+        const cy = Number(slot?.y || 0) + Number(slot?.height || 0) / 2;
+        const dx = targetX - cx;
+        const dy = targetY - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < bestDist) {
+          bestDist = dist;
+          found = index;
+        }
+      });
+      return found;
+    }
+
+    function buildObjectPalettePlacementSessionCandidates() {
+      const nodes = Array.from(canvas.querySelectorAll("*")).filter((node) => {
+        return node instanceof SVGElement && isEditableElement(node) && !!node.dataset.id;
+      });
+      const candidates = [];
+      const used = new Set();
+      nodes.forEach((node) => {
+        const id = String(node.dataset.id || "");
+        if (!id || used.has(id)) return;
+        const box = safeBBox(node);
+        if (!box || box.width <= 0 || box.height <= 0) return;
+        used.add(id);
+        candidates.push({ id, box });
+      });
+      return candidates;
+    }
+
+    function findBestPlacementSessionCandidate(slot, candidates, usedIds = new Set()) {
+      const s = normalizeObjectPalettePlacementSessionSlot(slot);
+      const tx = s.x + s.width / 2;
+      const ty = s.y + s.height / 2;
+      let bestId = "";
+      let bestScore = Infinity;
+      candidates.forEach((candidate) => {
+        const id = String(candidate?.id || "");
+        if (!id || usedIds.has(id)) return;
+        const b = candidate.box;
+        if (!b) return;
+        const cx = Number(b.x || 0) + Number(b.width || 0) / 2;
+        const cy = Number(b.y || 0) + Number(b.height || 0) / 2;
+        const sizePenalty = Math.abs(Math.log((Number(b.width || 1) * Number(b.height || 1)) / Math.max(1, Number(s.width || 1) * Number(s.height || 1))));
+        const score = Math.hypot(tx - cx, ty - cy) + Math.abs(sizePenalty) * 0.15;
+        if (!Number.isFinite(score) || score < 0) return;
+        if (score < bestScore) {
+          bestScore = score;
+          bestId = id;
+        }
+      });
+      return bestId;
+    }
+
+    function restoreObjectPalettePlacementSessionsFromMeta(meta = {}) {
+      const sessions = normalizeObjectPalettePlacementSessions(Array.isArray(meta?.objectPalettePlacementSessions) ? meta.objectPalettePlacementSessions : []);
+      const candidates = buildObjectPalettePlacementSessionCandidates();
+      const usedIds = new Set();
+      const mapped = sessions.map((session) => {
+        if (!session || !Array.isArray(session.placements)) return session;
+        session = cloneObjectPalettePlacementSession(session);
+        session.placements = session.placements.map((entry) => {
+          const next = normalizeObjectPalettePlacementSessionSlot(entry);
+          if (!next) return null;
+          const keepId = String(next.canvasItemId || "");
+          if (keepId && getById(keepId) && !usedIds.has(keepId)) {
+            usedIds.add(keepId);
+            return next;
+          }
+          const matchedId = findBestPlacementSessionCandidate(next, candidates, usedIds);
+          if (matchedId) {
+            usedIds.add(matchedId);
+            return { ...next, canvasItemId: matchedId };
+          }
+          return { ...next, canvasItemId: "" };
+        }).filter((entry) => !!entry);
+        return session;
+      }).filter((session) => !!session);
+      state.objectPalettePlacement.sessions = mapped;
+      state.objectPalettePlacement.activeSessionId = mapped.length ? String(mapped[mapped.length - 1]?.id || "") : "";
+      state.objectPalettePlacement.editMode = false;
+      clearObjectPalettePlacementSessionsVisuals();
+      syncObjectPaletteUi();
+    }
+
+    function resolveObjectPalettePlacementSessionHitFromTarget(target) {
+      if (!(target instanceof SVGElement)) return null;
+      const hit = target.closest(".placement-session-frame,.placement-session-handle,.placement-session-slot");
+      if (!hit) return null;
+      const sessionId = String(hit.dataset?.objectPaletteSessionId || "");
+      if (!sessionId) return null;
+      if (hit.classList.contains("placement-session-handle")) return { sessionId, kind: "resize" };
+      if (hit.classList.contains("placement-session-slot")) {
+        const slotIndex = Number(hit.dataset?.slotIndex || "");
+        return { sessionId, kind: "reorder", slotIndex: Number.isFinite(slotIndex) ? slotIndex : -1 };
+      }
+      return { sessionId, kind: "move" };
+    }
+
+    function updateObjectPalettePlacementSessionVisuals() {
+      if (state.objectPalettePlacement?.editMode) {
+        renderObjectPalettePlacementSessions({ forceFrame: true });
+      } else {
+        clearObjectPalettePlacementSessionsVisuals();
+      }
     }
 
     function setObjectPaletteSelection(ids, options = {}) {
@@ -2897,6 +3250,265 @@
       return layout;
     }
 
+    function renderObjectPalettePlacementSessions(options = {}) {
+      const opts = typeof options === "object" && options ? options : {};
+      const forceFrame = !!opts.forceFrame;
+      const sessions = normalizeObjectPalettePlacementSessions(state.objectPalettePlacement?.sessions || []);
+      state.objectPalettePlacement.sessions = sessions;
+      clearObjectPalettePlacementSessionsVisuals();
+      if (!sessions.length) {
+        if (forceFrame) setStatus("No placement sessions stored.");
+        state.objectPalettePlacement.activeSessionId = "";
+        state.objectPalettePlacement.editMode = false;
+        return;
+      }
+      if (!state.objectPalettePlacement.activeSessionId || !getObjectPalettePlacementSessionById(state.objectPalettePlacement.activeSessionId)) {
+        state.objectPalettePlacement.activeSessionId = String(sessions[sessions.length - 1].id || sessions[0].id || "");
+      }
+      sessions.forEach((session) => {
+        const area = normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 });
+        const frame = document.createElementNS(SVG_NS, "rect");
+        frame.className.baseVal = "placement-session-frame";
+        frame.setAttribute("class", "placement-session-frame");
+        frame.dataset.objectPaletteSessionId = session.id;
+        frame.dataset.type = "palette-session-frame";
+        if (String(session.id || "") === String(state.objectPalettePlacement.activeSessionId || "")) {
+          frame.classList.add("active");
+        }
+        frame.setAttribute("x", String(Number(area.x.toFixed(4))));
+        frame.setAttribute("y", String(Number(area.y.toFixed(4))));
+        frame.setAttribute("width", String(Number(Math.max(1, area.width).toFixed(4))));
+        frame.setAttribute("height", String(Number(Math.max(1, area.height).toFixed(4))));
+        canvas.appendChild(frame);
+
+        const handleSize = Math.max(12, Math.min(20, Math.min(area.width, area.height) * 0.18));
+        const handle = document.createElementNS(SVG_NS, "rect");
+        handle.className.baseVal = "placement-session-handle";
+        handle.setAttribute("class", "placement-session-handle");
+        handle.dataset.objectPaletteSessionId = session.id;
+        handle.dataset.type = "palette-session-handle";
+        handle.setAttribute("x", String(Number((area.x + area.width - handleSize).toFixed(4))));
+        handle.setAttribute("y", String(Number((area.y + area.height - handleSize).toFixed(4))));
+        handle.setAttribute("width", String(Number(handleSize.toFixed(4))));
+        handle.setAttribute("height", String(Number(handleSize.toFixed(4))));
+        canvas.appendChild(handle);
+
+        session.placements.forEach((entry, slotIndex) => {
+          const slot = normalizeObjectPalettePlacementSessionSlot(entry);
+          const slotRect = document.createElementNS(SVG_NS, "rect");
+          slotRect.className.baseVal = "placement-session-slot";
+          slotRect.setAttribute("class", "placement-session-slot");
+          slotRect.dataset.objectPaletteSessionId = session.id;
+          slotRect.dataset.slotIndex = String(slotIndex);
+          slotRect.setAttribute("x", String(Number(slot.x.toFixed(4))));
+          slotRect.setAttribute("y", String(Number(slot.y.toFixed(4))));
+          slotRect.setAttribute("width", String(Number(Math.max(1, slot.width).toFixed(4))));
+          slotRect.setAttribute("height", String(Number(Math.max(1, slot.height).toFixed(4))));
+          canvas.appendChild(slotRect);
+
+          const safeLabel = String(slot.label || `Item ${slotIndex + 1}`).slice(0, 34);
+          const label = document.createElementNS(SVG_NS, "text");
+          label.setAttribute("class", "placement-session-slot-label");
+          label.setAttribute("x", String(Number((slot.x + 4).toFixed(4))));
+          label.setAttribute("y", String(Number((slot.y + 14).toFixed(4))));
+          label.textContent = `${slotIndex + 1}. ${safeLabel}`;
+          canvas.appendChild(label);
+        });
+      });
+      return sessions;
+    }
+
+    function beginObjectPalettePlacementSessionMove(sessionId, startPoint) {
+      const session = getObjectPalettePlacementSessionById(sessionId);
+      if (!session) return;
+      clearSmartGuides();
+      state.objectPalettePlacement.editMode = true;
+      state.objectPalettePlacement.activeSessionId = session.id;
+      state.interaction = {
+        type: "palette-session-move",
+        sessionId: session.id,
+        pointerId: null,
+        changed: false,
+        startPoint: { x: Number(startPoint?.x || 0), y: Number(startPoint?.y || 0) },
+        baseArea: normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 }),
+        basePlacements: session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
+      };
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
+    function beginObjectPalettePlacementSessionResize(sessionId, startPoint) {
+      const session = getObjectPalettePlacementSessionById(sessionId);
+      if (!session) return;
+      clearSmartGuides();
+      state.objectPalettePlacement.editMode = true;
+      state.objectPalettePlacement.activeSessionId = session.id;
+      state.interaction = {
+        type: "palette-session-resize",
+        sessionId: session.id,
+        pointerId: null,
+        changed: false,
+        startPoint: { x: Number(startPoint?.x || 0), y: Number(startPoint?.y || 0) },
+        baseArea: normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 }),
+        basePlacements: session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
+      };
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
+    function beginObjectPalettePlacementSessionReorder(sessionId, startSlotIndex, startPoint) {
+      const session = getObjectPalettePlacementSessionById(sessionId);
+      if (!session) return;
+      const rawIndex = Number(startSlotIndex);
+      if (!Number.isFinite(rawIndex)) return;
+      clearSmartGuides();
+      state.objectPalettePlacement.editMode = true;
+      state.objectPalettePlacement.activeSessionId = session.id;
+      state.interaction = {
+        type: "palette-session-reorder",
+        sessionId: session.id,
+        pointerId: null,
+        changed: false,
+        dragIndex: rawIndex,
+        startPoint: { x: Number(startPoint?.x || 0), y: Number(startPoint?.y || 0) },
+        basePlacements: session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
+      };
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
+    function updateObjectPalettePlacementSessionMove(pt) {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-move") return;
+      const session = getObjectPalettePlacementSessionById(it.sessionId);
+      if (!session) return;
+      const dx = Number(pt?.x || 0) - it.startPoint.x;
+      const dy = Number(pt?.y || 0) - it.startPoint.y;
+      const nextArea = {
+        x: it.baseArea.x + dx,
+        y: it.baseArea.y + dy,
+        width: it.baseArea.width,
+        height: it.baseArea.height
+      };
+      const nextPlacements = it.basePlacements.map((entry) => {
+        return {
+          paletteItemId: entry.paletteItemId,
+          canvasItemId: entry.canvasItemId,
+          label: entry.label,
+          x: entry.x + dx,
+          y: entry.y + dy,
+          width: entry.width,
+          height: entry.height
+        };
+      });
+      const updated = moveObjectPalettePlacementSession(it.sessionId, nextArea, nextPlacements, { timestamp: Date.now() });
+      if (!updated) return;
+      it.changed = true;
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      applyObjectPalettePlacementSessionToCanvas(updated);
+    }
+
+    function updateObjectPalettePlacementSessionResize(pt) {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-resize") return;
+      const session = getObjectPalettePlacementSessionById(it.sessionId);
+      if (!session) return;
+      const dx = Number(pt?.x || 0) - it.startPoint.x;
+      const dy = Number(pt?.y || 0) - it.startPoint.y;
+      const rawWidth = it.baseArea.width + dx;
+      const rawHeight = it.baseArea.height + dy;
+      const nextWidth = Math.max(40, rawWidth);
+      const nextHeight = Math.max(40, rawHeight);
+      const sx = nextWidth / Math.max(1, it.baseArea.width);
+      const sy = nextHeight / Math.max(1, it.baseArea.height);
+      const nextArea = {
+        x: it.baseArea.x,
+        y: it.baseArea.y,
+        width: nextWidth,
+        height: nextHeight
+      };
+      const nextPlacements = it.basePlacements.map((entry) => ({
+        paletteItemId: entry.paletteItemId,
+        canvasItemId: entry.canvasItemId,
+        label: entry.label,
+        x: it.baseArea.x + (entry.x - it.baseArea.x) * sx,
+        y: it.baseArea.y + (entry.y - it.baseArea.y) * sy,
+        width: entry.width * sx,
+        height: entry.height * sy
+      }));
+      const updated = moveObjectPalettePlacementSession(it.sessionId, nextArea, nextPlacements, { timestamp: Date.now() });
+      if (!updated) return;
+      it.changed = true;
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      applyObjectPalettePlacementSessionToCanvas(updated);
+    }
+
+    function updateObjectPalettePlacementSessionReorder(pt) {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-reorder") return;
+      const session = getObjectPalettePlacementSessionById(it.sessionId);
+      if (!session || !session.placements.length) return;
+      const targetIndex = findClosestSessionSlotIndexFromPoint(session, pt);
+      if (targetIndex < 0 || targetIndex === it.dragIndex) return;
+      const next = cloneObjectPalettePlacementSession(session);
+      const moved = next.placements.splice(it.dragIndex, 1)[0];
+      if (!moved) return;
+      next.placements.splice(targetIndex, 0, moved);
+      next.lastEditedAt = Date.now();
+      replaceObjectPalettePlacementSession(next);
+      it.dragIndex = targetIndex;
+      it.changed = true;
+      state.objectPalettePlacement.activeSessionId = next.id;
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      applyObjectPalettePlacementSessionToCanvas(next);
+    }
+
+    function finishObjectPalettePlacementSessionMove() {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-move") return;
+      state.interaction = null;
+      syncObjectPaletteUi();
+      if (it.changed) {
+        pushHistory("palette-session-move");
+        const slotCount = getObjectPalettePlacementSessionById(it.sessionId)?.placements?.length || 0;
+        setStatus(slotCount ? `Moved placement session (${slotCount} items).` : "Moved placement session.");
+      } else {
+        setStatus("Session move canceled.");
+      }
+      if (state.objectPalettePlacement?.editMode) renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
+    function finishObjectPalettePlacementSessionResize() {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-resize") return;
+      state.interaction = null;
+      syncObjectPaletteUi();
+      if (it.changed) {
+        pushHistory("palette-session-resize");
+        setStatus("Resized placement session.");
+      } else {
+        setStatus("Session resize canceled.");
+      }
+      if (state.objectPalettePlacement?.editMode) renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
+    function finishObjectPalettePlacementSessionReorder() {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-reorder") return;
+      state.interaction = null;
+      syncObjectPaletteUi();
+      if (it.changed) {
+        pushHistory("palette-session-reorder");
+        setStatus("Reordered placement session.");
+      } else {
+        setStatus("Session reorder canceled.");
+      }
+      if (state.objectPalettePlacement?.editMode) renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
     function autoArrangeObjectPaletteOnCanvas(areaBox = null) {
       const items = getSelectedObjectPaletteItems();
       if (!items.length) {
@@ -2916,6 +3528,10 @@
       if (!inserted.length) {
         setStatus("Auto layout failed.");
         return;
+      }
+      const session = buildObjectPalettePlacementSessionFromLayout(layout, inserted);
+      if (session) {
+        addObjectPalettePlacementSession(session);
       }
       setSelection(inserted);
       pushHistory("palette-auto-arrange");
@@ -2993,7 +3609,10 @@
         selectionDrag: null
       },
       objectPalettePlacement: {
-        active: false
+        active: false,
+        editMode: false,
+        sessions: [],
+        activeSessionId: ""
       },
       viewScale: 1,
       pinch: { active: false, startScale: 1, startDistance: 0 },
@@ -3214,6 +3833,10 @@
         el.classList.contains("placement-guide") ||
         el.classList.contains("placement-preview") ||
         el.classList.contains("placement-preview-label") ||
+        el.classList.contains("placement-session-frame") ||
+        el.classList.contains("placement-session-handle") ||
+        el.classList.contains("placement-session-slot") ||
+        el.classList.contains("placement-session-slot-label") ||
         el.classList.contains("smart-guide") ||
         el.classList.contains("crop-boundary") ||
         el.classList.contains("crop-draft") ||
@@ -5603,7 +6226,7 @@
 
     function getCleanCanvasMarkup() {
       const clone = canvas.cloneNode(true);
-      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle").forEach((el) => el.remove());
+      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label").forEach((el) => el.remove());
       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
         el.classList.remove("fm-selected");
         el.classList.remove("fm-group-selected");
@@ -5622,7 +6245,14 @@
       return {
         viewBox: state.artboardViewBox || DEFAULT_ARTBOARD_VIEWBOX,
         artboardViewBox: state.artboardViewBox || DEFAULT_ARTBOARD_VIEWBOX,
-        workspaceViewBox: WORKSPACE_VIEWBOX
+        workspaceViewBox: WORKSPACE_VIEWBOX,
+        objectPalettePlacementSessions: normalizeObjectPalettePlacementSessions(state.objectPalettePlacement?.sessions || []).map((session) => ({
+          id: String(session?.id || ""),
+          area: normalizeObjectPaletteBox(session?.area, null),
+          placements: Array.isArray(session?.placements) ? session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry)) : [],
+          createdAt: Number.isFinite(Number(session?.createdAt)) ? Number(session.createdAt) : Date.now(),
+          lastEditedAt: Number.isFinite(Number(session?.lastEditedAt)) ? Number(session.lastEditedAt) : null
+        }))
       };
     }
 
@@ -6278,6 +6908,7 @@
       applyCanvasMeta(snap.canvasMeta);
       applySnapshotMarkup(snap.markup, snap.imageRefs || null);
       assignIds();
+      restoreObjectPalettePlacementSessionsFromMeta(snap.canvasMeta);
       setSelection(snap.selectedIds || []);
       garbageCollectImagePool();
     }
@@ -7764,6 +8395,7 @@
       applyCanvasMeta({ viewBox: root.getAttribute("viewBox") || DEFAULT_VIEWBOX }, { centerScroll: true });
       applySnapshotMarkup(root.innerHTML);
       assignIds();
+      restoreObjectPalettePlacementSessionsFromMeta({});
       ensureFigureTitle();
       clearSelection();
       pushHistory("open-svg");
@@ -7916,6 +8548,7 @@
       cancelImageCropMode({ silent: true });
       applyCanvasMeta({ viewBox: DEFAULT_VIEWBOX }, { centerScroll: true });
       applySnapshotMarkup("");
+      clearObjectPalettePlacementSessions();
       ensureFigureTitle();
       clearSelection();
       state.fileHandle = null;
@@ -8252,6 +8885,7 @@
         applyCanvasMeta(r.canvasMeta);
         applySnapshotMarkup(r.markup, r.imageRefs || null);
         assignIds();
+        restoreObjectPalettePlacementSessionsFromMeta(r.canvasMeta);
         ensureFigureTitle();
         setSelection(r.selectedIds || []);
         pushHistory("restore-latest");
@@ -8283,6 +8917,7 @@
         applyCanvasMeta(r.canvasMeta);
         applySnapshotMarkup(r.markup, r.imageRefs || null);
         assignIds();
+        restoreObjectPalettePlacementSessionsFromMeta(r.canvasMeta);
         ensureFigureTitle();
         setSelection(r.selectedIds || []);
         pushHistory("restore-from-list");
@@ -11589,6 +12224,22 @@
       bindClick("paletteAddSelectionBtn", addSelectionToObjectPalette);
       bindClick("palettePasteBtn", () => { void pasteToObjectPalette(); });
       bindClick("paletteAutoArrangeBtn", startObjectPalettePlacementMode);
+      bindClick("paletteEditModeBtn", () => {
+        const hasSessions = Array.isArray(state.objectPalettePlacement?.sessions) && state.objectPalettePlacement.sessions.length > 0;
+        if (!hasSessions) {
+          setStatus("No object placement sessions to edit.");
+          return;
+        }
+        state.objectPalettePlacement.editMode = !state.objectPalettePlacement.editMode;
+        if (state.objectPalettePlacement.editMode) {
+          renderObjectPalettePlacementSessions();
+          setStatus("Placement edit mode enabled.");
+        } else {
+          clearObjectPalettePlacementSessionsVisuals();
+          setStatus("Placement edit mode disabled.");
+        }
+        syncObjectPaletteUi();
+      });
       bindClick("paletteClearBtn", () => {
         state.objectPaletteItems = [];
         state.objectPaletteSelectedIds = [];
@@ -12133,6 +12784,23 @@
         if (e.pointerType !== "touch") focusPasteSink();
         closeContextMenu();
         closeFigureEditor();
+        const sessionHit = resolveObjectPalettePlacementSessionHitFromTarget(e.target);
+        if (sessionHit) {
+          const point = getSvgPoint(e.clientX, e.clientY);
+          if (sessionHit.kind === "move") {
+            beginObjectPalettePlacementSessionMove(sessionHit.sessionId, point);
+          } else if (sessionHit.kind === "resize") {
+            beginObjectPalettePlacementSessionResize(sessionHit.sessionId, point);
+          } else if (sessionHit.kind === "reorder") {
+            beginObjectPalettePlacementSessionReorder(sessionHit.sessionId, sessionHit.slotIndex, point);
+          }
+          if (state.interaction) {
+            state.interaction.pointerId = e.pointerId;
+            if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+          }
+          if (sessionHit.kind === "reorder") e.preventDefault();
+          return;
+        }
         if (state.cropMode) {
           const pt = getSvgPoint(e.clientX, e.clientY);
           const cm = state.cropMode;
@@ -12319,6 +12987,9 @@
         if (it.type === "pan") updatePan(e.clientX, e.clientY);
         if (it.type === "crop-move") updateCropMove(pt);
         if (it.type === "crop-resize") updateCropResize(pt, e.shiftKey);
+        if (it.type === "palette-session-move") updateObjectPalettePlacementSessionMove(pt);
+        if (it.type === "palette-session-resize") updateObjectPalettePlacementSessionResize(pt);
+        if (it.type === "palette-session-reorder") updateObjectPalettePlacementSessionReorder(pt);
         if (it.type === "drag") updateDrag(pt, { disableSnap, axisLock: e.shiftKey, clientX: e.clientX, clientY: e.clientY });
         if (it.type === "palette-place-area") updateObjectPalettePlacement(pt);
         if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
@@ -12338,6 +13009,9 @@
         if (type === "crop-resize") finishCropResize();
         if (type === "drag") finishDrag({ clientX: e.clientX, clientY: e.clientY });
         if (type === "palette-place-area") finishObjectPalettePlacement();
+        if (type === "palette-session-move") finishObjectPalettePlacementSessionMove();
+        if (type === "palette-session-resize") finishObjectPalettePlacementSessionResize();
+        if (type === "palette-session-reorder") finishObjectPalettePlacementSessionReorder();
         if (type === "resize") finishResize();
         if (type === "rotate") finishRotate();
         if (type === "marquee") finishMarquee();
@@ -12367,6 +13041,15 @@
         if (state.interaction.type === "pan") {
           canvasWrapEl.classList.remove("is-panning");
           updateToolCursor();
+        }
+        if (state.interaction.type === "palette-session-move") {
+          finishObjectPalettePlacementSessionMove();
+        }
+        if (state.interaction.type === "palette-session-resize") {
+          finishObjectPalettePlacementSessionResize();
+        }
+        if (state.interaction.type === "palette-session-reorder") {
+          finishObjectPalettePlacementSessionReorder();
         }
         if (state.interaction.type === "palette-place-area") {
           state.interaction.rect?.remove?.();
