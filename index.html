@@ -722,6 +722,14 @@
       pointer-events: all;
       vector-effect: non-scaling-stroke;
     }
+    .placement-session-title {
+      fill: #4a5f30;
+      font-size: 12px;
+      font-weight: 700;
+      pointer-events: none;
+      user-select: none;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
     .placement-session-remove {
       fill: #fff8f2;
       stroke: #8c3a3a;
@@ -2430,7 +2438,7 @@
     }
 
     function clearObjectPalettePlacementSessionsVisuals() {
-      canvas.querySelectorAll(".placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label").forEach((el) => el.remove());
+      canvas.querySelectorAll(".placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label,.placement-session-title").forEach((el) => el.remove());
     }
 
     function removeObjectPalettePlacementSession(sessionId) {
@@ -3406,6 +3414,7 @@
       const forceFrame = !!opts.forceFrame;
       const sessions = normalizeObjectPalettePlacementSessions(state.objectPalettePlacement?.sessions || []);
       state.objectPalettePlacement.sessions = sessions;
+      const showSessionTitles = sessions.length > 1;
       clearObjectPalettePlacementSessionsVisuals();
       if (!sessions.length) {
         if (forceFrame) setStatus("No placement sessions stored.");
@@ -3416,7 +3425,7 @@
       if (!state.objectPalettePlacement.activeSessionId || !getObjectPalettePlacementSessionById(state.objectPalettePlacement.activeSessionId)) {
         state.objectPalettePlacement.activeSessionId = String(sessions[sessions.length - 1].id || sessions[0].id || "");
       }
-      sessions.forEach((session) => {
+      sessions.forEach((session, sessionIndex) => {
         const area = normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 });
         const frame = document.createElementNS(SVG_NS, "rect");
         frame.className.baseVal = "placement-session-frame";
@@ -3431,6 +3440,16 @@
         frame.setAttribute("width", String(Number(Math.max(1, area.width).toFixed(4))));
         frame.setAttribute("height", String(Number(Math.max(1, area.height).toFixed(4))));
         canvas.appendChild(frame);
+
+        if (showSessionTitles) {
+          const title = document.createElementNS(SVG_NS, "text");
+          title.setAttribute("class", "placement-session-title");
+          title.setAttribute("x", String(Number((area.x + 6).toFixed(4))));
+          title.setAttribute("y", String(Number((area.y + 14).toFixed(4))));
+          title.textContent = `Layout ${sessionIndex + 1}`;
+          title.setAttribute("data-object-palette-session-id", session.id);
+          canvas.appendChild(title);
+        }
 
         const handleSize = Math.max(12, Math.min(20, Math.min(area.width, area.height) * 0.18));
         const handle = document.createElementNS(SVG_NS, "rect");
@@ -6536,7 +6555,7 @@
 
     function getCleanCanvasMarkup() {
       const clone = canvas.cloneNode(true);
-      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label").forEach((el) => el.remove());
+      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label,.placement-session-title").forEach((el) => el.remove());
       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
         el.classList.remove("fm-selected");
         el.classList.remove("fm-group-selected");
