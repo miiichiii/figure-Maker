@@ -3555,13 +3555,15 @@
       clearSmartGuides();
       state.objectPalettePlacement.editMode = true;
       state.objectPalettePlacement.activeSessionId = session.id;
+      const baseArea = normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 });
       state.interaction = {
         type: "palette-session-resize",
         sessionId: session.id,
         pointerId: null,
         changed: false,
         startPoint: { x: Number(startPoint?.x || 0), y: Number(startPoint?.y || 0) },
-        baseArea: normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 }),
+        baseArea,
+        baseAspect: baseArea.height > 0 ? baseArea.width / baseArea.height : 1,
         basePlacements: session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
       };
       renderObjectPalettePlacementSessions({ forceFrame: true });
@@ -3621,7 +3623,7 @@
       applyObjectPalettePlacementSessionToCanvas(updated);
     }
 
-    function updateObjectPalettePlacementSessionResize(pt) {
+    function updateObjectPalettePlacementSessionResize(pt, options = {}) {
       const it = state.interaction;
       if (!it || it.type !== "palette-session-resize") return;
       const session = getObjectPalettePlacementSessionById(it.sessionId);
@@ -3630,8 +3632,35 @@
       const dy = Number(pt?.y || 0) - it.startPoint.y;
       const rawWidth = it.baseArea.width + dx;
       const rawHeight = it.baseArea.height + dy;
-      const nextWidth = Math.max(40, rawWidth);
-      const nextHeight = Math.max(40, rawHeight);
+      const minSide = 40;
+      const keepAspect = !!options.lockAspect;
+      const aspect = Number.isFinite(it.baseAspect) && it.baseAspect > 0
+        ? it.baseAspect
+        : Math.max(0.01, it.baseArea.width / Math.max(1, it.baseArea.height));
+      let nextWidth;
+      let nextHeight;
+      if (keepAspect) {
+        const dragX = Math.abs(dx);
+        const dragY = Math.abs(dy);
+        if (dragX >= dragY) {
+          nextWidth = Math.max(minSide, rawWidth);
+          nextHeight = nextWidth / aspect;
+          if (nextHeight < minSide) {
+            nextHeight = minSide;
+            nextWidth = nextHeight * aspect;
+          }
+        } else {
+          nextHeight = Math.max(minSide, rawHeight);
+          nextWidth = nextHeight * aspect;
+          if (nextWidth < minSide) {
+            nextWidth = minSide;
+            nextHeight = nextWidth / aspect;
+          }
+        }
+      } else {
+        nextWidth = Math.max(minSide, rawWidth);
+        nextHeight = Math.max(minSide, rawHeight);
+      }
       const sx = nextWidth / Math.max(1, it.baseArea.width);
       const sy = nextHeight / Math.max(1, it.baseArea.height);
       const nextArea = {
@@ -13278,7 +13307,7 @@
         if (it.type === "crop-move") updateCropMove(pt);
         if (it.type === "crop-resize") updateCropResize(pt, e.shiftKey);
         if (it.type === "palette-session-move") updateObjectPalettePlacementSessionMove(pt);
-        if (it.type === "palette-session-resize") updateObjectPalettePlacementSessionResize(pt);
+        if (it.type === "palette-session-resize") updateObjectPalettePlacementSessionResize(pt, { lockAspect: e.shiftKey });
         if (it.type === "palette-session-reorder") updateObjectPalettePlacementSessionReorder(pt);
         if (it.type === "palette-session-slot-move") updateObjectPalettePlacementSessionSlotMove(pt);
         if (it.type === "drag") updateDrag(pt, { disableSnap, axisLock: e.shiftKey, clientX: e.clientX, clientY: e.clientY });
