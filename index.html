@@ -722,6 +722,26 @@
       pointer-events: all;
       vector-effect: non-scaling-stroke;
     }
+    .placement-session-remove {
+      fill: #fff8f2;
+      stroke: #8c3a3a;
+      stroke-width: 1.2;
+      cursor: pointer;
+      pointer-events: all;
+      vector-effect: non-scaling-stroke;
+    }
+    .placement-session-remove:hover {
+      fill: #ffefef;
+    }
+    .placement-session-remove-label {
+      fill: #8c3a3a;
+      font-size: 12px;
+      font-weight: 700;
+      pointer-events: none;
+      text-anchor: middle;
+      dominant-baseline: central;
+      user-select: none;
+    }
     .placement-session-handle {
       fill: #f7fbef;
       stroke: #6b8f4e;
@@ -742,6 +762,16 @@
     .placement-session-slot.active {
       fill: rgba(16, 111, 175, 0.22);
       stroke-width: 1.4;
+    }
+    .placement-session-slot.dragging {
+      fill: rgba(16, 111, 175, 0.32);
+      stroke-width: 1.9;
+      cursor: grabbing;
+    }
+    .placement-session-slot.swap-target {
+      fill: rgba(16, 175, 97, 0.22);
+      stroke: rgba(16, 175, 97, 0.85);
+      stroke-width: 1.7;
     }
     .placement-session-slot.drop-before,
     .placement-session-slot.drop-after {
@@ -2400,7 +2430,29 @@
     }
 
     function clearObjectPalettePlacementSessionsVisuals() {
-      canvas.querySelectorAll(".placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label").forEach((el) => el.remove());
+      canvas.querySelectorAll(".placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label").forEach((el) => el.remove());
+    }
+
+    function removeObjectPalettePlacementSession(sessionId) {
+      const targetId = String(sessionId || "");
+      if (!targetId) return false;
+      const sessions = Array.isArray(state.objectPalettePlacement?.sessions) ? [...state.objectPalettePlacement.sessions] : [];
+      const nextSessions = sessions.filter((session) => String(session?.id || "") !== targetId);
+      if (nextSessions.length === sessions.length) return false;
+      state.objectPalettePlacement.sessions = nextSessions;
+      if (String(state.objectPalettePlacement.activeSessionId || "") === targetId) {
+        state.objectPalettePlacement.activeSessionId = nextSessions.length
+          ? String(nextSessions[nextSessions.length - 1].id || "")
+          : "";
+      }
+      if (state.interaction && String(state.interaction.sessionId || "") === targetId) {
+        state.interaction = null;
+      }
+      state.objectPalettePlacement.editMode = false;
+      clearObjectPalettePlacementSessionsVisuals();
+      syncObjectPaletteUi();
+      setStatus("Layout deleted. Edit layout disabled.");
+      return true;
     }
 
     function replaceObjectPalettePlacementSession(nextSession) {
@@ -2517,6 +2569,77 @@
       return found;
     }
 
+    function findSessionSlotIndexFromPoint(session, pt = {}, options = {}) {
+      const slots = Array.isArray(session?.placements) ? session.placements : [];
+      const targetX = Number(pt.x);
+      const targetY = Number(pt.y);
+      if (!slots.length || !Number.isFinite(targetX) || !Number.isFinite(targetY)) return -1;
+      let hoveredIndex = -1;
+      let hoveredDist = Infinity;
+      slots.forEach((slot, index) => {
+        const x = Number(slot?.x || 0);
+        const y = Number(slot?.y || 0);
+        const w = Number(slot?.width || 0);
+        const h = Number(slot?.height || 0);
+        const padX = Math.min(24, Math.max(6, w * 0.22));
+        const padY = Math.min(24, Math.max(6, h * 0.22));
+        const hitRect = {
+          x: x - padX,
+          y: y - padY,
+          width: Math.max(4, w + padX * 2),
+          height: Math.max(4, h + padY * 2)
+        };
+        if (!pointInRect({ x: targetX, y: targetY }, hitRect)) return;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const dist = Math.hypot(targetX - cx, targetY - cy);
+        if (dist < hoveredDist) {
+          hoveredDist = dist;
+          hoveredIndex = index;
+        }
+      });
+      if (hoveredIndex >= 0) return hoveredIndex;
+      const dragIndex = Number(options.dragIndex);
+      if (!Number.isFinite(dragIndex) || dragIndex < 0 || dragIndex >= slots.length) return -1;
+      const draggedSlot = slots[dragIndex];
+      if (!draggedSlot) return -1;
+      const draggedCenterX = Number(draggedSlot.x || 0) + Number(draggedSlot.width || 0) / 2;
+      const draggedCenterY = Number(draggedSlot.y || 0) + Number(draggedSlot.height || 0) / 2;
+      const moveX = targetX - draggedCenterX;
+      const moveY = targetY - draggedCenterY;
+      const minMove = 2;
+      const closestIndex = findClosestSessionSlotIndexFromPoint(session, pt);
+      if (Math.hypot(moveX, moveY) < minMove && closestIndex >= 0) return closestIndex;
+      const horizontal = Math.abs(moveX) >= Math.abs(moveY);
+      const sign = horizontal ? Math.sign(moveX) || 1 : Math.sign(moveY) || 1;
+      let nextIndex = -1;
+      let bestScore = Infinity;
+      slots.forEach((slot, index) => {
+        if (index === dragIndex) return;
+        const cx = Number(slot?.x || 0) + Number(slot?.width || 0) / 2;
+        const cy = Number(slot?.y || 0) + Number(slot?.height || 0) / 2;
+        if (horizontal) {
+          const axisDelta = (cx - draggedCenterX) * sign;
+          if (axisDelta < 0) return;
+          const score = axisDelta + Math.abs(cy - draggedCenterY) * 0.6;
+          if (score < bestScore) {
+            bestScore = score;
+            nextIndex = index;
+          }
+          return;
+        }
+        const axisDelta = (cy - draggedCenterY) * sign;
+        if (axisDelta < 0) return;
+        const score = axisDelta + Math.abs(cx - draggedCenterX) * 0.6;
+        if (score < bestScore) {
+          bestScore = score;
+          nextIndex = index;
+        }
+      });
+      if (nextIndex >= 0) return nextIndex;
+      return closestIndex;
+    }
+
     function buildObjectPalettePlacementSessionCandidates() {
       const nodes = Array.from(canvas.querySelectorAll("*")).filter((node) => {
         return node instanceof SVGElement && isEditableElement(node) && !!node.dataset.id;
@@ -2589,16 +2712,44 @@
       syncObjectPaletteUi();
     }
 
-    function resolveObjectPalettePlacementSessionHitFromTarget(target) {
+    function resolveObjectPalettePlacementSessionHitFromTarget(target, options = {}) {
       if (!(target instanceof SVGElement)) return null;
-      const hit = target.closest(".placement-session-frame,.placement-session-handle,.placement-session-slot");
+      const hit = target.closest(".placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-remove,.placement-session-remove-label");
       if (!hit) return null;
-      const sessionId = String(hit.dataset?.objectPaletteSessionId || "");
+      const sessionId = String(
+        hit.getAttribute?.("data-object-palette-session-id")
+        || hit.dataset?.objectPaletteSessionId
+        || ""
+      );
       if (!sessionId) return null;
       if (hit.classList.contains("placement-session-handle")) return { sessionId, kind: "resize" };
+      if (hit.classList.contains("placement-session-remove") || hit.classList.contains("placement-session-remove-label")) {
+        return { sessionId, kind: "remove" };
+      }
       if (hit.classList.contains("placement-session-slot")) {
-        const slotIndex = Number(hit.dataset?.slotIndex || "");
-        return { sessionId, kind: "reorder", slotIndex: Number.isFinite(slotIndex) ? slotIndex : -1 };
+        let slotIndex = Number(
+          hit.getAttribute?.("data-slot-index")
+          || hit.dataset?.slotIndex
+          || ""
+        );
+        if (!Number.isFinite(slotIndex)) {
+          const session = getObjectPalettePlacementSessionById(sessionId);
+          const pt = options.point && Number.isFinite(options.point?.x) && Number.isFinite(options.point?.y)
+            ? { x: Number(options.point.x), y: Number(options.point.y) }
+            : null;
+          const fallbackIndex = session && pt ? findSessionSlotIndexFromPoint(session, pt) : -1;
+          if (Number.isFinite(fallbackIndex)) slotIndex = fallbackIndex;
+          else if (session && Array.isArray(session.placements) && session.placements.length) {
+            slotIndex = 0;
+          }
+        }
+        const forceFreeMove = !!options.forceFreeMove;
+        const reorder = !forceFreeMove;
+        return {
+          sessionId,
+          kind: reorder ? "slot-reorder" : "slot-move",
+          slotIndex: Number.isFinite(slotIndex) ? slotIndex : -1
+        };
       }
       return { sessionId, kind: "move" };
     }
@@ -3270,7 +3421,7 @@
         const frame = document.createElementNS(SVG_NS, "rect");
         frame.className.baseVal = "placement-session-frame";
         frame.setAttribute("class", "placement-session-frame");
-        frame.dataset.objectPaletteSessionId = session.id;
+        frame.setAttribute("data-object-palette-session-id", session.id);
         frame.dataset.type = "palette-session-frame";
         if (String(session.id || "") === String(state.objectPalettePlacement.activeSessionId || "")) {
           frame.classList.add("active");
@@ -3285,7 +3436,7 @@
         const handle = document.createElementNS(SVG_NS, "rect");
         handle.className.baseVal = "placement-session-handle";
         handle.setAttribute("class", "placement-session-handle");
-        handle.dataset.objectPaletteSessionId = session.id;
+        handle.setAttribute("data-object-palette-session-id", session.id);
         handle.dataset.type = "palette-session-handle";
         handle.setAttribute("x", String(Number((area.x + area.width - handleSize).toFixed(4))));
         handle.setAttribute("y", String(Number((area.y + area.height - handleSize).toFixed(4))));
@@ -3293,17 +3444,49 @@
         handle.setAttribute("height", String(Number(handleSize.toFixed(4))));
         canvas.appendChild(handle);
 
+        const removeSize = Math.max(12, Math.min(20, Math.min(area.width, area.height) * 0.16));
+        const removePadding = 4;
+        const removeX = Number((area.x + area.width - removeSize - removePadding).toFixed(4));
+        const removeY = Number((area.y + removePadding).toFixed(4));
+        const removeBtn = document.createElementNS(SVG_NS, "rect");
+        removeBtn.className.baseVal = "placement-session-remove";
+        removeBtn.setAttribute("class", "placement-session-remove");
+        removeBtn.setAttribute("data-object-palette-session-id", session.id);
+        removeBtn.setAttribute("data-type", "palette-session-remove");
+        removeBtn.setAttribute("x", String(removeX));
+        removeBtn.setAttribute("y", String(removeY));
+        removeBtn.setAttribute("width", String(Number(removeSize.toFixed(4))));
+        removeBtn.setAttribute("height", String(Number(removeSize.toFixed(4))));
+        canvas.appendChild(removeBtn);
+
+        const removeLabel = document.createElementNS(SVG_NS, "text");
+        removeLabel.setAttribute("class", "placement-session-remove-label");
+        removeLabel.setAttribute("data-object-palette-session-id", session.id);
+        removeLabel.setAttribute("x", String(Number((removeX + removeSize / 2).toFixed(4))));
+        removeLabel.setAttribute("y", String(Number((removeY + removeSize / 2).toFixed(4))));
+        removeLabel.textContent = "×";
+        canvas.appendChild(removeLabel);
+
+        const activeInteraction = state.interaction;
         session.placements.forEach((entry, slotIndex) => {
           const slot = normalizeObjectPalettePlacementSessionSlot(entry);
           const slotRect = document.createElementNS(SVG_NS, "rect");
           slotRect.className.baseVal = "placement-session-slot";
           slotRect.setAttribute("class", "placement-session-slot");
-          slotRect.dataset.objectPaletteSessionId = session.id;
-          slotRect.dataset.slotIndex = String(slotIndex);
+          slotRect.setAttribute("data-object-palette-session-id", session.id);
+          slotRect.setAttribute("data-slot-index", String(slotIndex));
           slotRect.setAttribute("x", String(Number(slot.x.toFixed(4))));
           slotRect.setAttribute("y", String(Number(slot.y.toFixed(4))));
           slotRect.setAttribute("width", String(Number(Math.max(1, slot.width).toFixed(4))));
           slotRect.setAttribute("height", String(Number(Math.max(1, slot.height).toFixed(4))));
+          const sessionDrag = activeInteraction && String(activeInteraction.sessionId || "") === String(session.id || "");
+          if (sessionDrag && Number.isFinite(Number(activeInteraction.dragIndex)) && Number(activeInteraction.dragIndex) === slotIndex &&
+            (activeInteraction.type === "palette-session-slot-move" || activeInteraction.type === "palette-session-reorder")) {
+            slotRect.classList.add("dragging");
+          }
+          if (sessionDrag && activeInteraction.type === "palette-session-reorder" && Number.isFinite(Number(activeInteraction.hoverIndex)) && Number(activeInteraction.hoverIndex) === slotIndex) {
+            slotRect.classList.add("swap-target");
+          }
           canvas.appendChild(slotRect);
 
           const safeLabel = String(slot.label || `Item ${slotIndex + 1}`).slice(0, 34);
@@ -3337,6 +3520,35 @@
       updateToolCursor();
     }
 
+    function beginObjectPalettePlacementSessionSlotMove(sessionId, startSlotIndex, startPoint) {
+      const session = getObjectPalettePlacementSessionById(sessionId);
+      if (!session) return;
+      const rawIndex = Number(startSlotIndex);
+      if (!Number.isFinite(rawIndex) || rawIndex < 0 || rawIndex >= session.placements.length) return;
+      const basePlacements = Array.isArray(session.placements) ? session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry)) : [];
+      const baseSlot = basePlacements[rawIndex];
+      if (!baseSlot) return;
+      clearSmartGuides();
+      state.objectPalettePlacement.editMode = true;
+      state.objectPalettePlacement.activeSessionId = session.id;
+      state.interaction = {
+        type: "palette-session-slot-move",
+        sessionId: session.id,
+        pointerId: null,
+        changed: false,
+        dragIndex: rawIndex,
+        startPoint: { x: Number(startPoint?.x || 0), y: Number(startPoint?.y || 0) },
+        dragOffset: {
+          x: Number(startPoint?.x || 0) - Number(baseSlot.x || 0),
+          y: Number(startPoint?.y || 0) - Number(baseSlot.y || 0)
+        },
+        baseArea: normalizeObjectPaletteBox(session.area, { x: 0, y: 0, width: 1, height: 1 }),
+        basePlacements
+      };
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
     function beginObjectPalettePlacementSessionResize(sessionId, startPoint) {
       const session = getObjectPalettePlacementSessionById(sessionId);
       if (!session) return;
@@ -3360,7 +3572,7 @@
       const session = getObjectPalettePlacementSessionById(sessionId);
       if (!session) return;
       const rawIndex = Number(startSlotIndex);
-      if (!Number.isFinite(rawIndex)) return;
+      if (!Number.isFinite(rawIndex) || rawIndex < 0 || rawIndex >= session.placements.length) return;
       clearSmartGuides();
       state.objectPalettePlacement.editMode = true;
       state.objectPalettePlacement.activeSessionId = session.id;
@@ -3370,6 +3582,7 @@
         pointerId: null,
         changed: false,
         dragIndex: rawIndex,
+        hoverIndex: -1,
         startPoint: { x: Number(startPoint?.x || 0), y: Number(startPoint?.y || 0) },
         basePlacements: session.placements.map((entry) => normalizeObjectPalettePlacementSessionSlot(entry))
       };
@@ -3448,19 +3661,70 @@
       if (!it || it.type !== "palette-session-reorder") return;
       const session = getObjectPalettePlacementSessionById(it.sessionId);
       if (!session || !session.placements.length) return;
-      const targetIndex = findClosestSessionSlotIndexFromPoint(session, pt);
+      const targetIndex = findSessionSlotIndexFromPoint(session, pt, { dragIndex: it.dragIndex });
+      it.hoverIndex = Number.isFinite(targetIndex) ? Number(targetIndex) : -1;
       if (targetIndex < 0 || targetIndex === it.dragIndex) return;
+      const slotLayout = Array.isArray(it.basePlacements) && it.basePlacements.length ? it.basePlacements : [];
+      const safeLayout = slotLayout.length === session.placements.length
+        ? slotLayout
+        : Array.isArray(session.placements) ? session.placements : [];
       const next = cloneObjectPalettePlacementSession(session);
       const moved = next.placements.splice(it.dragIndex, 1)[0];
       if (!moved) return;
       next.placements.splice(targetIndex, 0, moved);
+      if (safeLayout.length >= next.placements.length) {
+        next.placements = next.placements.map((entry, index) => {
+          const slot = safeLayout[index];
+          if (!slot) return entry;
+          return {
+            ...entry,
+            x: Number(slot.x || 0),
+            y: Number(slot.y || 0),
+            width: Number(slot.width || entry.width || 1),
+            height: Number(slot.height || entry.height || 1)
+          };
+        });
+      }
       next.lastEditedAt = Date.now();
       replaceObjectPalettePlacementSession(next);
       it.dragIndex = targetIndex;
+      it.hoverIndex = targetIndex;
       it.changed = true;
       state.objectPalettePlacement.activeSessionId = next.id;
       renderObjectPalettePlacementSessions({ forceFrame: true });
       applyObjectPalettePlacementSessionToCanvas(next);
+    }
+
+    function updateObjectPalettePlacementSessionSlotMove(pt) {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-slot-move") return;
+      const session = getObjectPalettePlacementSessionById(it.sessionId);
+      if (!session || !Array.isArray(session.placements) || !Number.isFinite(it.dragIndex)) return;
+      const slot = session.placements[it.dragIndex];
+      if (!slot) return;
+      const nextX = Number(pt?.x || 0) - it.dragOffset.x;
+      const nextY = Number(pt?.y || 0) - it.dragOffset.y;
+      const baseSlot = it.basePlacements?.[it.dragIndex] || normalizeObjectPalettePlacementSessionSlot(slot);
+      const area = normalizeObjectPaletteBox(it.baseArea, slot);
+      const w = Math.max(1, Number(baseSlot.width || slot.width || 1));
+      const h = Math.max(1, Number(baseSlot.height || slot.height || 1));
+      const minX = area.x;
+      const maxX = area.x + area.width - w;
+      const minY = area.y;
+      const maxY = area.y + area.height - h;
+      const slotX = maxX >= minX ? Math.max(minX, Math.min(nextX, maxX)) : area.x;
+      const slotY = maxY >= minY ? Math.max(minY, Math.min(nextY, maxY)) : area.y;
+      const next = cloneObjectPalettePlacementSession(session);
+      next.placements[it.dragIndex] = {
+        ...baseSlot,
+        x: slotX,
+        y: slotY
+      };
+      const updated = moveObjectPalettePlacementSession(it.sessionId, it.baseArea, next.placements, { timestamp: Date.now() });
+      if (!updated) return;
+      it.changed = true;
+      renderObjectPalettePlacementSessions({ forceFrame: true });
+      applyObjectPalettePlacementSessionToCanvas(updated);
     }
 
     function finishObjectPalettePlacementSessionMove() {
@@ -3474,6 +3738,21 @@
         setStatus(slotCount ? `Moved placement session (${slotCount} items).` : "Moved placement session.");
       } else {
         setStatus("Session move canceled.");
+      }
+      if (state.objectPalettePlacement?.editMode) renderObjectPalettePlacementSessions({ forceFrame: true });
+      updateToolCursor();
+    }
+
+    function finishObjectPalettePlacementSessionSlotMove() {
+      const it = state.interaction;
+      if (!it || it.type !== "palette-session-slot-move") return;
+      state.interaction = null;
+      syncObjectPaletteUi();
+      if (it.changed) {
+        pushHistory("palette-session-slot-move");
+        setStatus("Moved an object in placement layout.");
+      } else {
+        setStatus("Slot move canceled.");
       }
       if (state.objectPalettePlacement?.editMode) renderObjectPalettePlacementSessions({ forceFrame: true });
       updateToolCursor();
@@ -3837,6 +4116,8 @@
         el.classList.contains("placement-session-handle") ||
         el.classList.contains("placement-session-slot") ||
         el.classList.contains("placement-session-slot-label") ||
+        el.classList.contains("placement-session-remove") ||
+        el.classList.contains("placement-session-remove-label") ||
         el.classList.contains("smart-guide") ||
         el.classList.contains("crop-boundary") ||
         el.classList.contains("crop-draft") ||
@@ -6226,7 +6507,7 @@
 
     function getCleanCanvasMarkup() {
       const clone = canvas.cloneNode(true);
-      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label").forEach((el) => el.remove());
+      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label").forEach((el) => el.remove());
       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
         el.classList.remove("fm-selected");
         el.classList.remove("fm-group-selected");
@@ -12784,21 +13065,30 @@
         if (e.pointerType !== "touch") focusPasteSink();
         closeContextMenu();
         closeFigureEditor();
-        const sessionHit = resolveObjectPalettePlacementSessionHitFromTarget(e.target);
+        const point = getSvgPoint(e.clientX, e.clientY);
+        const sessionHit = resolveObjectPalettePlacementSessionHitFromTarget(e.target, { forceFreeMove: e.shiftKey, point });
         if (sessionHit) {
-          const point = getSvgPoint(e.clientX, e.clientY);
           if (sessionHit.kind === "move") {
             beginObjectPalettePlacementSessionMove(sessionHit.sessionId, point);
           } else if (sessionHit.kind === "resize") {
             beginObjectPalettePlacementSessionResize(sessionHit.sessionId, point);
-          } else if (sessionHit.kind === "reorder") {
+          } else if (sessionHit.kind === "remove") {
+            removeObjectPalettePlacementSession(sessionHit.sessionId);
+            if (state.interaction) {
+              state.interaction.pointerId = null;
+            }
+            e.preventDefault();
+            return;
+          } else if (sessionHit.kind === "slot-reorder") {
             beginObjectPalettePlacementSessionReorder(sessionHit.sessionId, sessionHit.slotIndex, point);
+          } else if (sessionHit.kind === "slot-move") {
+            beginObjectPalettePlacementSessionSlotMove(sessionHit.sessionId, sessionHit.slotIndex, point);
           }
           if (state.interaction) {
             state.interaction.pointerId = e.pointerId;
             if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
           }
-          if (sessionHit.kind === "reorder") e.preventDefault();
+          if (sessionHit.kind === "slot-reorder" || sessionHit.kind === "slot-move") e.preventDefault();
           return;
         }
         if (state.cropMode) {
@@ -12990,6 +13280,7 @@
         if (it.type === "palette-session-move") updateObjectPalettePlacementSessionMove(pt);
         if (it.type === "palette-session-resize") updateObjectPalettePlacementSessionResize(pt);
         if (it.type === "palette-session-reorder") updateObjectPalettePlacementSessionReorder(pt);
+        if (it.type === "palette-session-slot-move") updateObjectPalettePlacementSessionSlotMove(pt);
         if (it.type === "drag") updateDrag(pt, { disableSnap, axisLock: e.shiftKey, clientX: e.clientX, clientY: e.clientY });
         if (it.type === "palette-place-area") updateObjectPalettePlacement(pt);
         if (it.type === "resize") updateResize(pt, e.shiftKey, { disableSnap });
@@ -13012,6 +13303,7 @@
         if (type === "palette-session-move") finishObjectPalettePlacementSessionMove();
         if (type === "palette-session-resize") finishObjectPalettePlacementSessionResize();
         if (type === "palette-session-reorder") finishObjectPalettePlacementSessionReorder();
+        if (type === "palette-session-slot-move") finishObjectPalettePlacementSessionSlotMove();
         if (type === "resize") finishResize();
         if (type === "rotate") finishRotate();
         if (type === "marquee") finishMarquee();
@@ -13050,6 +13342,9 @@
         }
         if (state.interaction.type === "palette-session-reorder") {
           finishObjectPalettePlacementSessionReorder();
+        }
+        if (state.interaction.type === "palette-session-slot-move") {
+          finishObjectPalettePlacementSessionSlotMove();
         }
         if (state.interaction.type === "palette-place-area") {
           state.interaction.rect?.remove?.();
