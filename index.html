@@ -2522,6 +2522,40 @@
       return session.placements.find((entry) => String(entry?.paletteItemId || "") === String(paletteItemId || ""));
     }
 
+    function buildObjectPaletteLayoutItemsFromSession(session) {
+      if (!session || !Array.isArray(session?.placements)) return [];
+      const paletteItems = Array.isArray(state.objectPaletteItems) ? state.objectPaletteItems : [];
+      return session.placements.map((entry, index) => {
+        const paletteItemId = String(entry?.paletteItemId || "");
+        const paletteItem = paletteItemId ? paletteItems.find((item) => String(item?.id || "") === paletteItemId) : null;
+        const canvasItemId = String(entry?.canvasItemId || "");
+        let width = Number(entry?.width || 1);
+        let height = Number(entry?.height || 1);
+        let label = String(entry?.label || `Item ${index + 1}`);
+        if (paletteItem) {
+          width = Number(paletteItem?.box?.width || width);
+          height = Number(paletteItem?.box?.height || height);
+          label = String(paletteItem?.label || label);
+        } else if (canvasItemId) {
+          const placed = safeBBox(getById(canvasItemId));
+          if (placed) {
+            width = Number(placed.width || width);
+            height = Number(placed.height || height);
+          }
+        }
+        return {
+          id: paletteItemId || canvasItemId || String(index),
+          label,
+          box: normalizeObjectPaletteBox({
+            x: 0,
+            y: 0,
+            width: Math.max(1, Number.isFinite(width) ? width : 1),
+            height: Math.max(1, Number.isFinite(height) ? height : 1)
+          })
+        };
+      }).filter((item) => !!item);
+    }
+
     function applyObjectPalettePlacementSessionToCanvas(session) {
       if (!session) return false;
       let changed = false;
@@ -3322,8 +3356,8 @@
       return [id];
     }
 
-    function computeObjectPaletteAutoLayout(areaBox = null) {
-      const items = getSelectedObjectPaletteItems();
+    function computeObjectPaletteAutoLayout(areaBox = null, options = {}) {
+      const items = Array.isArray(options?.items) ? options.items : getSelectedObjectPaletteItems();
       if (!items.length) return null;
       const artDims = areaBox
         ? { x: Number(areaBox.x || 0), y: Number(areaBox.y || 0), width: Math.max(1, Number(areaBox.width || 1)), height: Math.max(1, Number(areaBox.height || 1)) }
@@ -3658,6 +3692,7 @@
         : Math.max(0.01, it.baseArea.width / Math.max(1, it.baseArea.height));
       let nextWidth;
       let nextHeight;
+      let nextPlacements;
       if (keepAspect) {
         const dragX = Math.abs(dx);
         const dragY = Math.abs(dy);
@@ -3677,26 +3712,47 @@
           }
         }
       } else {
-        nextWidth = Math.max(minSide, rawWidth);
-        nextHeight = Math.max(minSide, rawHeight);
+        const layoutItems = buildObjectPaletteLayoutItemsFromSession(session);
+        const layout = computeObjectPaletteAutoLayout({ x: it.baseArea.x, y: it.baseArea.y, width: rawWidth, height: rawHeight }, { items: layoutItems });
+        if (layout && Array.isArray(layout.placements) && layout.placements.length) {
+          nextWidth = Math.max(minSide, layout.area?.width || rawWidth);
+          nextHeight = Math.max(minSide, layout.area?.height || rawHeight);
+          const baseSlots = Array.isArray(it.basePlacements) ? it.basePlacements : [];
+          nextPlacements = baseSlots.map((slot, index) => {
+            const placement = layout.placements[index];
+            if (!placement) return slot;
+            return {
+              ...slot,
+              x: Number(placement.x || 0),
+              y: Number(placement.y || 0),
+              width: Number(placement.width || slot.width || 1),
+              height: Number(placement.height || slot.height || 1)
+            };
+          });
+        } else {
+          nextWidth = Math.max(minSide, rawWidth);
+          nextHeight = Math.max(minSide, rawHeight);
+        }
       }
       const sx = nextWidth / Math.max(1, it.baseArea.width);
       const sy = nextHeight / Math.max(1, it.baseArea.height);
+      if (!nextPlacements) {
+        nextPlacements = it.basePlacements.map((entry) => ({
+          paletteItemId: entry.paletteItemId,
+          canvasItemId: entry.canvasItemId,
+          label: entry.label,
+          x: it.baseArea.x + (entry.x - it.baseArea.x) * sx,
+          y: it.baseArea.y + (entry.y - it.baseArea.y) * sy,
+          width: entry.width * sx,
+          height: entry.height * sy
+        }));
+      }
       const nextArea = {
         x: it.baseArea.x,
         y: it.baseArea.y,
         width: nextWidth,
         height: nextHeight
       };
-      const nextPlacements = it.basePlacements.map((entry) => ({
-        paletteItemId: entry.paletteItemId,
-        canvasItemId: entry.canvasItemId,
-        label: entry.label,
-        x: it.baseArea.x + (entry.x - it.baseArea.x) * sx,
-        y: it.baseArea.y + (entry.y - it.baseArea.y) * sy,
-        width: entry.width * sx,
-        height: entry.height * sy
-      }));
       const updated = moveObjectPalettePlacementSession(it.sessionId, nextArea, nextPlacements, { timestamp: Date.now() });
       if (!updated) return;
       it.changed = true;
