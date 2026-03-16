@@ -510,12 +510,33 @@
       gap: 6px;
       flex-wrap: wrap;
     }
-    .object-palette-actions button.active {
+    .palette-action-btn {
+      min-height: 30px;
+      border: 1px solid #9a7d50;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #fcfbf7, #eee4cd);
+      color: #2f2a23;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      transition: all 0.18s ease;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .palette-action-btn:hover {
+      border-color: #7c6440;
+      filter: brightness(0.98);
+      transform: translateY(-1px);
+    }
+    .palette-action-btn:active {
+      transform: translateY(0);
+      box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08);
+    }
+    .palette-action-btn.active,
+    .palette-action-btn[aria-pressed="true"] {
       background: linear-gradient(180deg, rgba(247, 252, 241, 0.98), rgba(230, 241, 220, 0.96));
       border-color: #6b8f4e;
     }
-    .object-palette-actions button {
-      min-height: 30px;
+    .palette-action-btn strong {
+      letter-spacing: 0.04em;
     }
     .object-palette-frame {
       min-height: 92px;
@@ -1774,11 +1795,11 @@
             <span>Store assets here, reorder them, drag them onto the canvas, or auto-place them.</span>
           </div>
           <div class="object-palette-actions">
-            <button id="paletteAddSelectionBtn" type="button">Add Selection</button>
-            <button id="palettePasteBtn" type="button">Paste</button>
-            <button id="paletteAutoArrangeBtn" type="button">Place</button>
-            <button id="paletteEditModeBtn" type="button">Edit Layout</button>
-            <button id="paletteClearBtn" type="button">Clear</button>
+            <button id="paletteAddSelectionBtn" class="palette-action-btn" type="button">Add Selection</button>
+            <button id="palettePasteBtn" class="palette-action-btn" type="button">Paste</button>
+            <button id="paletteClearBtn" class="palette-action-btn" type="button">Clear</button>
+            <button id="paletteAutoArrangeBtn" class="palette-action-btn" type="button">Place</button>
+            <button id="paletteEditModeBtn" class="palette-action-btn" type="button">Edit Layout</button>
           </div>
         </div>
         <div id="objectPaletteFrame" class="object-palette-frame" tabindex="0" aria-describedby="objectPaletteHint">
