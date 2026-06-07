@@ -2055,6 +2055,7 @@
         label.setAttribute("font-family", "Arial, sans-serif");
         label.setAttribute("font-weight", "400");
       });
+      applyRuntimeSvgPolicies(canvas);
       ensureArtboardLayer();
       updateArtboardVisual();
     }
@@ -4347,41 +4348,89 @@
       });
     }
 
+    const FM_RUNTIME_POINTER_ATTR = "data-fm-runtime-pointer-events";
+    const FM_ORIG_POINTER_ATTR = "data-fm-orig-pointer-events";
+    const FM_ORIG_POINTER_STYLE_ATTR = "data-fm-orig-pointer-events-style";
+    const FM_MISSING_ATTR = "__missing__";
+
+    function rememberOriginalPointerEventState(el) {
+      if (!(el instanceof SVGElement)) return;
+      if (!el.hasAttribute(FM_ORIG_POINTER_ATTR)) {
+        const attrValue = el.getAttribute("pointer-events");
+        el.setAttribute(FM_ORIG_POINTER_ATTR, attrValue == null ? FM_MISSING_ATTR : attrValue);
+      }
+      if (!el.hasAttribute(FM_ORIG_POINTER_STYLE_ATTR)) {
+        const styleValue = el.style.getPropertyValue("pointer-events");
+        el.setAttribute(FM_ORIG_POINTER_STYLE_ATTR, styleValue ? styleValue : FM_MISSING_ATTR);
+      }
+    }
+
+    function applyRuntimePointerEvents(el, value) {
+      if (!(el instanceof SVGElement) || !value) return;
+      rememberOriginalPointerEventState(el);
+      el.setAttribute(FM_RUNTIME_POINTER_ATTR, value);
+      el.setAttribute("pointer-events", value);
+      el.style.setProperty("pointer-events", value, "important");
+    }
+
+    function restoreRuntimePointerEvents(el) {
+      if (!(el instanceof SVGElement)) return;
+      if (el.hasAttribute(FM_ORIG_POINTER_ATTR)) {
+        const attrValue = el.getAttribute(FM_ORIG_POINTER_ATTR);
+        if (attrValue && attrValue !== FM_MISSING_ATTR) el.setAttribute("pointer-events", attrValue);
+        else el.removeAttribute("pointer-events");
+      } else if (el.hasAttribute(FM_RUNTIME_POINTER_ATTR)) {
+        el.removeAttribute("pointer-events");
+      }
+      if (el.hasAttribute(FM_ORIG_POINTER_STYLE_ATTR)) {
+        const styleValue = el.getAttribute(FM_ORIG_POINTER_STYLE_ATTR);
+        if (styleValue && styleValue !== FM_MISSING_ATTR) el.style.setProperty("pointer-events", styleValue);
+        else el.style.removeProperty("pointer-events");
+      } else if (el.hasAttribute(FM_RUNTIME_POINTER_ATTR)) {
+        el.style.removeProperty("pointer-events");
+      }
+      el.removeAttribute(FM_RUNTIME_POINTER_ATTR);
+      el.removeAttribute(FM_ORIG_POINTER_ATTR);
+      el.removeAttribute(FM_ORIG_POINTER_STYLE_ATTR);
+    }
+
     function applyPointerEventPolicy(el) {
       if (!(el instanceof SVGElement) || el === canvas) return;
       const tag = svgTagName(el);
-      try {
-        el.removeAttribute("pointer-events");
-        el.style.removeProperty("pointer-events");
-      } catch (_) {}
-      // Keep pointer-event policy separate from visual stroke policy.
-      // (non-scaling-stroke caused zoom rendering artifacts)
-      el.removeAttribute("vector-effect");
-      el.style.removeProperty("vector-effect");
       if (tag === "line" || tag === "polyline") {
-        el.setAttribute("pointer-events", "stroke");
-        el.style.setProperty("pointer-events", "stroke", "important");
+        applyRuntimePointerEvents(el, "stroke");
         return;
       }
-      if (tag === "path" || tag === "text" || tag === "tspan" || tag === "rect" || tag === "ellipse" || tag === "circle" || tag === "polygon") {
-        el.setAttribute("pointer-events", "visiblePainted");
-        el.style.setProperty("pointer-events", "visiblePainted", "important");
-        return;
+      if (tag === "g" && el.getAttribute("data-fm-ai-root-layer") === "1") {
+        applyRuntimePointerEvents(el, "none");
       }
-      if (tag === "g") {
-        if (el.getAttribute("data-fm-ai-root-layer") === "1") {
-          el.setAttribute("pointer-events", "none");
-          el.style.setProperty("pointer-events", "none", "important");
-          return;
-        }
-        el.setAttribute("pointer-events", "visiblePainted");
-        el.style.setProperty("pointer-events", "visiblePainted", "important");
-        return;
+    }
+
+    function applyRuntimeSvgPolicies(root = canvas) {
+      if (!(root instanceof SVGElement)) return;
+      applyPointerEventPolicy(root);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+      while (walker.nextNode()) {
+        const el = walker.currentNode;
+        if (!(el instanceof SVGElement)) continue;
+        applyPointerEventPolicy(el);
       }
-      if (tag !== "g") {
-        el.setAttribute("pointer-events", "visiblePainted");
-        el.style.setProperty("pointer-events", "visiblePainted", "important");
-      }
+    }
+
+    function restoreRuntimeSvgPolicies(root) {
+      if (!(root instanceof Element)) return;
+      if (root instanceof SVGElement) restoreRuntimePointerEvents(root);
+      root.querySelectorAll(`[${FM_RUNTIME_POINTER_ATTR}], [${FM_ORIG_POINTER_ATTR}], [${FM_ORIG_POINTER_STYLE_ATTR}]`).forEach((el) => {
+        if (el instanceof SVGElement) restoreRuntimePointerEvents(el);
+      });
+    }
+
+    function isSafeSvgHrefValue(value) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) return true;
+      if (trimmed.startsWith("#")) return true;
+      if (/^data:image\//i.test(trimmed)) return true;
+      return false;
     }
 
     function sanitizeSvgAttributes(el) {
@@ -4393,9 +4442,14 @@
           el.removeAttribute(attr.name);
           continue;
         }
-        if (name.startsWith("on")) el.removeAttribute(attr.name);
-        if ((name === "href" || name.endsWith(":href")) && value.trim().toLowerCase().startsWith("javascript:")) {
+        if (name === FM_RUNTIME_POINTER_ATTR || name === FM_ORIG_POINTER_ATTR || name === FM_ORIG_POINTER_STYLE_ATTR) {
           el.removeAttribute(attr.name);
+          continue;
+        }
+        if (name.startsWith("on")) el.removeAttribute(attr.name);
+        if (name === "href" || name.endsWith(":href")) {
+          const lower = value.trim().toLowerCase();
+          if (lower.startsWith("javascript:") || !isSafeSvgHrefValue(value)) el.removeAttribute(attr.name);
         }
       }
     }
@@ -6632,12 +6686,13 @@
 
     function getCleanCanvasMarkup() {
       const clone = canvas.cloneNode(true);
-      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label,.placement-session-title").forEach((el) => el.remove());
+      clone.querySelectorAll(".selection-outline,.selection-handle,.marquee,.smart-guide,.crop-boundary,.crop-draft,.crop-mask,.crop-handle,.placement-guide,.placement-preview,.placement-preview-label,.placement-session-frame,.placement-session-handle,.placement-session-slot,.placement-session-slot-label,.placement-session-remove,.placement-session-remove-label,.placement-session-title,.fm-artboard-layer,.fm-artboard-bg").forEach((el) => el.remove());
       clone.querySelectorAll(".fm-selected,.fm-group-selected").forEach((el) => {
         el.classList.remove("fm-selected");
         el.classList.remove("fm-group-selected");
         if (el.classList.length === 0) el.removeAttribute("class");
       });
+      restoreRuntimeSvgPolicies(clone);
       clone.querySelectorAll("[data-id],[data-tx],[data-ty],[data-base-transform]").forEach((el) => {
         el.removeAttribute("data-id");
         el.removeAttribute("data-tx");
@@ -7278,10 +7333,6 @@
           setStatus(`Saved state (${reason}).`);
           return;
         }
-      }
-      if (force && state.history.length > 1) {
-        // For very large imports, keep one previous checkpoint so Undo remains available.
-        state.history = [state.history[state.history.length - 1]];
       }
       state.history.push(snap);
       if (state.history.length > state.maxHistory) state.history.shift();
