@@ -1448,7 +1448,7 @@
           <div class="menu-sep"></div>
           <button class="menu-action" data-menu-action="edit.copy">Copy (SVG)</button>
           <button class="menu-action" data-menu-action="edit.cut">Cut</button>
-          <button class="menu-action" data-menu-action="edit.paste">Paste (Internal)</button>
+          <button class="menu-action" data-menu-action="edit.paste">Paste</button>
           <div class="menu-sep"></div>
           <button class="menu-action" data-menu-action="edit.group">Group</button>
           <button class="menu-action" data-menu-action="edit.ungroup">Ungroup</button>
@@ -7306,7 +7306,7 @@
       if (action === "edit.redo") return redo();
       if (action === "edit.copy") return copySelected();
       if (action === "edit.cut") return cutSelected();
-      if (action === "edit.paste") return pasteInternalClipboard();
+      if (action === "edit.paste") return void pasteBestEffort();
       if (action === "edit.group") return groupSelected();
       if (action === "edit.ungroup") return ungroupSelected();
       if (action === "page.canvas.a4.portrait" || action === "view.canvas.a4.portrait") return setCanvasSize(794, 1123);
@@ -11415,6 +11415,11 @@
       return pasteInternalClipboard();
     }
 
+    function canUseClipboardApiPaste() {
+      const cb = navigator.clipboard;
+      return !!cb && (typeof cb.read === "function" || typeof cb.readText === "function");
+    }
+
     function beginMarquee(start, keepCurrent) {
       clearSmartGuides();
       const rect = document.createElementNS(SVG_NS, "rect");
@@ -12703,10 +12708,7 @@
       bindClick("redoBtn", redo);
       bindClick("copyBtn", copySelected);
       bindClick("cutBtn", cutSelected);
-      bindClick("pasteBtn", () => {
-        // Avoid browser permission prompts on every click.
-        pasteInternalClipboard();
-      });
+      bindClick("pasteBtn", () => { void pasteBestEffort(); });
       bindClick("pasteReportBtn", showPasteReport);
       bindClick("copyPasteReportBtn", copyPasteReport);
       bindClick("downloadPasteReportBtn", downloadPasteReport);
@@ -13186,7 +13188,7 @@
         const action = btn.dataset.ctxAction || "";
         if (action === "copy") copySelected();
         if (action === "cut") cutSelected();
-        if (action === "paste") pasteInternalClipboard();
+        if (action === "paste") void pasteBestEffort();
         if (action === "rasterize-image") promptRasterizeSelectedImage();
         if (action === "mark") {
           if (ctxMarkSubmenuEl?.classList.contains("open")) closeMarkSubmenu();
@@ -13738,7 +13740,12 @@
           return;
         }
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "v") {
-          // Prefer OS paste path; if no external payload arrives, fallback to internal clipboard.
+          if (canUseClipboardApiPaste()) {
+            e.preventDefault();
+            void pasteBestEffort();
+            return;
+          }
+          // Legacy fallback for environments without Clipboard API support.
           focusPasteSink();
           if (state.pendingInternalPasteTimer) clearTimeout(state.pendingInternalPasteTimer);
           const before = Date.now();
