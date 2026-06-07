@@ -396,8 +396,12 @@
     .canvas-wrap { padding: 10px; overflow: auto; position: relative; background: var(--bg); transition: background-color 0.12s ease, box-shadow 0.12s ease; }
     .canvas-wrap.drag-over { background: #efe8d8; box-shadow: inset 0 0 0 2px var(--focus); }
     .canvas-wrap.palette-drop-over { background: #e9efe2; box-shadow: inset 0 0 0 2px #6b8f4e; }
-    .canvas-wrap.hand-mode { cursor: grab; }
-    .canvas-wrap.is-panning { cursor: grabbing; }
+    .canvas-wrap.hand-mode,
+    .canvas-wrap.hand-mode #canvas,
+    .canvas-wrap.hand-mode #canvas * { cursor: grab !important; }
+    .canvas-wrap.is-panning,
+    .canvas-wrap.is-panning #canvas,
+    .canvas-wrap.is-panning #canvas * { cursor: grabbing !important; }
     #canvas {
       width: 8000px;
       height: 8000px;
