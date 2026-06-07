@@ -1912,8 +1912,11 @@
     const INTERNAL_SVG_CLIPBOARD_ATTR = "data-fm-clipboard";
     const INTERNAL_SVG_CLIPBOARD_VALUE = "1";
     const MAX_HISTORY_ENTRIES_DEFAULT = 30;
-    const MAX_HISTORY_SNAPSHOT_BYTES = 512 * 1024 * 1024; // Increased to 512MB for >100MB images
-    const MAX_HISTORY_TOTAL_BYTES = 1024 * 1024 * 1024; // Increased to 1GB total
+    const DEVICE_MEMORY_GB = Math.max(0, Number(globalThis?.navigator?.deviceMemory || 0));
+    const HISTORY_TOTAL_BUDGET_MB = DEVICE_MEMORY_GB >= 16 ? 256 : DEVICE_MEMORY_GB >= 8 ? 160 : DEVICE_MEMORY_GB >= 4 ? 96 : 64;
+    const HISTORY_SNAPSHOT_BUDGET_MB = Math.max(16, Math.floor(HISTORY_TOTAL_BUDGET_MB * 0.4));
+    const MAX_HISTORY_SNAPSHOT_BYTES = HISTORY_SNAPSHOT_BUDGET_MB * 1024 * 1024;
+    const MAX_HISTORY_TOTAL_BYTES = HISTORY_TOTAL_BUDGET_MB * 1024 * 1024;
     const FILE_AUTOSAVE_INTERVAL_MS = 60 * 1000;
     const DEFAULT_VIEWBOX = "0 0 794 1123";
     const WORKSPACE_SIZE = 8000;
@@ -2178,9 +2181,40 @@
       return estimateBytes(snap.markup) + estimateBytes(snap.selectedIds) + estimateBytes(snap.canvasMeta) + 96;
     }
 
+    function getSnapshotSizeBytes(snap) {
+      if (!snap || typeof snap !== "object") return 0;
+      const size = Number(snap.sizeBytes);
+      return Number.isFinite(size) && size > 0 ? size : estimateSnapshotBytes(snap);
+    }
+
     function estimateAutosaveRecordBytes(rec) {
       if (!rec || typeof rec !== "object") return 0;
       return estimateBytes(rec.markup) + estimateBytes(rec.selectedIds) + estimateBytes(rec.canvasMeta) + estimateBytes(rec.imageRefs) + 128;
+    }
+
+    function getHistoryStackBytes(entries) {
+      if (!Array.isArray(entries) || !entries.length) return 0;
+      return entries.reduce((sum, snap) => sum + getSnapshotSizeBytes(snap), 0);
+    }
+
+    function getTotalHistoryBytes() {
+      return getHistoryStackBytes(state.history) + getHistoryStackBytes(state.future);
+    }
+
+    function enforceHistoryByteBudget() {
+      let totalBytes = getTotalHistoryBytes();
+      while (totalBytes > MAX_HISTORY_TOTAL_BYTES) {
+        let removed = null;
+        if (Array.isArray(state.future) && state.future.length > 0) {
+          removed = state.future.shift();
+        } else if (Array.isArray(state.history) && state.history.length > 1) {
+          removed = state.history.shift();
+        } else {
+          break;
+        }
+        totalBytes -= getSnapshotSizeBytes(removed);
+      }
+      return totalBytes;
     }
 
     function collectRefIdsFromMarkup(markup, outSet) {
@@ -7340,12 +7374,7 @@
       }
       state.history.push(snap);
       if (state.history.length > state.maxHistory) state.history.shift();
-      let totalBytes = state.history.reduce((sum, s) => sum + Number(s?.sizeBytes || estimateSnapshotBytes(s)), 0);
-      while (state.history.length > 1 && totalBytes > MAX_HISTORY_TOTAL_BYTES) {
-        if (force && state.history.length <= 2) break;
-        const removed = state.history.shift();
-        totalBytes -= Number(removed?.sizeBytes || estimateSnapshotBytes(removed));
-      }
+      enforceHistoryByteBudget();
       garbageCollectImagePool();
       state.future = [];
       updateHistoryButtons();
@@ -7381,6 +7410,7 @@
       }
       const current = state.history.pop();
       state.future.push(current);
+      enforceHistoryByteBudget();
       restoreSnapshot(state.history[state.history.length - 1]);
       updateHistoryButtons();
       scheduleLiveAutosave("undo");
@@ -7394,6 +7424,7 @@
       }
       const next = state.future.pop();
       state.history.push(next);
+      enforceHistoryByteBudget();
       restoreSnapshot(next);
       updateHistoryButtons();
       scheduleLiveAutosave("redo");
