@@ -6,7 +6,7 @@
   <title>Figure Maker (Beta)</title>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.5.0/dist/svg2pdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/canvg@4.0.2/lib/umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/canvg/3.0.5/umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.min.js"></script>
   <style>
     :root {
@@ -29,10 +29,11 @@
       --bevel-light: rgba(255,255,255,0.5);
       --bevel-shadow: rgba(0,0,0,0.15);
       --status-bar-safe-height: 46px;
+      --desktop-min-width: 900px;
     }
     * { box-sizing: border-box; font-family: "Zen Kaku Gothic New", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; color: var(--ink); background: var(--bg); }
-    .app { height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; }
+    body { margin: 0; min-width: var(--desktop-min-width); color: var(--ink); background: var(--bg); overflow-x: auto; }
+    .app { height: 100vh; min-width: var(--desktop-min-width); display: grid; grid-template-rows: auto auto 1fr auto; }
     .menu-bar {
       display: flex;
       align-items: center;
@@ -4218,7 +4219,7 @@
     }
 
     function renderStatus() {
-      const compact = window.innerWidth < 980;
+      const compact = false;
       document.body.classList.toggle("compact", compact);
       const advancedBtn = document.getElementById("toggleAdvanced");
       if (!compact) {

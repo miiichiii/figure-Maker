@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "verify:ai-import": "node scripts/verify-ai-import.cjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node scripts/smoke-test.cjs"
   },
   "repository": {
     "type": "git",

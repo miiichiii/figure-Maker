@@ -1,5 +1,9 @@
 # Figure Maker
 
+## 対応範囲
+- Desktop browser only. モバイル幅のUI最適化は対象外。
+- 基本動作の回帰確認: `npm test`
+
 ## バグ報告テンプレ
 以下をそのまま埋めて送ってください。
 
